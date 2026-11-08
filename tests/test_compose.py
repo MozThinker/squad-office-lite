@@ -82,7 +82,7 @@ class ComposeGerado(unittest.TestCase):
         out = self.caddy()
         b = binds(out)
         office = [x for x in b if x[1] != "/etc/caddy/Caddyfile"]
-        self.assertEqual(len(office), 10)
+        self.assertEqual(len(office), 11)
         for s, alvo, _ in office:
             dentro = s == str(self.cfg) or any(s == str(self.t / r) or s.startswith(str(self.t / r) + "/")
                                                for r in ("dados", "claude"))
@@ -138,10 +138,16 @@ class ComposeGerado(unittest.TestCase):
             self.assertIn(lab, out)
         # segredo do proxy (ADR-006): no Office e num middleware de cabeçalho encadeado depois do basic auth
         self.assertIn(f"      OFFICE_PROXY_SEGREDO: {SEGREDO}\n", servico(out, "office"))
-        self.assertIn('"traefik.http.routers.office-lite.middlewares=office-lite-auth,office-lite-segredo"', out)
+        # cabeçalhos de resposta (CA-A2.3): middleware próprio, antes do basic auth (o 401 também os leva)
+        self.assertIn('"traefik.http.routers.office-lite.middlewares=office-lite-cab,office-lite-auth,'
+                      'office-lite-segredo"', out)
         self.assertIn('"traefik.http.middlewares.office-lite-segredo.headers.customrequestheaders.X-Office-Segredo='
                       f'{SEGREDO}"', out)
         self.assertEqual(out.count("middlewares="), 1)
+        cab = sorted(re.findall(r'"traefik\.http\.middlewares\.office-lite-cab\.headers\.(\w+)=(.*)"', out))
+        # sem CSP: substituiria a do Office (a da Biblioteca leva sandbox)
+        self.assertEqual(cab, [("framedeny", "true"), ("referrerpolicy", "same-origin"), ("stsseconds", "31536000")])
+        self.assertNotIn("contentsecuritypolicy", out)
 
     def test_deterministico(self):
         self.assertEqual(self.caddy("--dominio", "a.example.org"), self.caddy("--dominio", "a.example.org"))
@@ -219,6 +225,19 @@ class Ficheiros(unittest.TestCase):
         # o cabeçalho só é posto depois do basic_auth e substitui o do cliente (header_up = set)
         self.assertRegex(c, r"reverse_proxy office:8080 \{\s+header_up X-Office-Segredo \{\$OFFICE_PROXY_SEGREDO\}\s+\}")
 
+    def test_caddyfile_cabecalhos(self):  # CA-A2.1, CA-A2.2
+        c = (ROOT / "Caddyfile").read_text()
+        site = c[c.index("{$OFFICE_SITE} {"):]
+        # dentro do site e antes do basic_auth (a ordem do Caddy já o garante; assim lê-se como funciona)
+        self.assertLess(site.index("header {"), site.index("basic_auth {"))
+        bloco = re.search(r"\n\theader \{\n(.*?)\n\t\}", site, re.S).group(1)
+        self.assertEqual([x.strip() for x in bloco.splitlines()],
+                         ['Content-Security-Policy "frame-ancestors \'none\'"', "X-Frame-Options DENY",
+                          "Referrer-Policy same-origin"])
+        # HSTS só em HTTPS (com OFFICE_SITE=:80 nunca há HTTPS) e nunca fora do matcher
+        self.assertIn("\t@https protocol https\n\theader @https Strict-Transport-Security \"max-age=31536000\"\n", site)
+        self.assertEqual(c.count("Strict-Transport-Security"), 1)
+
 
 class InstaladorEstatico(unittest.TestCase):
     s = (ROOT / "install.sh").read_text()
@@ -278,7 +297,7 @@ class InstaladorEstatico(unittest.TestCase):
         b = self.bloco_cred()
         # sem OFFICE_CLAUDE_CRED no --sem-perguntas: nenhuma, com aviso (o fumo da CI não muda)
         self.assertRegex(b, r'if \[ -z "\$CRED_VIA" \]; then\n\s+aviso "sem OFFICE_CLAUDE_CRED[^\n]*"\n\s+CRED_VIA=nenhuma')
-        self.assertIn("1) chave de API (recomendada)", b)
+        self.assertIn("1) chave de API (recomendada; paga por uso)", b)
         self.assertIn('perguntar "Escolhe" 1', b)   # API por omissão
         self.assertIn("RX_CRED_API", b)      # formato da chave de API (o runner usa o mesmo padrão)
         self.assertNotIn("RX_CRED_OAUTH", b)  # o token da subscrição não é lido (C1 da 0.1.2)

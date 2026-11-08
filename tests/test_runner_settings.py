@@ -57,7 +57,8 @@ def test_base_tem_exactamente_as_negacoes(ctx):
         *[f"Edit({abs_(home / x)})" for x in CRED_HOME + EXECUTA],
         f"Edit({abs_(dados / 'quadro-lancar/**')})", f"Edit({abs_(dados / 'decisoes-fila/**')})",
         f"Edit({abs_(dados / 'decisoes/**')})", f"Edit({abs_(dados / 'quadro/**')})",
-        f"Edit({abs_(dados / 'runner/**')})", f"Edit({abs_(c.RAIZ / '**')})",
+        f"Edit({abs_(dados / 'runner/**')})", f"Edit({abs_(dados / 'runner-estado/**')})",
+        f"Edit({abs_(c.RAIZ / '**')})",
     ], "blockWritesOutsideWorkingDirectories": True}}
     regras = base["permissions"]["deny"]
     assert len(regras) == len(set(regras)) and not any(r.startswith("Write(") for r in regras)
@@ -120,6 +121,8 @@ def test_correr_passa_a_base_num_ficheiro(ctx):
     assert not os.path.lexists(f)   # apagado ao fechar a meta
     assert not any(a.startswith("{") for a in argv)   # nenhum JSON em argv
     assert f"Edit({abs_(ctx / 'dados' / 'runner' / '**')})" in settings_vistas(ctx)["permissions"]["deny"]
+    # 0.1.3: a pasta do estado.json (montada só de leitura no Office) também não se altera pelo Edit
+    assert f"Edit({abs_(ctx / 'dados' / 'runner-estado' / '**')})" in settings_vistas(ctx)["permissions"]["deny"]
 
 
 def test_settings_com_env_nunca_em_argv_e_reescrito_na_retoma(ctx):

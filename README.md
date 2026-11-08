@@ -8,6 +8,8 @@ cria um branch, programa, testa e abre um pull request no GitHub para tu reveres
 
 ## Instalação
 
+O Lite instala-se só numa VPS Linux (Ubuntu). No Windows ou no macOS não se instala: acedes ao Office pelo browser.
+
 **Precisas de:**
 - uma VPS com **Ubuntu 22.04 ou mais recente** (a CI testa a instalação em 22.04, 24.04 e 26.04) e acesso por SSH
   com um utilizador normal (não root; se a VPS só tem root, ver [VPS nova só com root](#vps-nova-só-com-root));
@@ -38,17 +40,17 @@ cria um branch, programa, testa e abre um pull request no GitHub para tu reveres
    depois de instalar (o instalador não o pede nem o guarda; ver [Credenciais do Claude](#credenciais-do-claude)).
    O `gh` instala-se pelas [instruções oficiais para Ubuntu](https://github.com/cli/cli/blob/trunk/docs/install_linux.md);
    no `gh auth login` usa de preferência um [token só para os repositórios do Office](#token-do-github).
-3. **Descarrega e instala o Office** (troca `<dono>/<repo>` pelo repositório do Lite). O endereço fica fixado à
-   versão (`v0.1.2`), para leres sempre o mesmo script que o livro e este README descrevem.
+3. **Descarrega e instala o Office.** O endereço fica fixado à versão (`v0.1.3`), para leres sempre o mesmo script
+   que o livro e este README descrevem.
    **Forma prudente** (recomendada: lês o script antes de o correr):
    ```bash
-   curl -fsSLO https://raw.githubusercontent.com/<dono>/<repo>/v0.1.2/get.sh
+   curl -fsSLO https://raw.githubusercontent.com/MozThinker/squad-office-lite/v0.1.3/get.sh
    less get.sh
-   bash get.sh --versao 0.1.2
+   bash get.sh --versao 0.1.3
    ```
    **Com um comando:**
    ```bash
-   curl -fsSL https://raw.githubusercontent.com/<dono>/<repo>/v0.1.2/get.sh | bash -s -- --versao 0.1.2
+   curl -fsSL https://raw.githubusercontent.com/MozThinker/squad-office-lite/v0.1.3/get.sh | bash -s -- --versao 0.1.3
    ```
    > Este comando descarrega um script da internet e corre-o no teu servidor, com o teu utilizador. Só o faças com
    > endereços em que confias, e de preferência lê-o primeiro. O `get.sh` confere o sha256 do pacote: isso apanha uma
@@ -61,26 +63,41 @@ cria um branch, programa, testa e abre um pull request no GitHub para tu reveres
    prudente. Opções (depois de `bash -s --` no comando de uma linha, ou de `bash get.sh`):
    - `--sem-perguntas`: as respostas vêm do ambiente (ver o cabeçalho do `install.sh`; `OFFICE_GIT_NOME` e
      `OFFICE_GIT_EMAIL` para a identidade do git; sem elas, e sem identidade no git, só avisa). Ex.:
-     `curl -fsSL …/get.sh | bash -s -- --versao 0.1.2 --sem-perguntas`;
-   - `--versao X.Y.Z`: instala essa versão em vez da última (`… | bash -s -- --versao 0.1.2`);
+     `curl -fsSL …/get.sh | bash -s -- --versao 0.1.3 --sem-perguntas`;
+   - `--versao X.Y.Z`: instala essa versão em vez da última (`… | bash -s -- --versao 0.1.3`);
    - as outras opções passam ao `install.sh` (ex.: `--proxy traefik --rede <rede>`).
 
-   O instalador confirma o que falta, pergunta o domínio (Enter = sem domínio), o utilizador e a palavra-passe
-   (12 ou mais caracteres), as credenciais do Claude (chave de API; token da subscrição, que só explica como o
-   escreveres tu; ou nenhuma), o nome e o e-mail para os commits da squad (só se o git ainda não os tiver; os que já
-   existem nunca são trocados) e arranca tudo.
+   **Verificação opcional da origem.** O sha256 só confirma que o pacote não se estragou. Para confirmar que foi
+   construído pelo repositório público (atestação do GitHub; precisa do `gh` com sessão), descarrega o pacote à mão e:
+   ```bash
+   gh attestation verify squad-office-lite-0.1.3.tar.gz --repo MozThinker/squad-office-lite
+   ```
+   Só as versões publicadas com atestação passam. Uma falha aqui é motivo para não instalar e reportar (ver
+   [`SECURITY.md`](SECURITY.md)).
+
+   O instalador confirma o que falta (e avisa, sem parar, se o `gh` não tiver sessão: as tarefas acabariam sem PR),
+   pergunta o domínio (Enter = sem domínio), o utilizador e a palavra-passe (12 ou mais caracteres; se as duas não
+   coincidem, pede-a de novo, até 3 vezes), as credenciais do Claude (ver o menu em
+   [Credenciais do Claude](#credenciais-do-claude)), o nome e o e-mail para os commits da squad (só se o git ainda não
+   os tiver; os que já existem nunca são trocados) e arranca tudo. Com domínio, antes do «Pronto» confirma que o DNS
+   aponta para esta VPS e, se não apontar, di-lo (só avisa).
    **Tempo:** no nosso teste (VPS de 1 vCPU e 1 GB, Ubuntu 26.04, 8/11/2026), `install.sh --sem-perguntas` levou
-   19 s; a primeira construção da imagem (download das imagens base `python:3.13-alpine` e `caddy:2.10-alpine`) pode
+   19 s; a primeira construção da imagem (download das imagens base `python:3.13-alpine` e `caddy:2.11.9-alpine`) pode
    demorar mais. Não mudes a pasta `~/squad-office-lite` de sítio depois de instalar.
 
-   **Alternativa com `git`:** `gh repo clone <dono>/<repo> ~/squad-office-lite`, `cd ~/squad-office-lite` e
-   `./install.sh`. Se o repositório for privado, o `gh repo clone` usa a sessão do `gh` (um `git clone https://…` sem
+   **Alternativa com `git`:** `gh repo clone MozThinker/squad-office-lite ~/squad-office-lite`,
+   `cd ~/squad-office-lite` e `./install.sh`. Se o repositório for privado, o `gh repo clone` usa a sessão do `gh` (um `git clone https://…` sem
    ela pede utilizador e palavra-passe e falha); depois volta ao token *fine-grained* (ver
    [Token do GitHub](#token-do-github)).
 4. **Abre o endereço** que o instalador mostra no fim (`https://<o teu domínio>` ou `http://<IP da VPS>`) e entra com
-   o utilizador e a palavra-passe que escolheste.
+   o utilizador e a palavra-passe que escolheste. Até à primeira tarefa entregue, o escritório mostra
+   «Primeiros passos»: runner a dar sinal, `claude` instalado, credencial do Claude e sessão do `gh`, cada um com ✓ ou
+   ✗ e, no ✗, o comando que o corrige.
 5. **Lança a primeira tarefa.** No `▦ Quadro`, cria um cartão no projecto «Exemplo» (por exemplo «Acrescentar um
-   ficheiro CONTRIBUTING.md»), arrasta-o para «Em curso» e carrega em «Lançar». Em um ou dois minutos a squad aparece
+   ficheiro CONTRIBUTING.md»), arrasta-o para «Em curso» (no telemóvel: mantém o dedo no cartão, ou usa «Lançar…» no
+   menu ⋯) e carrega em «Lançar». O diálogo pergunta o tipo (funcionalidade nova ou correcção), o tamanho (tarefa curta,
+   até 3 h, ou objectivo com plano, até 8 h) e «O que queres?»: escreve como a um colega. O nome curto do branch é
+   gerado do título (em «Avançado» podes mudá-lo). Em um ou dois minutos a squad aparece
    a trabalhar no escritório; no fim, o cartão passa para «À espera de …» ou «Feito» (o movimento é feito quando
    alguém abre o Quadro: se ninguém o abrir, o cartão fica em «Em curso» até lá).
 
@@ -93,13 +110,15 @@ de reinício. Se mudaste as `raizes`, corre outra vez `./install.sh` (não volta
 
 O mesmo `get.sh`, sem `--versao` (instala a última versão publicada; lê o aviso em «Instalação»):
 ```bash
-curl -fsSL https://raw.githubusercontent.com/<dono>/<repo>/v0.1.2/get.sh | bash
+curl -fsSL https://raw.githubusercontent.com/MozThinker/squad-office-lite/v0.1.3/get.sh | bash
 ```
 A versão instalada passa para `~/squad-office-lite.anterior-<data>` e a nova fica em `~/squad-office-lite`.
 `~/office-lite` (config, `.env`, credenciais e dados) não é tocada pelo `get.sh`; o `install.sh` só volta a
 perguntar o que falta (sem `claude.env`, por exemplo, pergunta outra vez pelas credenciais: escolhe 2 ou 3 se usas o
 token ou o login do `claude`). Para voltar atrás: `… | bash -s -- --versao <versão anterior>`. Apaga as pastas
-`.anterior-*` quando já não precisares delas. Vê o que mudou no `CHANGELOG.md`.
+`.anterior-*` quando já não precisares delas. Vê o que mudou no `CHANGELOG.md`. Se instalaste com `git`, depois do
+`git pull` corre outra vez `./install.sh` (a 0.1.3 monta uma pasta nova no contentor; sem isso o Office diz «O runner
+ainda não deu sinal»).
 
 ### VPS nova só com root
 
@@ -140,10 +159,20 @@ ele a sessão activa: com escrita no repositório do Office, a squad podia fazer
 
 ### O que fazer se…
 
+Começa pelo diagnóstico, na VPS:
+```bash
+python3 ~/squad-office-lite/runner/office_runner.py doctor
+```
+Uma linha por verificação (`office.yaml`, Docker e o grupo `docker`, *linger*, o timer do runner, `claude` no PATH,
+credencial do Claude, sessão do `gh`, DNS do domínio, portas 80 e 443 e a versão instalada): `✓` ou `✗ … → <comando
+que corrige>`. Sai com 0 se estiver tudo bem, 1 se não. Vê o que o runner veria: a credencial e o `GH_TOKEN` do
+`runner.env` e o `claude` também em `~/.local/bin` e no PATH da unit. Da credencial vê só o formato e o modo do
+ficheiro, nunca o valor. Funciona mesmo com o `office.yaml` inválido (di-lo e segue).
+
 - **o `get.sh` pára com um erro.** Nada foi instalado e a versão anterior (se havia) fica onde estava.
   «sem terminal; usa --sem-perguntas»: a sessão não tem terminal para as perguntas (ex.: `ssh` sem `-t`); entra com
-  `ssh -t` ou acrescenta `bash -s -- --sem-perguntas`. «não corras como root…»: ver
-  [VPS nova só com root](#vps-nova-só-com-root). «o sha256 não confere; nada foi instalado»: o download veio
+  `ssh -t` ou acrescenta `bash -s -- --sem-perguntas`. «não corras como root…»: o `get.sh` mostra antes os 4
+  comandos de [VPS nova só com root](#vps-nova-só-com-root). «o sha256 não confere; nada foi instalado»: o download veio
   corrompido ou alterado; corre de novo e, se repetir, não instales e reporta (ver [`SECURITY.md`](SECURITY.md)).
   «este instalador é para Ubuntu», «processador não suportado: …» e «falta curl» (ou `sudo`, `tar`, `sha256sum`) dizem
   o que falta.
@@ -151,18 +180,20 @@ ele a sessão activa: com escrita no repositório do Office, a squad podia fazer
   e pára-o (ex.: `sudo systemctl disable --now apache2` ou `nginx`). Se for um **Traefik** que já usas, não o pares:
   instala com `./install.sh --proxy traefik --rede <rede do Traefik>` (precisa de domínio; o Traefik tem de ter o
   entrypoint `websecure` e um certresolver, por omissão `letsencrypt`, mudável com `--certresolver`).
-- **o domínio não abre ou dá erro de certificado.** O DNS ainda não aponta para a VPS (pode demorar até umas horas).
+- **o domínio não abre ou dá erro de certificado.** O DNS ainda não aponta para a VPS (pode demorar até umas horas;
+  o instalador e o `doctor` avisam «o domínio … ainda não resolve» ou «aponta para …, mas esta VPS tem …»).
   Confirma com `getent hosts <domínio>`; abre as portas 80 e 443 na firewall (`sudo ufw allow 80,443/tcp`). Quando o
   DNS estiver certo: `docker compose -f ~/office-lite/docker-compose.yml restart caddy`.
 - **não tenho domínio / quero pôr um mais tarde.** Sem domínio o Office fica em `http://<IP>`: a palavra-passe passa
   sem cifra e as notificações no telemóvel não funcionam. Para acrescentar um domínio, muda `OFFICE_SITE` e
   `OFFICE_DOMINIO` em `~/office-lite/.env` para o domínio e corre `./install.sh` outra vez.
-- **a tarefa termina logo em «erro».** Quase sempre são as credenciais do Claude: se o resultado falar de
+- **a tarefa termina logo em «erro».** O cartão mostra o resultado da tarefa (mascarado) e, nos erros comuns, o comando
+  que corrige. Quase sempre são as credenciais do Claude: se o resultado falar de
   «credenciais do Claude», corrige o `~/office-lite/claude.env` como diz a mensagem (ex.: `chmod 600`) ou troca-as com
   `./install.sh --credenciais`. Se falar de «runner.settings inválido», corrige o ficheiro de `runner.settings` (JSON;
   `deny`/`allow`/`ask` têm de ser listas de textos; até 64 KB). Senão vê o fim de `~/office-lite/dados/tasks/<id da tarefa>/claude.log` (chave
   inválida, sem sessão iniciada, ou modo de permissões que a tua versão do `claude` não conhece; ver
-  [Runner](#runner)). Sem `gh auth login` a tarefa acaba sem PR («incompleta»).
+  [Runner](#runner)). Sem `gh auth login` a tarefa acaba sem PR («Terminou sem PR»: confirma `gh auth status`).
 - **a squad diz que não pode correr um comando.** Com `runner.permission_mode: dontAsk` (omissão) só corre o que está
   em `runner.ferramentas`. O prompt de cada tarefa tem uma secção «Permissões», gerada dessa lista, que diz à squad o
   que pode correr e como (um comando por chamada, ficheiros só com Write/Edit, sem `&&`, pipes nem heredocs). Se o
@@ -184,7 +215,9 @@ ele a sessão activa: com escrita no repositório do Office, a squad podia fazer
   fora da unit, por desenho: `KillMode=process`).
 - **a tarefa acabou mas o cartão não mudou de coluna.** O cartão só passa para «À espera de …» ou «Feito» quando
   alguém abre o Quadro (o movimento é feito no `GET /api/quadro`). Abre o `▦ Quadro`.
-- **carrego em «Lançar» e nada acontece.** O runner (timer de minuto a minuto) não está a correr. Vê
+- **carrego em «Lançar» e nada acontece** (o cartão fica em «a lançar…» e, passados 3 min, diz «O runner ainda não
+  pegou nisto»; ou o escritório mostra a faixa «O runner não dá sinal desde HH:MM»). O runner (timer de minuto a
+  minuto) não está a correr. «Tentar de novo» só relê o Quadro, não envia outro pedido. Vê
   `systemctl --user status office-runner.timer` e `journalctl --user -u office-runner -n 50`. Se o instalador avisou
   sobre *linger*, corre `sudo loginctl enable-linger $USER` (sem isto o runner pára quando sais do SSH). Para o ligar à
   mão: `systemctl --user enable --now office-runner.timer`. Para testar uma passagem:
@@ -198,6 +231,51 @@ ele a sessão activa: com escrita no repositório do Office, a squad podia fazer
 - **o Office mostra uma faixa «config inválida».** O `office.yaml` tem um erro; o Office usa a config de exemplo até o
   corrigires. `python3 ~/squad-office-lite/officecfg.py validar ~/office-lite/office.yaml` diz o erro (a linha, nos
   erros de sintaxe; o campo, nos outros).
+
+### Backups
+
+O que guardar:
+- `~/office-lite/` inteira: `office.yaml`, `.env` (hash da palavra-passe e segredo do proxy), `claude.env`,
+  `runner.env` e `dados/` (tarefas, cartões, decisões, filas, Biblioteca e `push/`, com as chaves e as subscrições
+  das notificações; sem `push/` todos os telemóveis têm de as ligar de novo). Se mudaste `raizes.dados`, guarda
+  também essa pasta;
+- com o Caddy, o volume do Docker `office-lite_caddy_data` (certificados e chave da conta do Let's Encrypt; sem ele o
+  Caddy pede certificados novos, o que funciona mas tem limites de pedidos).
+
+`~/squad-office-lite` é só código (o `get.sh` volta a pô-lo) e os projectos em `~/projectos` estão no GitHub.
+
+```bash
+umask 077                                       # a cópia tem segredos: só tu a lês
+systemctl --user stop office-runner.timer       # sem passagens novas durante a cópia
+tar -czf ~/office-lite-$(date +%F).tar.gz -C ~ office-lite
+docker run --rm -v office-lite_caddy_data:/d:ro alpine tar -czf - -C /d . > ~/caddy_data-$(date +%F).tar.gz
+systemctl --user start office-runner.timer
+```
+Leva os dois ficheiros para fora da VPS (ex.: `scp` para o teu computador). Para repor numa VPS nova: instala o
+Office, pára o runner e o compose (`docker compose -f ~/office-lite/docker-compose.yml down`), extrai a cópia
+(`tar -xzf office-lite-<data>.tar.gz -C ~`), repõe o volume
+(`docker run --rm -i -v office-lite_caddy_data:/d alpine tar -xzf - -C /d < caddy_data-<data>.tar.gz`) e corre
+outra vez `./install.sh` (não pergunta o que já existe).
+
+### Desinstalar
+
+```bash
+systemctl --user disable --now office-runner.timer
+rm ~/.config/systemd/user/office-runner.service ~/.config/systemd/user/office-runner.timer
+systemctl --user daemon-reload
+docker compose -f ~/office-lite/docker-compose.yml down --rmi local   # contentores e a imagem do Office
+rm -rf ~/squad-office-lite ~/squad-office-lite.anterior-*
+```
+Isto não apaga os teus dados. **Só se os quiseres perder de vez** (faz antes o backup, acima): os certificados do
+Caddy (volume) e depois config, credenciais e dados:
+```bash
+docker volume rm office-lite_caddy_data office-lite_caddy_config
+rm -rf ~/office-lite
+```
+Se houver tarefas a correr, pára-as antes (`office_runner.py parar <id>`). Ficam os projectos em `~/projectos` (com
+os worktrees das tarefas em `.worktrees/`), o `claude`, o `gh` e o Docker. Se não usas o *linger* para mais nada:
+`sudo loginctl disable-linger $USER`. Revoga também o token do GitHub e a chave de API do Claude que criaste só para o
+Office.
 
 ---
 
@@ -251,10 +329,13 @@ Lançáveis = cada squad `worktree` × cada projecto.
     quadro-lancar/              pedidos de lançamento
     push/                       chaves e subscrições Web Push (0700)
     biblioteca/<pasta>/         fontes da Biblioteca
-    runner/                     lock, histórico, logs, settings/ e office.yaml.sha256 do runner (só no host)
+    runner/                     lock, histórico, logs, settings/, office.yaml.sha256 e gh-verificado.json
+                                do runner (só no host)
+    runner-estado/estado.json   sinal do runner para o Office (sem segredos; ver Runner)
 ~/projectos/exemplo/            repositório de exemplo criado pelo instalador
 ```
-No contentor, `tasks`, `claude_projects`, `squads`, `decisoes` e `biblioteca` são montadas só de leitura; o Office só
+No contentor, `tasks`, `claude_projects`, `squads`, `decisoes`, `biblioteca` e `runner-estado` são montadas só de
+leitura; o Office só
 escreve em `decisoes-fila`, `quadro`, `quadro-lancar`, `push` e nas miniaturas (num `tmpfs`). O contentor corre com o
 uid/gid de quem instalou (`OFFICE_UID`/`OFFICE_GID` no `.env`), `read_only`, sem portas publicadas.
 
@@ -268,10 +349,23 @@ utilizador `office-runner.timer` (`systemctl --user …`, logs em `journalctl --
 office_runner.py --uma-vez [--config FICH]     uma passagem (omissão: $OFFICE_CONFIG ou ~/office-lite/office.yaml)
 office_runner.py correr TASK_ID [--retomar]    interno: corre o claude numa tarefa já preparada
 office_runner.py parar TASK_ID                 pára uma tarefa «a correr» (fecha em erro; nunca é retomada)
+office_runner.py doctor                        diagnóstico: uma linha ✓/✗ por verificação, com o comando que corrige
 ```
-`correr` e `parar` aceitam também `--config FICH`.
-Cada passagem (com lock, nunca duas ao mesmo tempo): confirma se o `office.yaml` mudou → aplica decisões → retoma tarefas interrompidas (até 2 vezes) →
-trata a fila do Quadro → arquiva pedidos antigos.
+`correr`, `parar` e `doctor` aceitam também `--config FICH`.
+Cada passagem (com lock, nunca duas ao mesmo tempo): grava o `estado.json` → confirma se o `office.yaml` mudou →
+aplica decisões → retoma tarefas interrompidas (até 2 vezes) → trata a fila do Quadro → arquiva pedidos antigos.
+
+**`estado.json`** (`<dados>/runner-estado/`, 0644, escrita atómica): o sinal do runner para o Office, que o lê só de
+leitura e com ele desenha os «Primeiros passos» e a faixa «O runner não dá sinal desde HH:MM» (mais de 3 min sem
+passagem). Só valores de uma lista conhecida, nunca segredos, caminhos nem a saída dos comandos:
+```json
+{"v": 1, "em": "2026-11-08T19:30:00+00:00", "versao": "0.1.3",
+ "claude": "ok|falta", "credencial": "ok|falta|modo", "gh": "ok|sem sessão"}
+```
+`credencial` diz se há uma credencial válida (`claude.env`, `runner.env` ou o login do `claude`), sem a ler para fora
+do runner; `modo` = ficheiro com permissões abertas. O `gh auth status` corre no máximo de 10 em 10 min (o último
+valor fica em `<dados>/runner/gh-verificado.json`). Um `estado.json` inválido, maior que 4 KB ou que seja um symlink é
+ignorado (o Office diz «O runner ainda não deu sinal»). O `/healthz` não muda.
 
 **Lançar:** revalida o pedido contra a config; confirma o tecto diário (`tecto_diario`, no fuso da config) e o
 `paralelo` (acima dele o pedido espera); cria `git worktree` em `<repo>/.worktrees/<task_id>` num branch
@@ -279,7 +373,11 @@ trata a fila do Quadro → arquiva pedidos antigos.
 responde `{"task_id"}` e corre o `claude -p` destacado (log em `<dados>/runner/logs/<task_id>.log`, saída do claude em
 `tasks/<id>/claude.log`; os segredos do `runner.env` chegam-lhe pelo stdin, ver
 [Credenciais do Claude](#credenciais-do-claude)). O título e o brief vão só por ficheiro e stdin, delimitados como dados do utilizador. Limite
-de 3 h (`task`) ou 8 h (`goal`). Estado final: `concluída`, `parcial (PR draft)`, `incompleta` ou `erro`.
+de 3 h (`task`) ou 8 h (`goal`). Estado final: `concluída`, `parcial (PR draft)`, `incompleta` ou `erro` (na
+interface, `parcial (PR draft)` aparece como «PR aberto em rascunho» e `incompleta` como «Terminou sem PR»; nos dados,
+na API e nas notificações os valores não mudam). No diálogo «Lançar», `feat`/`fix` aparecem como «funcionalidade
+nova»/«correcção» e `task`/`goal` como «tarefa curta (até 3 h)»/«objectivo com plano (até 8 h)»; o pedido leva os
+mesmos valores de sempre (contrato v1).
 
 **Travões:**
 - `runner.permission_mode`: `dontAsk` (omissão: o `claude -p` recusa sem perguntar tudo o que não estiver em
@@ -288,6 +386,7 @@ de 3 h (`task`) ou 8 h (`goal`). Estado final: `concluída`, `parcial (PR draft)
   confirmação: sem humano, recusa), `bypassPermissions` (perigoso: tudo sem confirmação, só os proibidos e as
   negações travam).
 - `runner.ferramentas` (`--allowedTools`), por omissão: `Read`, `Edit`, `Write`, `Glob`, `Grep`, `Agent`, `TodoWrite`,
+  `TaskCreate`, `TaskGet`, `TaskList`, `TaskUpdate` (a lista de tarefas das versões recentes do `claude`),
   `Bash(git *)`, `Bash(gh pr create|view|checks|edit|list|ready *)`, `Bash(gh run *)` e `Bash(<cmd> *)` para
   `python`, `python3`, `pytest`, `uv`, `pip`, `npm`, `npx`, `node`, `pnpm`, `yarn`, `make`, `ruff`, `ls`, `wc`,
   `grep`, `diff`, `mkdir`, `touch`, `pwd`, `which`, `sort`. Chega para a squad ir até ao PR num projecto Python ou
@@ -305,7 +404,7 @@ de 3 h (`task`) ou 8 h (`goal`). Estado final: `concluída`, `parcial (PR draft)
     `~/.claude/.credentials.json`, `~/.git-credentials`, `~/.netrc`, `~/.docker/config.json`,
     `~/.config/systemd/**` e `/proc/**` (o ambiente dos outros processos);
   - escrita (`Edit`, que cobre o Write) desses três ficheiros da casa, do `office.yaml`, de `quadro-lancar/`,
-    `decisoes-fila/`, `decisoes/`, `quadro/` e `runner/` dentro de `raizes.dados`, do código do Lite
+    `decisoes-fila/`, `decisoes/`, `quadro/`, `runner/` e `runner-estado/` dentro de `raizes.dados`, do código do Lite
     (`~/squad-office-lite/**`), do ficheiro de `runner.settings`, dos cinco de `~` acima (credenciais e
     `~/.config/systemd/**`) e do que o teu utilizador executa: `~/.claude/settings.json`,
     `~/.claude/settings.local.json`, `~/.bashrc`, `~/.profile`, `~/.bash_profile` e `~/.local/bin/**`;
@@ -369,8 +468,15 @@ Duas vias:
   valor, e recusa um `runner.env` que não seja um ficheiro normal teu com `chmod 600`); `--credenciais` mostra a
   pergunta na mesma.
 
-O instalador pergunta qual (1 = chave de API, omissão; 2 = token, que só mostra estas instruções e não lê nada; 3 =
-nenhuma, se já entraste com `claude` na VPS). A chave de API é lida sem aparecer no ecrã e tem de começar por `sk-ant-`
+O instalador pergunta qual:
+```
+  1) chave de API (recomendada; paga por uso)
+  2) token da subscrição (escreves tu no ficheiro; o instalador mostra como)
+  3) login já feito no claude (expira; só para experimentar)
+```
+A 1 é a omissão. A 2 só mostra estas instruções, com o comando `ssh -t <utilizador>@<domínio ou IP da VPS> claude
+setup-token` já preenchido, e não lê nada. A 3 não escreve credencial: usa o login que já fizeste com `claude` na VPS.
+A chave de API é lida sem aparecer no ecrã e tem de começar por `sk-ant-`
 (só letras, números, `_` e `-`); um token da subscrição colado ali é recusado. O runner lê o `claude.env` (escrito
 pelo instalador ou por ti) com as mesmas regras e mais a do token (`sk-ant-oat01-` seguido de letras, números, `_` ou
 `-`): fora do formato, a tarefa fica em «erro» com «credenciais do Claude inválidas» e a regra, nunca o valor. O
@@ -455,7 +561,8 @@ aprovar.
 
 Kanban com cinco colunas (rótulos na config). **Cartões automáticos**, calculados a cada pedido e nunca gravados:
 tarefas das squads (a correr → Em curso; erro → Em curso com selo vermelho; PR aberto → À espera; PR fundido ou
-terminada sem PR → Feito), aprovações pendentes (À espera) e briefs de `tasks/inbox/*.md` com ≤ 7 dias ainda não
+terminada sem PR → Feito; o detalhe mostra o resultado da tarefa, mascarado, também nos erros), aprovações
+pendentes (À espera) e briefs de `tasks/inbox/*.md` com ≤ 7 dias ainda não
 lançados (A fazer). **Cartões manuais** vivem em `<dados>/quadro/cartoes.json`, contrato v1, chaves exactas:
 ```json
 {"v": 1, "cartoes": [{"id": "m-3f9a1c2b7d", "titulo": "…", "descricao": "md curto", "projecto": "exemplo",
@@ -532,6 +639,16 @@ Para reportar uma falha, ver [`SECURITY.md`](SECURITY.md) (reporte privado no Gi
   `X-Office-Segredo` e o Office recusa (403) quem não o traz, excepto `/healthz`: chegar à rede não basta. Com `--proxy traefik` o segredo fica numa label do contentor: a API/dashboard
   do Traefik e o socket do Docker não podem estar acessíveis a outros contentores dessa rede.
 - **Sem domínio não há HTTPS:** a palavra-passe passa em claro e o Web Push não funciona. Usa um domínio.
+- **Cabeçalhos de segurança** em todas as respostas do proxy, incluindo o 401 do basic auth:
+  `X-Frame-Options: DENY` (ninguém põe o Office numa moldura) e `Referrer-Policy: same-origin`; o Caddy junta
+  `Content-Security-Policy: frame-ancestors 'none'` (o Traefik não: substituiria a CSP que o Office envia na
+  Biblioteca). O `Strict-Transport-Security` (HSTS, 1 ano) só sai com domínio: no Caddy só em HTTPS (com
+  `OFFICE_SITE=:80` nunca); no Traefik sempre (esse modo exige domínio). A CSP completa fica de fora (o JS inline
+  obrigaria a hashes).
+- **Imagens fixadas por digest:** `python:3.13-alpine` (`Dockerfile`), `caddy:2.11.9-alpine` (compose gerado) e
+  `httpd:2.4-alpine` (só para o hash da palavra-passe, no `install.sh`) levam o `@sha256:` do índice
+  multi-arquitectura; as dependências opcionais da imagem estão em `requirements.txt` com versões fixas. Um `docker
+  pull` não muda o que corre sem uma versão nova do Lite.
 - As credenciais do Claude (`claude.env`, 0600) ficam só no host, para o runner: o Office não as monta, não as
   guarda nem as mostra. O instalador não pede o token da subscrição. Os segredos do `runner.env` saem do ambiente do
   runner no arranque; o `git`, o `gh` e o `claude` recebem só a lista branca do ambiente (o `claude` mais a
@@ -564,13 +681,17 @@ Para reportar uma falha, ver [`SECURITY.md`](SECURITY.md) (reporte privado no Gi
   - um `.claude/settings.json` dentro de um projecto (hooks, `allow`) é aplicado pelo `claude`: só lances squads em
     repositórios teus;
   - o `get.sh` confirma a integridade (sha256 da mesma release), não a autenticidade: quem controlar a conta, o ramo
-    `main` ou as releases no GitHub troca os dois. Protege-os com 2FA.
+    `main` ou as releases no GitHub troca os dois. Protege-os com 2FA. A verificação da origem
+    (`gh attestation verify`, ver [Instalação](#instalação)) é opcional e feita por ti;
+  - o `estado.json` está numa pasta que o agente não pode editar com o Edit/Write, mas um interpretador autorizado
+    pode escrevê-la: o pior efeito é um ✓/✗ falso nos «Primeiros passos».
 
 ### Variáveis do servidor
 
 Postas pelo compose gerado: `OFFICE_CONFIG` (omissão `/config/office.yaml`), `TASKS_DIR`, `CLAUDE_PROJECTS_DIR`,
 `SQUADS_DIR`, `APROVACOES_DIR`, `BIBLIOTECA_DIR`, `DECISOES_FILA_DIR`, `QUADRO_DIR`, `QUADRO_LANCAR_DIR`, `PUSH_DIR`,
-`PUSH_CONTACTO` (opcional) e `BIBLIOTECA_MINI_DIR` (omissão `/tmp/miniaturas`); `PORT` (8080).
+`RUNNER_ESTADO_DIR` (omissão `/data/runner-estado`), `PUSH_CONTACTO` (opcional) e
+`BIBLIOTECA_MINI_DIR` (omissão `/tmp/miniaturas`); `PORT` (8080).
 Correr localmente: `OFFICE_CONFIG=office.example.yaml TASKS_DIR=/tmp/t … PORT=18080 python3 server.py`.
 
 ### Testes
@@ -602,6 +723,9 @@ Para preparar uma versão (mantenedores): `scripts/preparar-publico.sh DESTINO` 
 `ci.yml` de quem prepara a versão e não vai para a cópia pública; sem ela, o script recusa-se a correr);
 `scripts/release.sh X.Y.Z` (exige `## Lite X.Y.Z` no `CHANGELOG.md`) cria `dist/squad-office-lite-X.Y.Z.tar.gz` e
 `dist/SHA256SUMS`, os dois ficheiros que o `get.sh` descarrega. Nenhum dos dois publica nada: a release no GitHub (tag `vX.Y.Z` com os dois ficheiros anexados) é manual.
+Na árvore pública (que já não tem a lista de nomes) usa-se `--publica` (`scripts/release.sh --publica X.Y.Z`): salta a
+verificação de nomes e mantém a de caminhos pessoais. É assim que o workflow de release do repositório público
+constrói e atesta os dois ficheiros, que só anexa a uma release em rascunho; publicar continua manual.
 
 ## Licença
 

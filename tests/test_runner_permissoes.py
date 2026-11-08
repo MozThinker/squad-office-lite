@@ -47,7 +47,7 @@ def test_lista_por_omissao_tem_as_frases_chave(pm, mode):
     assert cmds.startswith("- Comandos do Bash autorizados (início do comando): `git`, `gh pr create`, `gh pr view`")
     assert "`pytest`" in cmds and "`npm`" in cmds and "*" not in cmds
     assert _linha(s, "- Ferramentas:") == ("- Ferramentas: `Read`, `Edit`, `Write`, `Glob`, `Grep`, `Agent`, "
-                                           "`TodoWrite`.")
+                                           "`TodoWrite`, `TaskCreate`, `TaskGet`, `TaskList`, `TaskUpdate`.")
 
 
 @pytest.mark.parametrize("mode", MODOS)

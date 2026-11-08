@@ -1,5 +1,6 @@
 // Quadro (kanban), lazy em #quadro. Funções puras testadas em node; DOM só a partir de abrir(). O servidor decide colunas e ordem.
 // HTML: tudo do servidor passa por esc()/md(); «…H()» devolve HTML escapado.
+import { rotuloEstado, rotuloDe, TIPOS, TAMANHOS, dicaErro, lancarParado, projectoNovo, COMANDOS, desvioRelogio } from "./ajuda.js";
 
 export const COL = {
   ideias: ["✦", "Sem ideias guardadas. Quando te lembrares de uma, carrega em + Cartão."],
@@ -197,6 +198,17 @@ export function validaLancar(v, cfg) {
   return e;
 }
 
+// C13: «Lançar…» no menu ⋯ com a fila ligada, manual e sem lançamento activo; ao contrário de arrastar (deveLancar),
+// também um que já está em «Em curso» sem lançamento (ex.: depois de «Só mover»)
+export const podeLancarMenu = (c, lancar) => !!lancar && manual(c) && (!c.lancamento || c.lancamento.estado === "erro");
+
+// C13: dica de arrastar só em ecrã de toque e até «Percebi» (sem localStorage: uma vez por carregamento, ver rota())
+export function verDica(st, toque) {
+  if (!toque) return false;
+  try { return st?.getItem("dicaArrastar") !== "1"; } catch { return true; }
+}
+export const gravarDica = (st) => { try { st?.setItem("dicaArrastar", "1"); } catch {} };
+
 // D6/D13: só um manual que entra em «Em curso» vindo de outra coluna e sem lançamento activo (pendente/ligado)
 export const deveLancar = (c, destino) => manual(c) && destino === "em-curso" && c.coluna !== "em-curso" && (!c.lancamento || c.lancamento.estado === "erro");
 
@@ -217,6 +229,7 @@ const PS = { preventScroll: true };
 const q = (s) => A.root.querySelector(s), qa = (s) => [...A.root.querySelectorAll(s)];
 const el = (id) => q(`.q-board .q-card[data-id="${CSS.escape(id)}"]`);
 const agora = () => Date.now();
+const agoraSrv = () => Date.now() + (S.desvio || 0); // para comparar com datas do servidor (desvio pelo «agora» do GET)
 const reduz = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
 const largo = () => matchMedia("(min-width: 900px)").matches;
 const cols = () => S.d?.colunas.map((c) => c.chave) || [];
@@ -238,7 +251,8 @@ const SHELL = `<div class="q-top"><div class="q-bar">
 <input type="search" maxlength="100" placeholder="Pesquisar" aria-label="Pesquisar no quadro" autocomplete="off" aria-keyshortcuts="/"><kbd aria-hidden="true">/</kbd></label>
 <button type="button" class="q-btn q-pri q-new" data-a="novo" aria-keyshortcuts="n">+ Cartão</button></div>
 <div class="q-chips" role="group" aria-label="Filtrar por projecto"></div><div class="q-tabs" role="tablist" aria-label="Colunas"></div></div>
-<p class="q-aviso" role="status" hidden></p><div class="q-board"></div>
+<p class="q-aviso" role="status" hidden></p>
+<p class="q-dica" hidden>Mantém o dedo no cartão para o arrastar. <button type="button" class="q-btn" data-a="percebi">Percebi</button></p><div class="q-board"></div>
 <p class="q-hint"><kbd>/</kbd> pesquisar · <kbd>n</kbd> novo · <kbd>1</kbd>–<kbd>5</kbd> coluna · num cartão teu: <kbd>Espaço</kbd> agarra, setas movem, <kbd>Esc</kbd> cancela, <kbd>m</kbd> mover, <kbd>e</kbd> editar</p>
 <div class="q-scrim" hidden></div><div class="q-dr" role="dialog" aria-labelledby="q-dh" hidden></div><div class="q-menu" role="menu" hidden></div>
 <button type="button" class="q-fab" data-a="novo" aria-label="Novo cartão">+</button><p class="q-toast" aria-hidden="true"></p><p class="q-sr" aria-live="polite"></p>`;
@@ -280,13 +294,17 @@ export async function abrir(api) {
 }
 const SKEL = `<div class="q-card"><i></i><i></i></div>`.repeat(3);
 
-// cada entrada em #quadro…: poll de 15 s só com o separador visível e nada agarrado/em edição
-export async function rota() {
+// cada entrada em #quadro…: poll de 15 s só com o separador visível e nada agarrado/em edição; «#quadro/novo» abre o formulário
+export async function rota(h) {
   const ini = !S.on;
   S.on = true;
   clearInterval(S.poll);
   S.poll = setInterval(() => !document.hidden && !D && !S.k && !pend && !/form|apagar|lancar/.test(S.dr?.modo) && carregar(true), 15000);
-  if (ini) { await carregar(); q("#q-h").focus(PS); }
+  if (ini) {
+    await carregar(); q("#q-h").focus(PS);
+    q(".q-dica").hidden = !(S.d?.escrita && verDica(globalThis.localStorage, matchMedia("(pointer: coarse)").matches)); // uma vez por carregamento
+  }
+  if (h === "#quadro/novo") { history.replaceState(null, "", "#quadro"); abrirForm(null, "ideias"); }
 }
 
 // prefs da barra mudaram
@@ -306,10 +324,10 @@ async function carregar(poll) {
   try {
     const r = await fetch("api/quadro", { cache: "no-store" });
     if (!r.ok) throw new Error(r.status);
-    const d = await r.json();
+    const d = await r.json(), em = Date.now();
     if (n !== S.seq || f0 !== S.fim || D || S.k) return; // resposta antiga, um POST acabou entretanto, ou o utilizador está a arrastar
     d.projectos = d.projectos.map((p) => ({ ...p, cor: corDe(p.chave, A.cfg) })); // cores c0…c7 da config
-    S.d = d; S.erro = false;
+    S.d = d; S.erro = false; S.desvio = desvioRelogio(d.agora, em);
     if (S.dr?.antes && !S.dr.busy) d.cartoes = moverLocal(d.cartoes, S.dr.id, "em-curso", S.dr.posicao);
     S.rot = Object.fromEntries(d.projectos.map((p) => [p.chave, p.rotulo]));
     S.pj = Object.fromEntries(d.projectos.map((p) => [p.chave, p]));
@@ -329,14 +347,14 @@ const ico = (s) => String(s ?? "") + "\uFE0E"; // selector de variação de text
 const tagH = (p) => `<span class="q-tag" data-p="${esc(p.cor)}"><span aria-hidden="true">${esc(ico(p.icone))}</span> ${esc(p.rotulo)}</span>`;
 const avH = (c) => { const sq = (A.cfg?.squads || []).some((s) => s.id === c.fonte), [l, nome] = avDe(c.fonte, A.cfg) || AV.manual;
   return `<span class="q-av" data-s="${esc(sq ? "squad" : c.fonte)}" role="img" aria-label="${esc(nome)}" title="${esc(nome)}">${esc(l)}</span>`; };
-const seloH = (s) => (s ? `<span class="q-selo" data-c="${esc(s.cor)}">${s.cor === "vermelho" ? "⚠ " : ""}${esc(s.texto)}</span>` : "");
+const seloH = (s) => (s ? `<span class="q-selo" data-c="${esc(s.cor)}">${s.cor === "vermelho" ? "⚠ " : ""}${esc(rotuloEstado(s.texto))}</span>` : "");
 const etiqH = (l) => (l || []).map((e) => `<span class="q-et">${esc(e)}</span>`).join("");
 const colPillH = (k) => `<span class="q-cp" data-col="${esc(k)}"><span aria-hidden="true">${esc(COL[k]?.[0] || "·")}</span> ${esc(rotCol(k))}</span>`;
 
 function cartaoH(c) {
-  const ed = editavel(c), p = pj(c.projecto), w = atrasado(c, agora()), id = idade(c.desde, agora()), cu = custo(c.custo_usd), lift = S.k?.id === c.id, sel = S.dr?.id === c.id;
+  const ed = editavel(c), p = pj(c.projecto), w = atrasado(c, agoraSrv()), id = idade(c.desde, agoraSrv()), cu = custo(c.custo_usd), lift = S.k?.id === c.id, sel = S.dr?.id === c.id;
   const sr = [p.rotulo, avDe(c.fonte, A.cfg)?.[1], id, w && "à espera há mais de 3 dias", ed ? "manual, arrastável" : !manual(c) && "automático, muda sozinho",
-    LANC[c.lancamento?.estado]].filter(Boolean).join(", ");
+    lancarParado(c.lancamento, agoraSrv()) ? PARADO : LANC[c.lancamento?.estado]].filter(Boolean).join(", ");
   return `<li class="q-card${w ? " q-late" : ""}${lift ? " q-lift" : ""}${sel ? " q-sel" : ""}" data-id="${esc(c.id)}" data-p="${esc(p.cor)}" data-kind="${ed ? "manual" : "auto"}"${c.antigo ? " data-old" : ""} tabindex="0" aria-roledescription="cartão">`
     + `<div class="q-c1"><h4 class="q-t">${esc(c.titulo)}</h4>${seloH(c.selo)}`
     + `${ed ? `<button type="button" class="q-more" data-a="menu" aria-label="Acções do cartão" aria-haspopup="menu">⋯</button>` : manual(c) ? "" : lockH()}</div>`
@@ -345,10 +363,11 @@ function cartaoH(c) {
 }
 const barraH = (c) => (c.progress && A.barra ? A.barra(c.progress) : ""); // progHtml escapa
 // estado do lançamento (desenhado do GET, nunca gravado em «etiquetas»); ligado com barra não repete a etiqueta
-const LANC = { "a-lancar": "a lançar…", ligado: "ligado à execução", erro: "erro ao lançar" };
+const LANC = { "a-lancar": "a lançar…", ligado: "ligado à execução", erro: "erro ao lançar" }, PARADO = "O runner ainda não pegou nisto";
 function lancH(c) {
   const l = c.lancamento;
   if (!l) return "";
+  if (lancarParado(l, agoraSrv())) return `<span class="q-et q-le">${esc(PARADO)}</span><button type="button" class="q-lnk q-lx" data-a="retentar">Tentar de novo</button>`;
   if (l.estado === "a-lancar") return `<span class="q-et q-lz">a lançar…</span>`;
   if (l.estado === "erro") return `<span class="q-et q-le">erro ao lançar</span>`;
   return c.progress ? "" : `<span class="q-et">ligado · ${esc(l.task_id)}</span>`;
@@ -446,7 +465,8 @@ function irCol(k, focar) {
 function avisos() {
   const d = S.d, msgs = [S.erro && "Sem ligação ao Office. A mostrar o último estado.",
     d && !d.escrita && `Só leitura: ${d.aviso || "sem pasta do quadro"}. Não dá para criar nem mover cartões.`,
-    d?.invalidos && `${d.invalidos} ${d.invalidos === 1 ? "cartão inválido ignorado" : "cartões inválidos ignorados"} no cartoes.json.`].filter(Boolean);
+    d?.invalidos && `${d.invalidos} ${d.invalidos === 1 ? "cartão inválido ignorado" : "cartões inválidos ignorados"} no cartoes.json.`,
+    S.doctor && d?.cartoes.some((c) => lancarParado(c.lancamento, agoraSrv())) && `No servidor: ${COMANDOS.doctor}`].filter(Boolean);
   q(".q-aviso").hidden = !msgs.length;
   setHtml(q(".q-aviso"), msgs.map(esc).join(" ") + (S.erro ? ` <button type="button" class="q-lnk" data-a="recarregar">Tentar de novo</button>` : ""));
 }
@@ -498,6 +518,8 @@ function clique(e) {
     apr: () => { const l = cartao(S.dr.id)?.links?.aprovacao; l && A.verAprovacao(l.fonte, l.ficheiro); },
     tarefa: () => { const t = cartao(card?.dataset.id ?? S.dr.id)?.links?.tarefa; if (t && A.abrirTarefa(t) === false) aviso("Esta execução já não está no escritório."); },
     exec: () => acc.tarefa(), lock: () => {},
+    percebi: () => { gravarDica(globalThis.localStorage); q(".q-dica").hidden = true; q("#q-h").focus(PS); },
+    retentar: async () => { S.doctor = true; await carregar(); avisos(); anuncia(`No servidor: ${COMANDOS.doctor}`); }, // C12.2: só relê, nunca POST
     lcancel: () => !S.dr.busy && fecharDr(true),
     lmover: () => { if (S.dr.busy) return; const { id, posicao } = S.dr, a = deLancar(S.dr); S.dr.enviado = true; fecharDr(); moverJa(a, id, "em-curso", posicao); } };
   if (acc[a]) return acc[a]();
@@ -548,23 +570,29 @@ function fecharDr(focar) {
 const LAB = { estado: "Estado", modo: "Modo", branch: "Branch", pr_estado: "PR", inicio: "Início", fim: "Fim", duracao_s: "Duração",
   abertas: "Decisões abertas", criado: "Criado", sonda: "Sonda", falha: "Falhas seguidas", nome: "Ficheiro", data: "Data" };
 const BLOCO = { resultado: "Resultado", resumo: "Resumo", ultimo: "Último erro" };
+// blocos de texto do detalhe (resultado já mascarado no servidor, sempre escapado) e a dica com o comando que resolve (B7)
+export function blocosH(dt, esc, md) {
+  const dica = dicaErro(dt.estado, dt.resultado);
+  return Object.entries(BLOCO).filter(([k]) => typeof dt[k] === "string" && dt[k]).map(([k, l]) => `<h3>${esc(l)}</h3><p class="q-blk">${esc(dt[k])}</p>`).join("")
+    + (dica ? `<div class="q-dica2 md">${md(dica)}</div>` : "");
+}
 const linhaH = (k, v) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`;
 
 function detalheH(c) {
   const dt = c.detalhe || {}, ls = [], fs = dt.fases && typeof dt.fases === "object" ? Object.entries(dt.fases) : [];
   for (const [k, l] of Object.entries(LAB)) {
     const v = dt[k];
-    if (v !== null && v !== undefined && v !== "" && typeof v !== "object") ls.push(linhaH(l, k === "duracao_s" ? fmtDur(v) : /^(inicio|fim|criado|data)$/.test(k) ? fmtData(v) : String(v)));
+    if (v !== null && v !== undefined && v !== "" && typeof v !== "object") ls.push(linhaH(l, k === "duracao_s" ? fmtDur(v) : /^(inicio|fim|criado|data)$/.test(k) ? fmtData(v) : k === "estado" ? rotuloEstado(String(v)) : String(v)));
   }
   if (manual(c)) ls.push(linhaH("Criado", fmtData(c.criado)), linhaH("Actualizado", fmtData(c.actualizado)));
   const l = c.lancamento;
   if (l) ls.push(linhaH("Lançamento", [LANC[l.estado], camposLancar(A.cfg)[l.squad]?.nome || l.squad, l.task_id, fmtData(l.pedido_em)].filter(Boolean).join(" · ")));
-  if (c.desde) ls.push(linhaH(c.coluna === "a-espera" ? "À espera" : "Idade", idade(c.desde, agora())));
+  if (c.desde) ls.push(linhaH(c.coluna === "a-espera" ? "À espera" : "Idade", idade(c.desde, agoraSrv())));
   if (custo(c.custo_usd)) ls.push(linhaH("Custo", custo(c.custo_usd)));
   ls.push(linhaH("Id", c.id));
   return `<dl class="q-dl">${ls.join("")}</dl>`
     + (fs.length ? `<p class="q-fases" aria-label="Fases">${fs.map(([k, v]) => `<span class="q-fa${v ? " q-ok" : ""}">${v ? "✓" : "○"} ${esc(k)}</span>`).join("")}</p>` : "")
-    + Object.entries(BLOCO).filter(([k]) => typeof dt[k] === "string" && dt[k]).map(([k, l]) => `<h3>${esc(l)}</h3><p class="q-blk">${esc(dt[k])}</p>`).join("")
+    + blocosH(dt, esc, A.md)
     + (l?.estado === "erro" ? `<h3>Erro ao lançar</h3><p class="q-blk">${esc(l.erro || "sem detalhe")}</p>` : "");
 }
 
@@ -607,7 +635,8 @@ function abrirForm(id, coluna) {
   f.titulo.value = c?.titulo || "";
   f.descricao.value = c?.descricao || "";
   f.etiquetas.value = (c?.etiquetas || []).join(", ");
-  f.projecto.value = c?.projecto || (S.f.p.length === 1 ? S.f.p[0] : "outro");
+  f.projecto.value = c?.projecto || projectoNovo(S.f.p, A.cfg);
+  if (!f.projecto.value) f.projecto.value = "outro"; // id que o quadro não conhece
   if (f.coluna) f.coluna.value = coluna || "ideias";
   mostraDr();
   f.titulo.focus(PS);
@@ -673,17 +702,17 @@ function lancarH(c) {
     + `<div class="q-2"><div>${campoH("squad", "Squad", "", `<select ${atH("squad")}>${optH(Object.entries(cs).map(([k, x]) => [k, x.nome]))}</select>`)}</div>`
     + `<div>${campoH("projecto", "Projecto", "", `<select ${atH("projecto")}><option value="">Escolhe…</option>${optH((A.cfg?.lancar?.projectos || []).map((p) => [p, nomeP(p)]))}</select>`)}</div>`
     + `<div>${campoH("kind", "Tipo", "", `<select ${atH("kind")}></select>`)}</div>`
-    + `<div>${campoH("mode", "Modo", "", `<select ${atH("mode")}></select>`)}</div></div>`
-    + campoH("slug", "Slug", "a-z, 0-9 e «-»", `<input ${atH("slug")} maxlength="60" pattern="[a-z0-9][a-z0-9\\-]{1,58}[a-z0-9]" autocomplete="off" autocapitalize="none" spellcheck="false">`)
+    + `<div>${campoH("mode", "Tamanho", "", `<select ${atH("mode")}></select>`)}</div></div>`
     + campoH("titulo", "Título", "", `<input ${atH("titulo")} maxlength="120" required autocomplete="off">`)
-    + campoH("brief", "Brief", "a descrição do cartão; editar aqui não muda o cartão", `<textarea ${atH("brief")} rows="6"></textarea>`)
-    + `<p class="q-lnota" id="q-l-kb"></p></div>`
+    + campoH("brief", "O que queres? Escreve como a um colega.", "vem da descrição do cartão; editar aqui não muda o cartão", `<textarea ${atH("brief")} rows="6"></textarea>`)
+    + `<p class="q-lnota" id="q-l-kb"></p>`
+    + `<details class="q-adv"><summary>Avançado</summary>${campoH("slug", "Nome curto (slug)", "gerado do título; a-z, 0-9 e «-»", `<input ${atH("slug")} maxlength="60" pattern="[a-z0-9][a-z0-9\\-]{1,58}[a-z0-9]" autocomplete="off" autocapitalize="none" spellcheck="false">`)}</details></div>`
     + `<div class="q-df"><button type="submit" class="q-btn q-pri">Lançar</button><button type="button" class="q-btn" data-a="lmover">Só mover</button>`
     + `<button type="button" class="q-btn" data-a="lcancel">Cancelar</button></div></form>`;
   q("#q-l-brief").setAttribute("aria-describedby", "q-l-brief-e q-l-kb");
 }
 
-const lerLancar = (f) => ({ squad: f.squad.value, projecto: f.projecto.value, kind: f.kind.value, mode: f.mode.value, slug: f.slug.value.trim(),
+export const lerLancar = (f) => ({ squad: f.squad.value, projecto: f.projecto.value, kind: f.kind.value, mode: f.mode.value, slug: f.slug.value.trim(),
   titulo: limpaTexto(f.titulo.value).trim(), brief: limpaTexto(f.brief.value, true) });
 
 // squad mudou → tipos e modos dela, o 1.º de cada por omissão; erros, contador e «Lançar» sempre reavaliados
@@ -691,11 +720,12 @@ function lancarSync(f) {
   const sq = f.squad.value, cp = camposLancar(A.cfg)[sq] || { kind: [], mode: [] };
   if (f.dataset.sq !== sq) {
     f.dataset.sq = sq;
-    f.kind.replaceChildren(...cp.kind.map((k) => new Option(k, k)));
-    f.mode.replaceChildren(...cp.mode.map((m) => new Option(m, m)));
+    f.kind.replaceChildren(...cp.kind.map((k) => new Option(rotuloDe(TIPOS, k), k))); // rótulo em texto, valor igual (contrato v1)
+    f.mode.replaceChildren(...cp.mode.map((m) => new Option(rotuloDe(TAMANHOS, m), m)));
   }
   const v = lerLancar(f), err = validaLancar(v, A.cfg), kb = kbFaltam(v.brief), n = (x) => String(Math.abs(x)).replace(".", ",");
   for (const k of LCAMPOS) { q(`#q-l-${k}-e`).textContent = err[k] || ""; f[k].setAttribute("aria-invalid", !!err[k]); }
+  if (err.slug) f.querySelector(".q-adv").open = true; // C10.3: o erro do slug nunca fica escondido
   q("#q-l-kb").textContent = `Isto vai ser enviado à squad · ${kb >= 0 ? `faltam ${n(kb)} KB de 8 KB` : `${n(kb)} KB acima do limite de 8 KB`}`;
   f.querySelector("[type=submit]").disabled = !S.d.lancar || !!S.dr.busy || Object.keys(err).length > 0;
 }
@@ -833,7 +863,7 @@ function abrirMenu(btn, id, completo) {
   soltarK(false, false);
   S.menu = { id, btn };
   const itemH = (a, txtH, extraH = "") => `<button type="button" role="menuitem" tabindex="-1" data-m="${esc(a)}"${extraH}>${txtH}</button>`;
-  m.innerHTML = (completo ? itemH("editar", "✎ Editar") + itemH("apagar", "✕ Apagar…") + `<div role="separator"></div>` : "") + `<p class="q-ml" aria-hidden="true">Mover para</p>`
+  m.innerHTML = (completo ? itemH("editar", "✎ Editar") + (podeLancarMenu(c, S.d.lancar) ? itemH("lancar", "▷ Lançar…") : "") + itemH("apagar", "✕ Apagar…") + `<div role="separator"></div>` : "") + `<p class="q-ml" aria-hidden="true">Mover para</p>`
     + S.d.colunas.map((k) => itemH("col", `<span aria-hidden="true">${esc(COL[k.chave]?.[0] || "·")}</span> ${esc(k.rotulo)}${k.chave === c.coluna ? " ✓" : ""}`,
       ` data-col="${esc(k.chave)}"${k.chave === c.coluna ? " aria-disabled='true'" : ""}`)).join("")
     + `<div role="separator"></div>` + itemH("topo", "⤒ Topo da coluna") + itemH("fim", "⤓ Fim da coluna");
@@ -863,6 +893,7 @@ function escolheMenu(b) {
   fecharMenu();
   if (a === "editar") return abrirForm(id);
   if (a === "apagar") return confirma(id);
+  if (a === "lancar") return abrirLancar(S.d.cartoes, id, 0); // topo de «Em curso», mesmo diálogo que arrastar
   mover(S.d.cartoes, id, coluna, a === "topo" ? 0 : nMan(coluna, id));
 }
 

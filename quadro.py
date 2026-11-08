@@ -248,7 +248,8 @@ def _dev(t: dict, aux: dict) -> dict | None:
         detalhe={"estado": txt(str(status), ESTADO_MAX), "branch": txt(t.get("branch"), TITULO_MAX) or None,
                  "pr_estado": hit.group(2) if hit else None, "inicio": started, "fim": finished,
                  "duracao_s": _num(t.get("duration_s")),
-                 "fases": {k: phases.get(k) is True for k in ("SPEC", "PLAN", "QA")}},
+                 "fases": {k: phases.get(k) is True for k in ("SPEC", "PLAN", "QA")},
+                 "resultado": txt((aux.get("result") or {}).get((squad, t["id"])), RESULTADO_MAX) or None},
         progress=t.get("progress"))
 
 
@@ -267,7 +268,7 @@ def _dev_espera(w: dict) -> dict | None:
         desde=w.get("finished"), links={"pr": hit.group(1), "aprovacao": None, "tarefa": None},
         detalhe={"estado": txt(str(w.get("status")), ESTADO_MAX), "branch": None,
                  "pr_estado": "open, draft" if w.get("draft") is True else "open", "inicio": None,
-                 "fim": w.get("finished"), "duracao_s": None, "fases": None})
+                 "fim": w.get("finished"), "duracao_s": None, "fases": None, "resultado": None})
 
 
 def _squad(t: dict, aux: dict) -> dict | None:

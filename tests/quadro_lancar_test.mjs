@@ -3,7 +3,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
-import { slugDe, sugestao, corpoLancar, validaLancar, deveLancar, fundeManuais, kbFaltam, bytes, camposLancar, BRIEF_MAX } from "../static/quadro.js";
+import { slugDe, sugestao, corpoLancar, validaLancar, deveLancar, fundeManuais, kbFaltam, bytes, camposLancar, BRIEF_MAX, lerLancar, podeLancarMenu, verDica,
+  gravarDica, blocosH, moverLocal } from "../static/quadro.js";
 
 // config de teste (forma do GET api/config): dev e ops lançáveis, «notas» de sessão (não lançável); projectos loja e blog
 const sqd = (id, nome, tipos, modos, formato = "worktree") => ({ id, nome, lead: "tech-lead", personagem: null, formato, tipos, modos });
@@ -143,11 +144,87 @@ test("fundeManuais: o POST /api/quadro sem «lancamento» mantém o do GET e o q
   assert.equal(fundeManuais([], []).length, 0);
 });
 
-test("AC12: o diálogo vive em quadro.js/quadro.css; index.html não cresce face ao origin/main", (t) => {
+// 0.1.3 (F4): o index.html cresce no máximo 4 KB (lang, faixa do runner, primeiros passos, rótulos); o diálogo continua fora dele
+test("AC12: o diálogo vive em quadro.js/quadro.css; index.html cresce ≤ 4 KB face ao origin/main", (t) => {
   const html = readFileSync(new URL("../static/index.html", import.meta.url));
   assert.doesNotMatch(html.toString("utf8"), /lancar|Lançar na squad/);
   let base;
   try { base = execFileSync("git", ["show", "origin/main:static/index.html"], { cwd: new URL("..", import.meta.url), stdio: ["ignore", "pipe", "ignore"] }); }
   catch { return t.skip("sem origin/main no git"); }
-  assert.ok(html.length <= base.length, `index.html cresceu ${html.length - base.length} bytes`);
+  assert.ok(html.length <= base.length + 4096, `index.html cresceu ${html.length - base.length} bytes`);
+});
+
+// ---- 0.1.3 (F4)
+const Q = readFileSync(new URL("../static/quadro.js", import.meta.url), "utf8");
+
+test("C10.4: lerLancar dá o mesmo corpo da 0.1.2 (kind/mode/slug crus; os rótulos são só texto das opções)", () => {
+  // formulário falso: um select guarda o value (feat/goal), não o texto («funcionalidade nova», …)
+  const f = { squad: { value: "dev" }, projecto: { value: "loja" }, kind: { value: "feat" }, mode: { value: "goal" }, slug: { value: " quadro-lancar " },
+    titulo: { value: " Quadro:\tlançar\u0007 " }, brief: { value: "linha 1\r\nlinha 2\u0000" } };
+  const v = lerLancar(f);
+  assert.deepEqual(corpoLancar(v), { squad: "dev", projecto: "loja", kind: "feat", mode: "goal", slug: "quadro-lancar", titulo: "Quadro: lançar", brief: "linha 1\nlinha 2" });
+  assert.deepEqual(Object.keys(corpoLancar(v)), ["squad", "projecto", "kind", "mode", "slug", "titulo", "brief"]);
+  assert.deepEqual(validaLancar(v, CFG), {});
+  for (const m of ["fix", "task"]) assert.equal(Object.values(lerLancar({ ...f, kind: { value: "fix" }, mode: { value: "task" } })).includes(m), true);
+  // as opções levam o valor cru e o rótulo em texto (new Option, nunca HTML)
+  assert.match(Q, /new Option\(rotuloDe\(TIPOS, k\), k\)/);
+  assert.match(Q, /new Option\(rotuloDe\(TAMANHOS, m\), m\)/);
+  for (const s of ['"Tipo"', '"Tamanho"', '"O que queres? Escreve como a um colega."', "<summary>Avançado</summary>", 'f.querySelector(".q-adv").open = true']) assert.ok(Q.includes(s), s);
+});
+
+test("C13.2: «Lançar…» no menu ⋯ só com a fila ligada e sem lançamento activo", () => {
+  assert.equal(podeLancarMenu(man("a", "ideias"), true), true);
+  assert.equal(podeLancarMenu(man("a", "ideias", { lancamento: lanc("erro") }), true), true);
+  assert.equal(podeLancarMenu(man("a", "ideias", { lancamento: lanc("a-lancar") }), true), false);
+  assert.equal(podeLancarMenu(man("a", "em-curso", { lancamento: lanc("ligado") }), true), false);
+  assert.equal(podeLancarMenu(man("a", "ideias"), false), false);
+  assert.equal(podeLancarMenu(man("a", "em-curso"), true), true);    // já em «Em curso» sem lançamento (depois de «Só mover»)
+  assert.equal(podeLancarMenu(man("a", "em-curso", { lancamento: lanc("erro") }), true), true);
+  assert.equal(deveLancar(man("a", "em-curso"), "em-curso"), false);   // arrastar dentro de «Em curso» continua só a reordenar
+  // abrirLancar(…, 0) a partir do menu: o que já está em «Em curso» fica nela, no topo, e os outros renumerados
+  const l = moverLocal([man("b", "em-curso", { ordem: 10 }), man("a", "em-curso", { ordem: 20 })], "a", "em-curso", 0);
+  assert.deepEqual(l.map((x) => [x.id, x.coluna, x.ordem]), [["b", "em-curso", 20], ["a", "em-curso", 10]]);
+  assert.equal(podeLancarMenu({ id: "dev:x", tipo: "dev" }, true), false);
+  assert.match(Q, /if \(a === "lancar"\) return abrirLancar\(S\.d\.cartoes, id, 0\);/);   // topo de «Em curso», mesmo diálogo
+});
+
+test("C13.1: dica de arrastar só em toque e até «Percebi»; sem localStorage aparece (uma vez por carregamento)", () => {
+  const st = () => { const m = {}; return { getItem: (k) => m[k] ?? null, setItem: (k, v) => { m[k] = String(v); } }; };
+  const a = st();
+  assert.equal(verDica(a, false), false);
+  assert.equal(verDica(a, true), true);
+  gravarDica(a);
+  assert.equal(verDica(a, true), false);
+  const parte = { getItem: () => { throw new Error("SecurityError"); }, setItem: () => { throw new Error("SecurityError"); } };
+  assert.equal(verDica(parte, true), true);
+  assert.doesNotThrow(() => gravarDica(parte));
+  assert.equal(verDica(undefined, true), true);
+  assert.match(Q, /if \(ini\) \{[^}]*\n[^\n]*q\("\.q-dica"\)\.hidden = /);   // só na 1.ª entrada do carregamento
+});
+
+test("B7.2/B7.4: o detalhe de um cartão dev em erro mostra o resultado escapado e a dica", () => {
+  const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const md = (s) => `<p>${esc(s).replace(/`([^`]+)`/g, "<code>$1</code>")}</p>`;
+  const h = blocosH({ estado: "erro", resultado: "credenciais do Claude inválidas <img src=x onerror=alert(1)>" }, esc, md);
+  assert.match(h, /<h3>Resultado<\/h3><p class="q-blk">credenciais do Claude inválidas &lt;img src=x onerror=alert\(1\)&gt;<\/p>/);
+  assert.match(h, /<div class="q-dica2 md"><p>Corre <code>\.\/install\.sh --credenciais<\/code>/);
+  assert.doesNotMatch(h, /<img/);
+  assert.match(blocosH({ estado: "incompleta", resultado: null }, esc, md), /confirma <code>gh auth status<\/code>/);
+  assert.equal(blocosH({ estado: "erro", resultado: "outra coisa" }, esc, md), `<h3>Resultado</h3><p class="q-blk">outra coisa</p>`);
+  assert.equal(blocosH({ estado: "concluída" }, esc, md), "");
+});
+
+test("C12.2: «Tentar de novo» só relê o quadro e aponta para o doctor (nunca POST)", () => {
+  const i = Q.indexOf("retentar: async () =>"), linha = Q.slice(i, Q.indexOf("\n", i));
+  assert.match(linha, /await carregar\(\)/);
+  assert.doesNotMatch(linha, /post\(|fetch\(|method/);
+  assert.match(Q, /No servidor: \$\{COMANDOS\.doctor\}/);
+});
+
+test("C12.1: «parado» e idades no quadro pela hora do servidor (o «agora» do GET), não pelo relógio do telemóvel", () => {
+  assert.match(Q, /const d = await r\.json\(\), em = Date\.now\(\);/);
+  assert.match(Q, /S\.desvio = desvioRelogio\(d\.agora, em\);/);
+  assert.match(Q, /const agoraSrv = \(\) => Date\.now\(\) \+ \(S\.desvio \|\| 0\);/);
+  assert.doesNotMatch(Q, /(lancarParado|idade|atrasado)\([^)]*agora\(\)\)/);   // datas do servidor nunca com o Date.now() cru
+  assert.equal((Q.match(/lancarParado\([^)]*agoraSrv\(\)\)/g) || []).length, 3);
 });

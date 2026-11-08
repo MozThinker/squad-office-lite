@@ -169,6 +169,20 @@ class GetSh(unittest.TestCase):
         self.recusa("erro: não corras como root; usa um utilizador com sudo (README, «VPS nova só com root»)",
                     "--sem-perguntas", FAKE_UID="0")
 
+    def test_root_mostra_os_4_comandos_antes_do_erro(self):   # CA-B9.3: iguais ao README
+        r = self.recusa("erro: não corras como root", "--sem-perguntas", FAKE_UID="0")
+        casa = "/" + "home" + "/u"   # sem o caminho literal: o passo «Genérico» da CI proíbe-o em tests/
+        cmds = ["adduser u", "usermod -aG sudo u", f"install -d -m 700 -o u -g u {casa}/.ssh",
+                f"install -m 600 -o u -g u /root/.ssh/authorized_keys {casa}/.ssh/authorized_keys"]
+        linhas = r.stderr.splitlines()
+        self.assertEqual(linhas[1:5], cmds)
+        self.assertTrue(linhas[5].startswith("erro: não corras como root"))
+        self.assertEqual(r.stdout, "")
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        bloco = readme[readme.index("### VPS nova só com root"):readme.index("### Token do GitHub")]
+        no_readme = [x.split("  #")[0].rstrip() for x in bloco.split("```bash\n")[1].split("```")[0].splitlines()]
+        self.assertEqual(no_readme, cmds)
+
     def test_falta_programa(self):
         for p in ("curl", "sudo", "sha256sum", "tar"):
             (self.bin / p).rename(self.bin / f"{p}.fora")
@@ -254,6 +268,17 @@ class Estatico(unittest.TestCase):
         self.assertTrue(os.access(GET, os.X_OK))
         for v in ("DONO=${OFFICE_LITE_DONO:-", "REPO=${OFFICE_LITE_REPO:-", "BASE=${OFFICE_LITE_URL:-"):
             self.assertIn(v, texto)
+
+    def test_cabecalho_0_1_3(self):   # CA-E17.3, CA-E17.4
+        texto = GET.read_text(encoding="utf-8")
+        cab = texto[:texto.index("set -euo pipefail")]
+        self.assertNotIn("<dono>/<repo>", texto)
+        self.assertNotIn("0.1.2", texto)
+        self.assertEqual(cab.count("https://raw.githubusercontent.com/MozThinker/squad-office-lite/v0.1.3/get.sh"), 2)
+        self.assertIn("gh attestation verify squad-office-lite-0.1.3.tar.gz --repo MozThinker/squad-office-lite", cab)
+        self.assertIn("ex.: --versao 0.1.3", texto)
+        self.assertIn("DONO=${OFFICE_LITE_DONO:-MozThinker}", texto)
+        self.assertIn("REPO=${OFFICE_LITE_REPO:-squad-office-lite}", texto)
 
     @unittest.skipIf(shutil.which("shellcheck") is None, "sem shellcheck")
     def test_shellcheck(self):

@@ -116,6 +116,23 @@ class RegrasDevTest(unittest.TestCase):
         self.assertEqual(c["custo_usd"], 4.1)
         self.assertIsNone(c["progress"])   # só nas tarefas a correr (test_progresso)
 
+    def test_resultado_no_detalhe_dev(self):  # CA-B7.1/B7.2: o mesmo texto mascarado e cortado dos cartões de squad
+        tid = "20261103-2359-office-quadro-kanban"
+        erro = "credenciais do Claude inválidas (claude.env: a chave de API tem de começar por sk-ant-)"
+        c = auto({"tasks": [dev(status="erro")]}, {"result": {("dev", tid): erro}})[f"dev:{tid}"]
+        self.assertEqual((c["coluna"], c["detalhe"]["resultado"]), ("em-curso", erro))
+        longo = f"falhou {SK} " + "x" * 500
+        c = auto({"tasks": [dev(status="incompleta")]}, {"result": {("dev", tid): longo}})[f"dev:{tid}"]
+        r = c["detalhe"]["resultado"]
+        self.assertEqual(len(r), quadro.RESULTADO_MAX)
+        self.assertNotIn(SK, r)
+        self.assertTrue(r.startswith("falhou [segredo]"))
+        for res in (None, "", 5):   # sem result (ou não texto) → null
+            aux = {"result": {("dev", tid): res}} if res is not None else {}
+            self.assertIsNone(auto({"tasks": [dev(status="erro")]}, aux)[f"dev:{tid}"]["detalhe"]["resultado"])
+        w = {"id": "20260901-1000-velha", "squad": "dev", "status": "concluída", "pr_url": PR, "finished": iso(40)}
+        self.assertIsNone(auto({"tasks": [], "waiting": [w]})["dev:20260901-1000-velha"]["detalhe"]["resultado"])
+
     def test_pr_fora_do_github_nao_sai_em_links(self):
         c = self.um(status="arquivada", pr="javascript:alert(1) (merged)")
         self.assertEqual((c["coluna"], c["links"]["pr"]), ("feito", None))

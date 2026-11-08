@@ -20,6 +20,7 @@ services:
       QUADRO_DIR: /data/quadro
       QUADRO_LANCAR_DIR: /data/quadro-lancar
       PUSH_DIR: /data/push
+      RUNNER_ESTADO_DIR: /data/runner-estado
     volumes:
       - type: bind
         source: "/home/utilizador/office-lite/dados/tasks"
@@ -58,13 +59,17 @@ services:
         target: /data/push
         read_only: false
       - type: bind
+        source: "/home/utilizador/office-lite/dados/runner-estado"
+        target: /data/runner-estado
+        read_only: true
+      - type: bind
         source: "/home/utilizador/office-lite/office.yaml"
         target: /config/office.yaml
         read_only: true
     tmpfs:
       - /tmp/miniaturas:size=128m,uid=${OFFICE_UID},gid=${OFFICE_GID},mode=0700
   caddy:
-    image: caddy:2.10-alpine
+    image: caddy:2.11.9-alpine@sha256:0bbb055bda6793c999bde78b1b5ce3e89f829fb031af2cf50056ea1246559fee
     restart: unless-stopped
     depends_on:
       - office

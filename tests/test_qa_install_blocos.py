@@ -107,7 +107,7 @@ class Credenciais(unittest.TestCase):
         resto = self.raiz / "resto"
         r = self.correr("0", entrada=f"2\n{TOKEN}\n", depois=f'cat > "{resto}"\n')
         self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertIn("2) token da subscrição (escreves tu o ficheiro; o instalador não o pede)", r.stdout)
+        self.assertIn("2) token da subscrição (escreves tu no ficheiro; o instalador mostra como)", r.stdout)
         self.explicou(r)
         self.assertEqual(resto.read_text(encoding="utf-8"), TOKEN + "\n")   # o token ficou por ler no stdin
         self.assertFalse((self.casa / "claude.env").exists())
@@ -151,14 +151,14 @@ class Credenciais(unittest.TestCase):
             self.runner_env(texto)
             r = self.correr("0", entrada="3\n")
             self.assertEqual(r.returncode, 0, r.stderr)
-            self.assertIn("3) nenhuma (já tenho login no claude)", r.stdout, texto)
+            self.assertIn("3) login já feito no claude (expira; só para experimentar)", r.stdout, texto)
             self.assertNotIn("runner.env (--credenciais", r.stdout)
 
     def test_credenciais_mostra_o_menu_mesmo_com_runner_env(self):
         self.runner_env(f"ANTHROPIC_API_KEY={TOKEN}\n")
         r = self.correr("0", entrada="3\n", CREDENCIAIS="1")
         self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertIn("3) nenhuma (já tenho login no claude)", r.stdout)
+        self.assertIn("3) login já feito no claude (expira; só para experimentar)", r.stdout)
         self.assertNotIn(TOKEN, r.stdout + r.stderr)
 
     def test_runner_env_inseguro_e_recusado_com_a_correccao(self):

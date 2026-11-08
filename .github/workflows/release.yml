@@ -1,0 +1,60 @@
+name: Release (construir, atestar e anexar)
+
+# Proposta: copiar para .github/workflows/release.yml no repositório público. Corre à mão sobre uma tag vX.Y.Z já
+# empurrada e uma release vX.Y.Z já criada EM RASCUNHO: constrói o tarball e o SHA256SUMS (scripts/release.sh
+# --publica), atesta-os (proveniência SLSA) e anexa-os ao rascunho. Nunca publica a release (isso é manual) e não usa
+# segredos configurados: só o token do próprio workflow.
+
+on:
+  workflow_dispatch:
+    inputs:
+      versao:
+        description: "Versão X.Y.Z (sem o v; a tag vX.Y.Z e a release em rascunho já existem)"
+        required: true
+        type: string
+
+concurrency:
+  group: release-${{ inputs.versao }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+
+jobs:
+  anexar:
+    name: Construir, atestar e anexar
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      VERSAO: ${{ inputs.versao }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - name: Versão válida
+        run: |
+          if ! [[ "$VERSAO" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then echo "::error::versão inválida (usa X.Y.Z)"; exit 1; fi
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: v${{ inputs.versao }}
+          persist-credentials: false
+      - name: A release existe e está em rascunho
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          rascunho=$(gh release view "v$VERSAO" --json isDraft --jq .isDraft)
+          if [ "$rascunho" != true ]; then echo "::error::a release v$VERSAO não existe ou já não está em rascunho"; exit 1; fi
+      - name: Construir
+        run: scripts/release.sh --publica "$VERSAO"
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: |
+            dist/squad-office-lite-${{ inputs.versao }}.tar.gz
+            dist/SHA256SUMS
+      - name: Anexar à release em rascunho
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          rascunho=$(gh release view "v$VERSAO" --json isDraft --jq .isDraft)
+          if [ "$rascunho" != true ]; then echo "::error::a release v$VERSAO já não está em rascunho"; exit 1; fi
+          gh release upload "v$VERSAO" "dist/squad-office-lite-$VERSAO.tar.gz" dist/SHA256SUMS --clobber

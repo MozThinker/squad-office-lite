@@ -1,5 +1,6 @@
 """QA da 0.1.2: o office.example.yaml com as chaves comentadas activas valida (CA-6.4, CA-9.6) e o README diz o que o
-código faz (CA-2.6, CA-5.1, CA-5.7, CA-9.2, CA-9.4, CA-12.9, CA-13.5). Só lê ficheiros do repositório."""
+código faz (CA-2.6, CA-5.1, CA-5.7, CA-9.2, CA-9.4, CA-13.5). Só lê ficheiros do repositório. O CA-12.9 (endereço
+fixado à versão) passou para o tests/test_qa_0_1_3.py, com o endereço da 0.1.3."""
 import re
 import unittest
 from pathlib import Path
@@ -67,18 +68,6 @@ class Readme(unittest.TestCase):
         self.assertIn("não é testado", inst)
         self.assertIn("**4 GB ou mais** (requisito do Claude Code); no nosso teste, tarefas curtas correram em 1 GB",
                       inst)
-
-    def test_um_comando_e_forma_prudente(self):   # CA-12.9
-        inst = seccao("## Instalação")
-        base = "https://raw.githubusercontent.com/<dono>/<repo>/v0.1.2/get.sh"   # D-A1: fixado à versão
-        um = f"curl -fsSL {base} | bash -s -- --versao 0.1.2"
-        self.assertIn(um, inst)
-        for x in (f"curl -fsSLO {base}", "less get.sh", "bash get.sh --versao 0.1.2", "gh repo clone",
-                  "nunca como `root`", "não te protege se o próprio repositório for alterado"):
-            self.assertIn(x, inst)
-        self.assertLess(inst.index("**Forma prudente**"), inst.index(um))
-        self.assertIn(f"curl -fsSL {base} | bash", seccao("### Actualizar"))
-        self.assertNotIn("/main/get.sh", README)
 
     def test_badge_contribuir_e_seguranca(self):   # CA-13.5
         badge = README.splitlines()[2]

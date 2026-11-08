@@ -147,6 +147,7 @@ class ServerTest(unittest.TestCase):
                                    {"nome": "PR", "estado": ""}],
                          "decorrido_s": decorrido, "tipico_s": None, "amostra": 0, "pct": None, "faltam_s": None,
                          "atrasada": False},
+            "resultado": None,
         }])
 
     # --- (b) marketing a correr: só a sessão da meta ---
@@ -618,3 +619,128 @@ class ServerTest(unittest.TestCase):
         self.assertEqual(st["usage"]["status"], "ok")
         self.assertEqual(st["waiting"], [])
         self.assertNotIn("SEGREDO-X", body)
+
+
+RUNNER_BOM = {"v": 1, "em": "2026-11-08T19:30:00+00:00", "versao": "0.1.3", "claude": "ok", "credencial": "modo",
+              "gh": "sem sessão"}
+
+
+class RunnerEstadoTest(ServerTest):
+    """0.1.3 (D15, B7): /api/state ganha "runner" (estado.json validado ou null), "tarefa_entregue" e tasks[].resultado.
+    O /healthz não muda."""
+    BOM = RUNNER_BOM
+
+    def setUp(self):
+        super().setUp()
+        self.estado = Path(self.tmp.name) / "runner-estado"
+        self.estado.mkdir()
+        self.old_estado = server.RUNNER_ESTADO_DIR
+        server.RUNNER_ESTADO_DIR = self.estado
+
+    def tearDown(self):
+        server.RUNNER_ESTADO_DIR = self.old_estado
+        super().tearDown()
+
+    def gravar(self, doc) -> None:
+        (self.estado / "estado.json").write_text(doc if isinstance(doc, str) else json.dumps(doc), encoding="utf-8")
+
+    def test_runner_valido(self):
+        self.gravar(self.BOM)
+        self.assertEqual(server.build_state()["runner"], self.BOM)
+        for k, v in (("credencial", "ok"), ("credencial", "falta"), ("claude", "falta"), ("gh", "ok"),
+                     ("em", "2026-11-08T20:30:00+01:00"), ("versao", "10.20.300")):
+            with self.subTest(k=k, v=v):
+                self.gravar({**self.BOM, k: v})
+                self.assertEqual(server.runner_estado()[k], v)
+
+    def test_runner_invalido_e_null(self):
+        self.assertIsNone(server.build_state()["runner"])   # ainda não deu sinal
+        sem_gh = {k: v for k, v in self.BOM.items() if k != "gh"}
+        casos = [{**self.BOM, "extra": 1}, sem_gh, {**self.BOM, "v": 2}, {**self.BOM, "v": True},
+                 {**self.BOM, "v": "1"}, {**self.BOM, "em": "2026-11-08T19:30:00"}, {**self.BOM, "em": "ontem"},
+                 {**self.BOM, "em": 1762630200}, {**self.BOM, "versao": "0.1"}, {**self.BOM, "versao": "v0.1.3"},
+                 {**self.BOM, "claude": "sim"}, {**self.BOM, "credencial": "sk-ant-api03-x"},
+                 {**self.BOM, "gh": "ok "}, {**self.BOM, "gh": ["ok"]}, "[]", "{", "\xff", ""]
+        for doc in casos:
+            with self.subTest(doc=doc):
+                self.gravar(doc)
+                self.assertIsNone(server.runner_estado())
+
+    def test_runner_limites(self):
+        texto = json.dumps(self.BOM)
+        self.gravar(texto + " " * (server.RUNNER_ESTADO_MAX - len(texto)))   # 4096 bytes: ainda lê
+        self.assertEqual(server.runner_estado(), self.BOM)
+        self.gravar(texto + " " * (server.RUNNER_ESTADO_MAX + 1 - len(texto)))   # > 4 KB
+        self.assertIsNone(server.runner_estado())
+
+    def test_runner_sem_symlinks_nem_outros_tipos(self):
+        fora = Path(self.tmp.name) / "fora.json"
+        fora.write_text(json.dumps(self.BOM), encoding="utf-8")
+        (self.estado / "estado.json").symlink_to(fora)
+        self.assertIsNone(server.runner_estado())
+        (self.estado / "estado.json").unlink()
+        (self.estado / "estado.json").mkdir()
+        self.assertIsNone(server.runner_estado())
+        (self.estado / "estado.json").rmdir()
+        os.mkfifo(self.estado / "estado.json")   # O_NONBLOCK: não fica à espera de quem escreva
+        self.assertIsNone(server.runner_estado())
+
+    def meta(self, tid, status, age_s=600, mode="task", root=None, **extra):
+        write_json((root or self.tasks) / tid / "meta.json",
+                   {"id": tid, "mode": mode, "status": status, "started_at": "2026-10-23T09:00:00",
+                    "finished_at": "2026-10-23T10:00:00", **extra}, age_s=age_s)
+
+    def test_tarefa_entregue(self):
+        self.assertIs(server.build_state()["tarefa_entregue"], False)
+        self.meta("t-erro", "erro")
+        self.meta("t-incompleta", "incompleta")
+        self.meta("t-ensaio", "concluída", mode="dry-run")
+        self.meta("m-1", "concluída", root=self.mkt, squad="marketing")   # squad sessao não conta
+        self.assertIs(server.build_state()["tarefa_entregue"], False)
+        for st in ("concluída", "parcial (PR draft)"):
+            with self.subTest(st=st):
+                # de qualquer idade: antes do corte RECENT_S (a meta já nem aparece em tasks)
+                self.meta("t-velha", st, age_s=server.RECENT_S + 86400)
+                state = server.build_state()
+                self.assertIs(state["tarefa_entregue"], True)
+                self.assertNotIn("t-velha", [t["id"] for t in state["tasks"]])
+
+    def test_tasks_resultado_mascarado_e_cortado(self):
+        segredo = "sk-" + "proj-" + "Abc123XyZ" * 4
+        self.meta("t-erro", "erro", result="credenciais do Claude inválidas (claude.env: …)")
+        self.meta("t-longo", "incompleta", result=f"falhou {segredo} " + "x" * 600)
+        self.meta("t-nada", "concluída")
+        self.meta("t-lista", "concluída", result=["não texto"])
+        self.mkt_task(status="erro", result="erro do marketing")
+        by = {t["id"]: t for t in server.build_state()["tasks"]}
+        self.assertEqual(by["t-erro"]["resultado"], "credenciais do Claude inválidas (claude.env: …)")
+        self.assertEqual(len(by["t-longo"]["resultado"]), server.quadro.RESULTADO_MAX)
+        self.assertNotIn(segredo, by["t-longo"]["resultado"])
+        self.assertIn("[segredo]", by["t-longo"]["resultado"])
+        self.assertIsNone(by["t-nada"]["resultado"])
+        self.assertIsNone(by["t-lista"]["resultado"])
+        self.assertEqual(by["20261023-0730-mkt-diario"]["resultado"], "erro do marketing")
+        self.assertEqual(by["t-erro"]["status"], "erro")   # os estados continuam os antigos (só a UI troca rótulos)
+
+    def test_quadro_dev_com_resultado_e_healthz_igual(self):
+        tid = "20261023-0900-pagina"
+        self.meta(tid, "erro", result="credenciais do Claude inválidas (claude.env: …)")
+        self.gravar(self.BOM)
+        server._cache["at"] = 0.0
+        httpd = ThreadingHTTPServer(("127.0.0.1", 0), server.Handler)
+        threading.Thread(target=httpd.serve_forever, daemon=True).start()
+        base = f"http://127.0.0.1:{httpd.server_address[1]}"
+        try:
+            with urllib.request.urlopen(f"{base}/healthz", timeout=5) as r:
+                self.assertEqual((r.status, r.read()), (200, b"ok"))
+            with urllib.request.urlopen(f"{base}/api/state", timeout=5) as r:
+                st = json.loads(r.read())
+            with urllib.request.urlopen(f"{base}/api/quadro", timeout=5) as r:
+                q = json.loads(r.read())
+        finally:
+            httpd.shutdown()
+            httpd.server_close()
+            server._cache["at"] = 0.0
+        self.assertEqual((st["runner"], st["tarefa_entregue"]), (self.BOM, False))
+        c = next(c for c in q["cartoes"] if c["id"] == f"dev:{tid}")
+        self.assertEqual(c["detalhe"]["resultado"], "credenciais do Claude inválidas (claude.env: …)")

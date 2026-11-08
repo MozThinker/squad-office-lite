@@ -280,6 +280,14 @@ class ValidarTest(unittest.TestCase):
     def test_versao_continua_so_1(self):
         self.erro(com(versao=2, runner={"max_usd": 5}), "versao")
 
+    def test_ferramentas_de_tarefas(self):  # CA-A5.1: logo a seguir ao TodoWrite, por esta ordem
+        f = officecfg.FERRAMENTAS
+        i = f.index("TodoWrite")
+        self.assertEqual(f[i:i + 5], ["TodoWrite", "TaskCreate", "TaskGet", "TaskList", "TaskUpdate"])
+        self.assertEqual(f[:i], ["Read", "Edit", "Write", "Glob", "Grep", "Agent"])
+        self.assertEqual(f[i + 5], "Bash(git *)")
+        self.assertEqual(validar(com())["runner"]["ferramentas"], f)
+
     def test_permission_mode(self):
         for pm in ("dontAsk", "default", "acceptEdits", "auto", "bypassPermissions"):
             self.assertEqual(validar(com(runner={"permission_mode": pm}))["runner"]["permission_mode"], pm)
@@ -422,6 +430,13 @@ class LayoutTest(unittest.TestCase):
         modos = {str(p): m for m, p in ps}
         self.assertEqual(modos["/d/push"], "0700")
         self.assertEqual({m for c, m in modos.items() if c != "/d/push"}, {"0750"})
+
+    def test_runner_estado(self):  # CA-D15.2: pasta própria em dados, fora de <dados>/runner, montada só de leitura
+        cfg = self.cfg(dados="/d", projectos="/p", claude_projects="/c")
+        self.assertEqual(officecfg.caminho(cfg, "runner_estado"), Path("/d/runner-estado"))
+        self.assertIn(("0750", Path("/d/runner-estado")), officecfg.pastas(cfg))
+        self.assertIn(("runner_estado", "/data/runner-estado", "ro", "RUNNER_ESTADO_DIR"), officecfg.MOUNTS)
+        self.assertNotIn("runner", [o for o, *_ in officecfg.MOUNTS])
 
     def test_mounts_cobrem_sub(self):
         for origem, destino, modo, env in officecfg.MOUNTS:

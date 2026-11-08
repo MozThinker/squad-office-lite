@@ -3,7 +3,9 @@
 # squad-office-lite-X.Y.Z/, gerada por scripts/preparar-publico.sh a partir do HEAD) e SHA256SUMS (formato do
 # sha256sum, uma linha), os dois ficheiros que o get.sh descarrega. Não publica nada: a release no GitHub é manual.
 #
-#   scripts/release.sh X.Y.Z      (exige «## Lite X.Y.Z» no CHANGELOG.md do HEAD)
+#   scripts/release.sh [--publica] X.Y.Z      (exige «## Lite X.Y.Z» no CHANGELOG.md do HEAD)
+#
+# --publica: na árvore pública (passa-o ao preparar-publico.sh; ver lá).
 set -euo pipefail
 
 TMP=""
@@ -11,7 +13,9 @@ TMP=""
 erro() { printf 'erro: %s\n' "$*" >&2; exit 1; }
 
 main() {
-  [ $# -eq 1 ] || erro "uso: scripts/release.sh X.Y.Z"
+  local -a publica=()
+  if [ "${1:-}" = --publica ]; then publica=(--publica); shift; fi
+  [ $# -eq 1 ] || erro "uso: scripts/release.sh [--publica] X.Y.Z"
   local versao=$1 aqui raiz nome
   [[ "$versao" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || erro "versão inválida (usa X.Y.Z)"
   aqui=$(cd "$(dirname "$0")" && pwd)
@@ -21,7 +25,7 @@ main() {
   nome="squad-office-lite-$versao"
   TMP=$(mktemp -d)
   trap 'rm -rf "$TMP"' EXIT
-  "$aqui/preparar-publico.sh" "$TMP/$nome"
+  "$aqui/preparar-publico.sh" "${publica[@]}" "$TMP/$nome"
   mkdir -p "$raiz/dist"
   tar --sort=name --owner=0 --group=0 --numeric-owner -czf "$raiz/dist/$nome.tar.gz" -C "$TMP" "$nome"
   (cd "$raiz/dist" && sha256sum "$nome.tar.gz" > SHA256SUMS)

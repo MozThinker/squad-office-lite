@@ -369,8 +369,13 @@ class TranscriptHttpTest(unittest.TestCase):
         self.assertEqual([e["text"] for e in b["entries"]], ["r5"] + [f"r{i}" for i in range(50, 60)])
 
     def test_delivery_never_in_state(self):
+        # o pedido nunca; a entrega (result da meta) só em tasks[].resultado, mascarada e cortada (0.1.3)
         self.dev("T1", fake.prompt("SEGREDO-PEDIDO"), result="SEGREDO-ENTREGA")
-        self.assertNotIn("SEGREDO", json.dumps(server.build_state()))
+        st = server.build_state()
+        self.assertNotIn("SEGREDO-PEDIDO", json.dumps(st))
+        self.assertEqual([t["resultado"] for t in st["tasks"]], ["SEGREDO-ENTREGA"])
+        sem = dict(st, tasks=[{k: v for k, v in t.items() if k != "resultado"} for t in st["tasks"]])
+        self.assertNotIn("SEGREDO", json.dumps(sem))
 
 
 class RulesTest(unittest.TestCase):

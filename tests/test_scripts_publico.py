@@ -208,6 +208,65 @@ class Release(unittest.TestCase):
         self.assertFalse((repo / "dist" / "SHA256SUMS").exists())
 
 
+def conteudo(tarball):
+    """{nome: (modo, bytes)} de cada membro do tarball (pastas com bytes vazios)."""
+    with tarfile.open(tarball) as t:
+        return {m.name: (m.mode, t.extractfile(m).read() if m.isfile() else b"") for m in t.getmembers()}
+
+
+class Publica(unittest.TestCase):   # CA-E17.2: release.sh --publica na árvore pública
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.raiz = Path(self.tmp.name)
+        self.repo, self.env = repo_temporario(self.raiz)
+
+    def arvore_publica(self):
+        """Repositório novo (outra raiz) com o conteúdo do tarball da dev, como o repositório público."""
+        r = correr(self.repo, self.env, "release.sh", "9.9.9")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        tarball = self.repo / "dist" / "squad-office-lite-9.9.9.tar.gz"
+        pub = self.raiz / "publico"
+        pub.mkdir()
+        with tarfile.open(tarball) as t:
+            t.extractall(pub, filter="data")
+        pub = pub / "squad-office-lite-9.9.9"
+        git(pub, self.env, "init", "-q")
+        commit(pub, self.env)
+        return tarball, pub
+
+    def test_mesma_arvore_que_na_dev(self):
+        tarball, pub = self.arvore_publica()
+        r = correr(pub, self.env, "release.sh", "--publica", "9.9.9")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(conteudo(pub / "dist" / "squad-office-lite-9.9.9.tar.gz"), conteudo(tarball))
+
+    def test_sem_flag_na_publica_falha_como_antes(self):
+        _, pub = self.arvore_publica()
+        r = correr(pub, self.env, "release.sh", "9.9.9")
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("erro: não encontrei a lista de nomes internos", r.stderr)
+        self.assertFalse((pub / "dist" / "SHA256SUMS").exists())
+
+    def test_publica_na_dev_recusada(self):
+        r = correr(self.repo, self.env, "preparar-publico.sh", "--publica", str(self.raiz / "pub"))
+        self.assertEqual(r.returncode, 1, r.stderr)
+        self.assertIn("erro: --publica só na árvore pública", r.stderr)
+        r = correr(self.repo, self.env, "release.sh", "--publica", "9.9.9")
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("erro: --publica só na árvore pública", r.stderr)
+        self.assertFalse((self.repo / "dist" / "SHA256SUMS").exists())
+
+    def test_publica_mantem_os_caminhos_pessoais(self):
+        _, pub = self.arvore_publica()
+        (pub / "isco.txt").write_text(f"linha 1\nlinha 2 {CASA_ALHEIA}\n", encoding="utf-8")
+        commit(pub, self.env)
+        r = correr(pub, self.env, "preparar-publico.sh", "--publica", str(self.raiz / "pub2"))
+        self.assertEqual(r.returncode, 1, r.stderr)
+        self.assertIn("isco.txt:2\n", r.stderr)
+        self.assertIn("erro: nomes internos na árvore pública", r.stderr)
+
+
 class Estatico(unittest.TestCase):
     def test_lista_de_nomes_so_no_ci(self):
         ci = ROOT / CI
@@ -222,7 +281,8 @@ class Estatico(unittest.TestCase):
 
     def test_nada_e_publicado(self):   # CA-13.4
         for f in [ROOT / "scripts" / s for s in SCRIPTS] + [ROOT / "get.sh"]:
-            texto = f.read_text(encoding="utf-8")
+            # comentários não correm (o cabeçalho do get.sh ensina o `gh attestation verify`, CA-E17.3)
+            texto = "\n".join(x for x in f.read_text(encoding="utf-8").splitlines() if not x.lstrip().startswith("#"))
             for proibido in (r"\bgh ", r"git push", r"git tag", r"gh release"):
                 self.assertIsNone(re.search(proibido, texto), (f.name, proibido))
 

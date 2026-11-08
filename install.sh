@@ -30,6 +30,8 @@ RX_NOME='^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$'
 RX_CAMINHO='^/[A-Za-z0-9/._+-]*$'
 # formato das credenciais do Claude (o runner aplica os mesmos padrões ao ler o claude.env)
 RX_CRED_API='^sk-ant-[A-Za-z0-9_-]+$'
+# só para o hash da palavra-passe; fixada por digest do index multi-arquitectura (actualizar à mão)
+HTTPD_IMAGEM=httpd:2.4-alpine@sha256:d72968666c0a6961b07036d85fc053bc3cf640583cb1ff8360e1617818f164dc
 
 erro() { printf 'erro: %s\n' "$*" >&2; exit 1; }
 aviso() { printf 'aviso: %s\n' "$*" >&2; }
@@ -96,6 +98,12 @@ if command -v python3 >/dev/null 2>&1 && ! python3 -c 'import sys; sys.exit(sys.
   falta=1
 fi
 [ "$falta" = 0 ] || exit 1
+# gh com sessão: início
+# sem sessão a squad trabalha, mas não abre PR: só avisa (timeout: o gh pode ir à rede)
+if command -v gh >/dev/null 2>&1 && ! timeout 10 gh auth status >/dev/null 2>&1; then
+  aviso "o gh não tem sessão: as tarefas acabam sem PR. Corre gh auth login"
+fi
+# gh com sessão: fim
 [ "$(id -u)" != 0 ] || aviso "a correr como root: o Office e as pastas ficam do root (recomendado: um utilizador normal no grupo docker)"
 for c in "$REPO" "$CASA"; do
   [[ "$c" =~ $RX_CAMINHO ]] || erro "caminho com caracteres não suportados (usa só letras, números e / . _ + -): $c"
@@ -145,18 +153,24 @@ if [ ! -f "$ENVF" ] || [ "$PALAVRA_PASSE" = 1 ]; then
     IFS= read -r PASS < "$OFFICE_PASSWORD_FILE" || [ -n "$PASS" ] || erro "OFFICE_PASSWORD_FILE está vazio"
   else
     UTILIZADOR=$(perguntar "Utilizador do Office" "${UTILIZADOR:-$(id -un | tr '[:upper:]' '[:lower:]')}")
-    read -rsp "Palavra-passe (12 ou mais caracteres): " PASS; echo
-    read -rsp "Repete a palavra-passe: " PASS2; echo
+    # palavra-passe repetida: início
+    for t in 1 2 3; do
+      read -rsp "Palavra-passe (12 ou mais caracteres): " PASS; echo
+      read -rsp "Repete a palavra-passe: " PASS2; echo
+      [ "$PASS" != "$PASS2" ] || break
+      [ "$t" = 3 ] || aviso "as palavras-passe não coincidem: tenta de novo"
+    done
     [ "$PASS" = "$PASS2" ] || erro "as palavras-passe não coincidem"
     unset PASS2
+    # palavra-passe repetida: fim
   fi
   [[ "$UTILIZADOR" =~ $RX_UTILIZADOR ]] || erro "utilizador inválido (minúsculas, números, . _ -; 2 a 32 caracteres): $UTILIZADOR"
   [ "${#PASS}" -ge 12 ] || erro "a palavra-passe tem de ter pelo menos 12 caracteres"
   info "A gerar o hash bcrypt da palavra-passe…"
   # a palavra-passe vai só por stdin (printf é builtin: não aparece em argv nem nos logs)
   # sem `| head`: fechar o pipe antes do fim dá «broken pipe» no docker e, com pipefail, um erro intermitente
-  saida=$(printf '%s\n' "$PASS" | docker run --rm -i httpd:2.4-alpine htpasswd -niBC 12 "$UTILIZADOR") \
-    || erro "não consegui gerar o hash (docker run httpd:2.4-alpine)"
+  saida=$(printf '%s\n' "$PASS" | docker run --rm -i "$HTTPD_IMAGEM" htpasswd -niBC 12 "$UTILIZADOR") \
+    || erro "não consegui gerar o hash (docker run $HTTPD_IMAGEM)"
   linha=${saida%%$'\n'*}
   unset saida
   unset PASS
@@ -174,6 +188,17 @@ explicar_token() {  # o token da subscrição escreve-o o utilizador: o instalad
   info "O instalador não pede nem guarda o token da subscrição. Escreve-o tu em $CASA/claude.env (uma linha"
   info "CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-…) ou em $CASA/runner.env, e corre chmod 600 no ficheiro. Ver README,"
   info "«Credenciais do Claude»."
+}
+explicar_setup_token() {  # opção 2: como gerar o token no computador do utilizador (o instalador continua sem o ler)
+  local vps=${DOMINIO:-}
+  if [ -z "$vps" ]; then
+    vps=$(hostname -I 2>/dev/null || true)
+    vps=${vps%% *}
+  fi
+  info "Para o gerar, no teu computador:"
+  # caminho absoluto: no ssh sem shell interactiva o ~/.local/bin (onde o claude costuma estar) não entra no PATH
+  info "  ssh -t $(id -un)@${vps:-<IP da VPS>} $(command -v claude || echo claude) setup-token"
+  info "e copia a linha que começa por sk-ant-oat01-, não o código do browser."
 }
 segredo_seguro() {  # segredo_seguro <ficheiro>: se existir, ficheiro normal, do utilizador, sem bits 077; senão erro
   local f=$1 dono modo
@@ -204,9 +229,9 @@ elif [ ! -e "$CRED" ] || [ "$CRED_PEDIDO" = 1 ]; then
     fi
   else
     info "Credenciais do Claude para a squad (ficam em $CRED, 0600, só no host):"
-    info "  1) chave de API (recomendada)"
-    info "  2) token da subscrição (escreves tu o ficheiro; o instalador não o pede)"
-    info "  3) nenhuma (já tenho login no claude)"
+    info "  1) chave de API (recomendada; paga por uso)"
+    info "  2) token da subscrição (escreves tu no ficheiro; o instalador mostra como)"
+    info "  3) login já feito no claude (expira; só para experimentar)"
     case "$(perguntar "Escolhe" 1)" in
       1) CRED_VIA=api ;;
       2) CRED_VIA=oauth ;;
@@ -218,6 +243,7 @@ elif [ ! -e "$CRED" ] || [ "$CRED_PEDIDO" = 1 ]; then
     api) CRED_CHAVE=ANTHROPIC_API_KEY ;;
     oauth)
       explicar_token
+      explicar_setup_token
       if [ "$SEM_PERGUNTAS" = 1 ] && [ -n "${OFFICE_CLAUDE_CRED_FILE:-}" ]; then
         aviso "OFFICE_CLAUDE_CRED_FILE ignorado com oauth"
       fi
@@ -429,6 +455,26 @@ if [ "$runner_ok" = 1 ]; then
 fi
 
 # ---------------------------------------------------------------- (9) endereço
+# DNS do domínio: início
+# só avisa e só com o resolvedor do sistema (getent): nenhum serviço de terceiros
+dns_verificar() {  # dns_verificar <domínio>
+  local ip r l
+  local -a resolvidos=() locais=()
+  while read -r ip _; do
+    [[ " ${resolvidos[*]} " == *" $ip "* ]] || resolvidos+=("$ip")
+  done < <(getent ahosts "$1" 2>/dev/null)
+  read -ra locais < <(hostname -I 2>/dev/null) || true
+  if [ "${#resolvidos[@]}" = 0 ]; then
+    aviso "o domínio $1 ainda não resolve: cria um registo A para o IP desta VPS"
+    return 0
+  fi
+  for r in "${resolvidos[@]}"; do
+    for l in "${locais[@]}"; do [ "$r" != "$l" ] || return 0; done
+  done
+  aviso "o domínio $1 aponta para ${resolvidos[*]}, mas esta VPS tem ${locais[*]:-nenhum IP} (se a VPS está atrás de NAT, ignora)"
+}
+[ -z "$DOMINIO" ] || dns_verificar "$DOMINIO"
+# DNS do domínio: fim
 if [ -n "$DOMINIO" ]; then
   info "Pronto: https://$DOMINIO (utilizador: ${UTILIZADOR:-o do .env})"
 else

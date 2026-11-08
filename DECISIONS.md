@@ -196,6 +196,13 @@ chave de API (o prefixo `sk-ant-` e não `sk-ant-api` por compatibilidade com o 
 tarefa fica só documentado (`pkill`; retoma até 2 vezes). Alternativa recusada: lançar com `systemd-run` (dependência
 do D-Bus de utilizador, muda o pai do processo, as retomas e os testes, por um caso raro).
 
+**Nota · estado do runner (2026-11-08):** o runner grava a cada passagem `<dados>/runner-estado/estado.json`
+(`v: 1`; só enumerados, sem segredos, caminhos nem saída de comandos; escrita atómica, 0644). A pasta é mais uma de
+`officecfg.SUB`/`MOUNTS`, montada `ro` no contentor (`RUNNER_ESTADO_DIR`), criada pelo instalador e pelo runner e
+negada ao `Edit` do agente; fica fora de `<dados>/runner/` para os logs e as settings não entrarem no contentor. O
+servidor lê-a com `O_NOFOLLOW`, ≤ 4 KB e chaves exactas (senão `null`). `/api/state` ganha `runner` e
+`tarefa_entregue`; o `/healthz` não muda. Alternativa recusada: montar `<dados>/runner` (`ro`).
+
 ## ADR-007 · Distribuição pública por `get.sh` e GitHub Releases com `SHA256SUMS`; negações por omissão (2026-11-08)
 **Contexto:** o Lite passa a ser instalado por leitores de um livro, que colam um comando por SSH numa VPS sem `git`
 nem `gh` configurados. A revisão da 0.1.1 encontrou ainda: o instalador recolhia o token da subscrição do leitor, o
@@ -242,3 +249,11 @@ antigos. O `get.sh` em si não é verificado (o README mostra a forma prudente: 
 precisem de variáveis de ambiente próprias (proxy, `NODE_OPTIONS`) deixam de as receber do runner; a web volta
 acrescentando-a a `runner.ferramentas`. `blockWritesOutsideWorkingDirectories` só existe nas versões recentes do `claude`; as negações
 explícitas valem em todas.
+
+**Nota · atestação (2026-11-08):** o tarball e o `SHA256SUMS` passam a ser construídos e atestados
+(`actions/attest-build-provenance`) por um workflow `workflow_dispatch` no repositório público, que só os anexa a uma
+release em rascunho; publicar continua manual. `scripts/release.sh --publica` (e `preparar-publico.sh --publica`)
+servem a árvore pública, que já não tem a lista de nomes; a verificação de caminhos pessoais mantém-se. A verificação
+(`gh attestation verify … --repo MozThinker/squad-office-lite`) é opcional (README e `get.sh`). Nesta versão o
+workflow fica proposto em `docs/propostas-ci/release.yml`, a activar depois do merge. Alternativa recusada: atestar
+na dev (a atestação tem de ser do repositório que o leitor usa).

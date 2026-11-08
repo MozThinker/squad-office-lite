@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="pt">
+<html lang="pt-PT">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -118,7 +118,8 @@ li.act { background: var(--act-bg); }
   border: 1px solid var(--ctl); font: inherit; font-size: 12px; cursor: pointer; }
 #office .seat { cursor: pointer; }
 #office .seat:focus { outline: none; }
-#office .seat:focus-visible > rect:first-of-type { stroke: var(--well-focus); stroke-width: 1; }
+/* foco: 2 px de ecrã em qualquer escala do SVG (CA-A6.3) */
+#office .seat:focus-visible > rect:first-of-type { stroke: var(--well-focus); stroke-width: 2px; vector-effect: non-scaling-stroke; }
 /* ecrã estreito: o papel seria ilegível (fica no toque/tooltip) e o nome ganha 1 unidade (cabe em 64 u) */
 @media (max-width: 520px) { #office .role { display: none; } #office .seat > text { font-size: 8px; } }
 /* 4 salas a 360 px sem scroll horizontal */
@@ -157,7 +158,17 @@ svg .beam { transform-origin: 19px 198px; animation: spin 1.6s linear infinite; 
 .tag { display: inline-block; padding: 0 5px; font-size: 11px; background: var(--warn); color: var(--on-warn); font-weight: 600; }
 .now { margin-top: 4px; font-size: 12px; }
 /* config inválida ou ausente: o servidor usa o exemplo e diz porquê */
-#aviso { margin: 0; padding: 6px 16px; font-size: 12px; background: var(--warn-bg); color: var(--warn); border-bottom: 1px solid var(--line); }
+#aviso, #runner-f { margin: 0; padding: 6px 16px; font-size: 12px; background: var(--warn-bg); color: var(--warn); border-bottom: 1px solid var(--line); }
+/* primeiros passos (até à 1.ª tarefa entregue); só no escritório */
+#passos { margin: 12px 16px 0; padding: 10px 14px; background: var(--panel); border: 1px solid var(--accent); }
+body:is([data-view="quadro"], [data-view="biblioteca"]) #passos { display: none; }
+#passos h2 { font-size: 14px; margin: 0 0 6px; }
+#passos ul { list-style: none; margin: 0 0 10px; padding: 0; }
+#passos li { display: block; padding: 6px 0; border-top: 1px solid var(--line); }
+#passos code { display: block; margin-top: 4px; padding: 4px 6px; background: var(--bg); overflow-wrap: anywhere; user-select: all; }
+#passos a { display: inline-flex; align-items: center; min-height: 44px; padding: 0 14px; background: var(--accent); color: var(--on-accent); font-weight: 600; text-decoration: none; }
+#passos a:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+@media (max-width: 520px) { #passos { margin-inline: 8px; } }
 #banner { position: fixed; top: 8px; left: 50%; transform: translateX(-50%); z-index: 10; width: max-content; max-width: calc(100vw - 16px);
   background: var(--ok-bg); color: var(--text); border: 2px solid var(--ok); padding: 8px 14px; font-weight: 600; box-shadow: 0 4px 0 #0008; overflow-wrap: anywhere; }
 /* filtro e pesquisa das tarefas terminadas */
@@ -252,8 +263,10 @@ svg .beam { transform-origin: 19px 198px; animation: spin 1.6s linear infinite; 
   <div id="live"><i></i><span>a ligar…</span></div>
 </header>
 <p id="aviso" role="status" hidden></p>
+<p id="runner-f" role="status" hidden></p>
 <section id="bib" aria-labelledby="bib-h" hidden></section>
 <section id="quadro" aria-labelledby="q-h" hidden></section>
+<section id="passos" aria-labelledby="passos-h" hidden></section>
 <nav id="rooms" aria-label="Salas"></nav>
 <div id="filt"><div role="group" aria-label="Tarefas terminadas de"><button type="button" data-p="hoje">hoje</button><button type="button" data-p="7d">7 d</button><button type="button" data-p="30d">30 d</button></div>
   <input id="q" type="search" placeholder="pesquisar tarefa" aria-label="Pesquisar tarefas por projecto ou id" autocomplete="off"></div>
@@ -422,7 +435,7 @@ function desk(role, active, used, done, tip) {
   }
   if (done) g += `<rect x="${x + 13}" y="${y + 3}" width="4" height="4" fill="#66bb6a"/><path d="M${x + 13.8} ${y + 5} l1 1 l1.6 -2" stroke="#0d0f15" stroke-width=".7" fill="none"/>`;
   // placa: nome a negrito e papel curto por baixo (o papel esconde-se em ecrãs estreitos, ver CSS)
-  g += `</g><text x="${x + 5}" y="${y + 41}" text-anchor="middle" font-size="7" font-weight="bold" fill="${active ? "#ffffff" : used ? "#b0bec5" : "#607d8b"}" font-family="ui-monospace,monospace">${esc(r.name)}</text>`;
+  g += `</g><text x="${x + 5}" y="${y + 41}" text-anchor="middle" font-size="7" font-weight="bold" fill="${active ? "#ffffff" : used ? "#b0bec5" : "#90a4ae"}" font-family="ui-monospace,monospace">${esc(r.name)}</text>`;
   g += `<text class="role" x="${x + 5}" y="${y + 47}" text-anchor="middle" font-size="5" fill="#90a4ae" font-family="ui-monospace,monospace">${esc(r.short)}</text>`;
   return g + `</g>`;
 }
@@ -452,7 +465,7 @@ function room(task) {
   // quadro: fases nas squads com worktree; modo e estado nas de sessão (não têm fases)
   s += `<rect x="104" y="4" width="112" height="24" fill="#eceff1"/><rect x="104" y="27" width="112" height="2" fill="#90a4ae"/>`;
   if (!R().fases) {
-    const st = task ? task.status : "sem trabalho", w = st.length * 2.7 + 8;
+    const st = task ? rot(task.status) : "sem trabalho", w = st.length * 2.7 + 8;
     const col = task ? { "s-run": "#66bb6a", "s-ok": "#64b5f6", "s-warn": "#ffb74d", "s-bad": "#ef5350" }[statusClass(task)] : "#cfd8dc";
     s += `<text x="160" y="15" text-anchor="middle" font-size="8" font-weight="bold" fill="#263238" font-family="ui-monospace,monospace">${esc(task ? task.mode : R().name.toLowerCase())}</text>`;
     s += `<rect x="${160 - w / 2}" y="18" width="${w}" height="7" fill="${col}"/>`;
@@ -490,7 +503,7 @@ function room(task) {
   return s;
 }
 
-const endText = (t) => (t.status === "morreu" ? "a tarefa morreu" : ROOMS[sq(t)].fases && t.status === "concluída" ? `PR pronto para ${cfg.utilizador?.nome || "ti"}` : "terminou: " + t.status);
+const endText = (t) => (t.status === "morreu" ? "a tarefa morreu" : ROOMS[sq(t)].fases && t.status === "concluída" ? `PR pronto para ${cfg.utilizador?.nome || "ti"}` : "terminou: " + rot(t.status));
 
 // ---- v2: actividade ao vivo (o estado só traz kind/tool/error; os rótulos vivem aqui)
 const ACT = { ler: ["📖", "a ler"], editar: ["✏️", "a editar"], terminal: ["💻", "terminal"], testes: ["🧪", "testes"], web: ["🌐", "web"],
@@ -745,7 +758,7 @@ function infoHtml(t) {
   const gh = g.pr || g.ci ? `<div class="sub">GitHub: ${g.pr ? (gm ? `<a href="${esc(g.pr_url)}" target="_blank" rel="noopener noreferrer">PR #${esc(gm[2])}</a>` : "PR") + " " + esc(g.pr) : ""}`
     + `${g.pr && g.ci ? " · " : ""}${g.ci ? `<span class="${g.ci === "vermelho" ? "s-bad" : "s-run"}">CI ${esc(g.ci)}</span>` : ""}</div>` : "";
   return `
-    <h2>${esc(t.project)} <span class="badge ${statusClass(t)}">${esc(t.status)}</span></h2>
+    <h2>${esc(t.project)} <span class="badge ${statusClass(t)}">${esc(rot(t.status))}</span></h2>
     <div class="sub">${esc(t.mode)}${t.branch ? " · " + esc(t.branch) : ""}</div>
     <div class="sub">início ${fmtT(t.started)} · ${t.running ? "há " + fmtDur(t.started) : "duração " + fmtDur(t.started, t.finished)}
       ${t.auto_resumes ? " · retomas auto: " + t.auto_resumes : ""}</div>
@@ -754,8 +767,30 @@ function infoHtml(t) {
     ${pr ? `<div class="sub">PR: ${PR_RE.test(pr[1]) ? `<a href="${esc(pr[1])}" target="_blank" rel="noopener noreferrer">${esc(pr[1].replace(/^https:\/\/github.com\//, ""))}</a>` : esc(pr[1])} ${esc(pr[2])}</div>` : ""}
     ${progHtml(t.progress) || (ROOMS[sq(t)].fases ? `<div class="steps">${phases(t).map((p) => `<span class="${p.state}">${p.name}</span>`).join("")}</div>` : "")}
     ${t.issues.length ? `<div class="issues">${esc(t.issues.join("\n"))}</div>` : ""}
+    ${t.running ? "" : erroHtml(t)}
     <ol>${items || `<li><i></i><span class="sub">${t.mode === "task" ? "Tarefa de um só engenheiro (sem subagentes)." : "Ainda sem passagens."}</span><span></span></li>`}</ol>
     ${t.running ? "" : delivHtml(t)}`;
+}
+
+// ---- 0.1.3 (ajuda.js, por import()): rótulos de estado, resultado com dica, faixa do runner e primeiros passos
+let AJ = null, stateEm = 0; // stateEm: Date.now() quando chegou o state (para o desvio do relógio)
+import("./ajuda.js").then((m) => { AJ = m; paint(false); }, () => {}); // sem ajuda.js: estados crus, sem faixa nem passos
+const rot = (s) => (AJ ? AJ.rotuloEstado(s) : s);
+// resultado (já mascarado no servidor, sempre escapado) e dica com o comando que resolve; não em tarefas concluídas
+function erroHtml(t) {
+  const dica = AJ?.dicaErro(t.status, t.resultado), res = typeof t.resultado === "string" && t.status !== "concluída" ? t.resultado : "";
+  return (res ? `<div class="issues">${esc(res)}</div>` : "") + (dica ? `<div class="md">${md(dica)}</div>` : "");
+}
+function renderAjuda() {
+  if (!AJ || !state) return;
+  const agoraS = Date.now() + AJ.desvioRelogio(state.now, stateEm); // hora do servidor: telemóvel adiantado não dispara avisos
+  const f = AJ.faixaRunner(state.runner, agoraS, TZ), ps = AJ.primeirosPassos(state, agoraS);
+  $("#runner-f").textContent = f ? f + ". Corre o diagnóstico no servidor: " + AJ.COMANDOS.doctor : "";
+  $("#runner-f").hidden = !f;
+  $("#passos").hidden = !ps;
+  setHtml($("#passos"), !ps ? "" : `<h2 id="passos-h">Primeiros passos</h2><ul>${ps.map((p) => `<li><span role="img" aria-label="${p.ok ? "feito" : "por fazer"}">${p.ok ? "✓" : "✗"}</span> `
+    + `${esc(p.rotulo)}${p.comando ? `<code>${esc(p.comando)}</code>` : ""}</li>`).join("")}</ul>`
+    + `<a href="#quadro/novo">Criar o primeiro cartão</a>`);
 }
 
 // ---- v2: entrega e leitor do transcript (só por clique; nunca no polling). O #info é reescrito a cada 8 s: a entrega fica em cache
@@ -911,6 +946,7 @@ function paint(animate) {
   $("#office").innerHTML = room(t);
   if (f) $("#office").querySelector(`.seat[data-role="${f}"]`)?.focus();
   renderInfo(t);
+  renderAjuda();
   musicRoom();
   if (!t || !animate) return;
   const before = new Set((prevWorking[t.id] || []).map(roleOf)), now = new Set(t.working.map(roleOf));
@@ -1112,6 +1148,7 @@ async function tick() {
     const next = await res.json();
     const prev = state;
     state = next;
+    stateEm = Date.now();
     paint(!firstPaint);
     // lembra quem estava a trabalhar para animar as passagens seguintes
     prevWorking = Object.fromEntries(state.tasks.map((t) => [t.id, t.working]));

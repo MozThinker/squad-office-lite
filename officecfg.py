@@ -15,17 +15,19 @@ from pathlib import Path
 from zoneinfo import ZoneInfo, available_timezones
 
 EXEMPLO = Path(__file__).resolve().parent / "office.example.yaml"
+VERSAO = "0.1.3"   # versão do produto: única fonte (runner: estado.json e doctor); = 1.ª «## Lite X.Y.Z» do CHANGELOG
 
 SUB = {"tasks": "tasks", "inbox": "tasks/inbox", "quadro": "quadro", "quadro_lancar": "quadro-lancar",
        "decisoes": "decisoes", "decisoes_fila": "decisoes-fila", "push": "push", "biblioteca": "biblioteca",
-       "squads": "squads", "runner": "runner"}
+       "squads": "squads", "runner": "runner", "runner_estado": "runner-estado"}
 MOUNTS = [  # (origem, destino no contentor, modo, variável de ambiente do servidor)
     ("tasks", "/data/tasks", "ro", "TASKS_DIR"), ("claude_projects", "/data/claude", "ro", "CLAUDE_PROJECTS_DIR"),
     ("squads", "/data/squads", "ro", "SQUADS_DIR"), ("decisoes", "/data/aprovacoes", "ro", "APROVACOES_DIR"),
     ("biblioteca", "/data/biblioteca", "ro", "BIBLIOTECA_DIR"),
     ("decisoes_fila", "/data/decisoes-fila", "rw", "DECISOES_FILA_DIR"),
     ("quadro", "/data/quadro", "rw", "QUADRO_DIR"), ("quadro_lancar", "/data/quadro-lancar", "rw", "QUADRO_LANCAR_DIR"),
-    ("push", "/data/push", "rw", "PUSH_DIR")]
+    ("push", "/data/push", "rw", "PUSH_DIR"),
+    ("runner_estado", "/data/runner-estado", "ro", "RUNNER_ESTADO_DIR")]   # estado.json do runner (sem segredos)
 RAIZES = ("dados", "projectos", "claude_projects")
 COLUNAS = {"ideias": "Ideias", "a-fazer": "A fazer", "em-curso": "Em curso", "a-espera": None, "feito": "Feito"}
 
@@ -223,6 +225,7 @@ _PERMISSION = ("dontAsk", "default", "acceptEdits", "auto", "bypassPermissions")
 # nunca a começar por - (a opção é variádica: seria lido como outra opção)
 _FERRAMENTA = re.compile(r"[A-Za-z][A-Za-z0-9_-]{0,63}(?:\([^()]{1,200}\))?")
 FERRAMENTAS = ["Read", "Edit", "Write", "Glob", "Grep", "Agent", "TodoWrite",
+               "TaskCreate", "TaskGet", "TaskList", "TaskUpdate",
                "Bash(git *)", "Bash(gh pr create *)", "Bash(gh pr view *)", "Bash(gh pr checks *)",
                "Bash(gh pr edit *)", "Bash(gh pr list *)", "Bash(gh pr ready *)", "Bash(gh run *)"] + [
     f"Bash({c} *)" for c in ("python", "python3", "pytest", "uv", "pip", "npm", "npx", "node", "pnpm", "yarn",

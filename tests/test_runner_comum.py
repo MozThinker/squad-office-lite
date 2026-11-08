@@ -14,13 +14,14 @@ for _p in (str(RAIZ / "runner"), str(RAIZ)):
         sys.path.insert(0, _p)
 
 import decisoes
+import diagnostico
 import lancador
 import office_runner
 
 import officecfg
 
 # sem aprovacoes/server aqui: importam reader.py (re `*+`, Python >= 3.11) e estes testes correm também em 3.10
-__all__ = ["decisoes", "lancador", "office_runner", "officecfg"]
+__all__ = ["decisoes", "diagnostico", "lancador", "office_runner", "officecfg"]
 
 GIT_ENV = {"GIT_AUTHOR_NAME": "Teste", "GIT_AUTHOR_EMAIL": "teste@example.com", "GIT_COMMITTER_NAME": "Teste",
            "GIT_COMMITTER_EMAIL": "teste@example.com", "GIT_CONFIG_NOSYSTEM": "1"}
@@ -31,15 +32,28 @@ FAKE = ("FAKE_CLAUDE_ARGV", "FAKE_CLAUDE_STDIN", "FAKE_CLAUDE_FALHA", "FAKE_CLAU
         "FAKE_CLAUDE_SETTINGS", "FAKE_GH_ARGV", "FAKE_GH_SAIDA", "FAKE_GH_SAIDA_VIEW", "FAKE_GH_RC_VIEW")
 
 
+def gh_sem_sessao(tmp: Path) -> Path:
+    """Pasta `tmp/bin-gh` com um `gh` falso que falha sempre (exit 1, sem saída): o `gh auth status` do estado.json e
+    o `gh pr list` nunca chamam o gh real nos testes."""
+    pasta = tmp / "bin-gh"
+    if not (pasta / "gh").exists():
+        pasta.mkdir(exist_ok=True)
+        (pasta / "gh").write_text("#!/bin/sh\nexit 1\n", encoding="utf-8")
+        (pasta / "gh").chmod(0o755)
+    return pasta
+
+
 def ambiente(monkeypatch, tmp: Path, extra_bin: Path | None = None) -> None:
-    """HOME e git isolados, claude falso no PATH (com as FAKE_CLAUDE_* na lista branca), sem Telegram."""
+    """HOME e git isolados, claude falso no PATH (com as FAKE_CLAUDE_* na lista branca), gh falso sem sessão (depois
+    do extra_bin), sem Telegram."""
     monkeypatch.setattr(lancador, "ENV_PASSA", lancador.ENV_PASSA + FAKE)
     monkeypatch.setenv("HOME", str(tmp / "casa"))
     (tmp / "casa").mkdir(exist_ok=True)
     for k, v in GIT_ENV.items():
         monkeypatch.setenv(k, v)
     monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(tmp / "casa" / ".gitconfig"))
-    caminhos = ([str(extra_bin)] if extra_bin else []) + [str(BIN), os.environ.get("PATH", "")]
+    caminhos = ([str(extra_bin)] if extra_bin else []) + [str(gh_sem_sessao(tmp)), str(BIN),
+                                                         os.environ.get("PATH", "")]
     monkeypatch.setenv("PATH", os.pathsep.join(caminhos))
     for k in ("OFFICE_TELEGRAM_TOKEN", "OFFICE_TELEGRAM_CHAT", "OFFICE_TELEGRAM_API", "FAKE_CLAUDE_FALHA",
               "FAKE_CLAUDE_ARGV", "FAKE_CLAUDE_STDIN", "OFFICE_CONFIG", "FAKE_CLAUDE_EXIGE_CRED", "FAKE_CLAUDE_CRED",

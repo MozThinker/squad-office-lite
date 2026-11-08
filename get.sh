@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
 # Squad Office Lite: instala ou actualiza numa VPS Ubuntu com um comando (ver README, «Instalação»).
 #
-#   curl -fsSL https://raw.githubusercontent.com/<dono>/<repo>/v0.1.2/get.sh | bash
-#   curl -fsSL https://raw.githubusercontent.com/<dono>/<repo>/v0.1.2/get.sh | bash -s -- [--versao X.Y.Z] [opções do install.sh]
+#   curl -fsSL https://raw.githubusercontent.com/MozThinker/squad-office-lite/v0.1.3/get.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/MozThinker/squad-office-lite/v0.1.3/get.sh | bash -s -- [--versao X.Y.Z] [opções do install.sh]
 #
 # Descarrega o SHA256SUMS e o squad-office-lite-X.Y.Z.tar.gz das releases do GitHub (a última, ou a de --versao),
 # confirma o sha256, extrai para ~/squad-office-lite (a versão anterior fica em ~/squad-office-lite.anterior-<data>)
 # e corre o install.sh com as outras opções. Os teus dados (a casa do install.sh) não são tocados.
+# Verificação opcional da origem (atestação do GitHub; precisa do gh), com o tarball descarregado à mão:
+#   gh attestation verify squad-office-lite-0.1.3.tar.gz --repo MozThinker/squad-office-lite
 # Tudo corre dentro de main, chamada na última linha: um download interrompido não executa nada.
 set -euo pipefail
 
@@ -23,9 +25,20 @@ erro() { printf 'erro: %s\n' "$*" >&2; exit 1; }
 aviso() { printf 'aviso: %s\n' "$*" >&2; }
 info() { printf '%s\n' "$*"; }
 
+so_root() {  # os 4 comandos de «VPS nova só com root» (README), para criar o utilizador u
+  printf '%s\n' "VPS nova só com root: cria um utilizador normal (troca u pelo nome que quiseres) e entra com ele:" \
+    "adduser u" \
+    "usermod -aG sudo u" \
+    "install -d -m 700 -o u -g u /home/u/.ssh" \
+    "install -m 600 -o u -g u /root/.ssh/authorized_keys /home/u/.ssh/authorized_keys" >&2
+}
+
 verificar() {  # verificar <sem_perguntas>: nada é criado em ~ antes de tudo isto passar
   local arch p
-  [ "$(id -u)" != 0 ] || erro "não corras como root; usa um utilizador com sudo (README, «VPS nova só com root»)"
+  if [ "$(id -u)" = 0 ]; then
+    so_root
+    erro "não corras como root; usa um utilizador com sudo (README, «VPS nova só com root»)"
+  fi
   grep -qxE 'ID="?ubuntu"?' "$OS_RELEASE" 2>/dev/null || erro "este instalador é para Ubuntu"
   arch=$(uname -m)
   case "$arch" in
@@ -54,7 +67,7 @@ main() {
     case "$1" in
       --versao)
         versao=${2:-}
-        [[ "$versao" =~ $RX_VERSAO ]] || erro "versão inválida (usa X.Y.Z, ex.: --versao 0.1.2)"
+        [[ "$versao" =~ $RX_VERSAO ]] || erro "versão inválida (usa X.Y.Z, ex.: --versao 0.1.3)"
         shift ;;
       --sem-perguntas) sem_perguntas=1; args+=("$1") ;;
       *) args+=("$1") ;;

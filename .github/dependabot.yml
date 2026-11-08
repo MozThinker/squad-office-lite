@@ -1,0 +1,16 @@
+# Proposta: copiar para .github/dependabot.yml. Actions (SHA fixado), imagem base do Dockerfile e requirements.txt.
+# O Caddy (runner/gerar_compose.py) e o httpd (install.sh) não são vistos pelo Dependabot: actualizar à mão.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: weekly

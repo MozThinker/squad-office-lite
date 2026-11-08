@@ -1,5 +1,73 @@
 # Changelog
 
+## Lite 0.1.3 (2026-11-08)
+
+Segurança barata, erros com saída e primeira tarefa sem jargão. Os contratos v1 (decisões, `cartoes.json`, pedidos
+de lançamento, push) e o formato do `office.yaml` (`versao: 1`) não mudam. Endereços fixados passam a
+`MozThinker/squad-office-lite/v0.1.3`. As propostas de CI ficam em `docs/propostas-ci/` (fora da árvore pública) e
+são activadas em `.github/` depois do merge, por quem tem permissão.
+
+### Security
+
+- **Imagens fixadas por digest** (índice multi-arquitectura): `python:3.13-alpine` no `Dockerfile`,
+  `caddy:2.11.9-alpine` no compose gerado (era `caddy:2.10-alpine`) e `httpd:2.4-alpine` no `install.sh`. As
+  dependências opcionais da imagem passam para `requirements.txt` (mesmas versões da 0.1.2).
+- **Cabeçalhos de segurança** no Caddyfile e nas labels do Traefik: `X-Frame-Options: DENY`,
+  `Referrer-Policy: same-origin`, `Strict-Transport-Security` (1 ano) só com domínio (no Caddy só em HTTPS) e, só no
+  Caddy, `Content-Security-Policy: frame-ancestors 'none'` (no Traefik substituiria a CSP `sandbox` da Biblioteca).
+  O 401 do basic auth também os leva: no Traefik o middleware `office-lite-cab` é o primeiro da cadeia.
+- **CI** (activada depois do merge; era `docs/propostas-ci/ci.yml`): actions fixadas por SHA, gitleaks por digest, `shellcheck` também
+  do `get.sh` e dos `scripts/*.sh`, e no fumo um `curl -sI` que confirma os cabeçalhos e a ausência de HSTS sem domínio.
+- **Dependabot** (activado depois do merge; era `docs/propostas-ci/dependabot.yml`): `github-actions`, `docker` e `pip`, semanal. Caddy
+  e httpd continuam à mão.
+- **Proposta de release atestada** (`docs/propostas-ci/release.yml`, só para o repositório público): constrói o
+  tarball e o `SHA256SUMS` com `scripts/release.sh --publica`, atesta-os com `actions/attest-build-provenance` e só
+  os anexa a uma release em rascunho; publicar continua manual. Verificação opcional:
+  `gh attestation verify squad-office-lite-X.Y.Z.tar.gz --repo MozThinker/squad-office-lite` (README e `get.sh`).
+- **`scripts/preparar-publico.sh --publica`** e **`scripts/release.sh --publica`**: para correr na árvore pública,
+  sem a lista de nomes (recusado na árvore de desenvolvimento); mantém a verificação de caminhos pessoais.
+- **`runner-estado/` negada ao `Edit`** do agente (como as filas).
+
+### Erros com saída
+
+- **O cartão mostra o resultado da tarefa** (mascarado), também nos cartões `dev` do Quadro (`detalhe.resultado`) e
+  no escritório (`tasks[].resultado` no `/api/state`). Nos erros comuns, a frase vem com o comando: credenciais do
+  Claude ⇒ `./install.sh --credenciais`; «Terminou sem PR» ⇒ `gh auth status`; `runner.settings` inválido ⇒ README.
+- **`office_runner.py doctor`:** uma linha `✓`/`✗ … → <comando>` por verificação (`office.yaml`, Docker e grupo,
+  *linger*, timer, `claude` no PATH, credencial só pelo formato e modo, sessão do `gh`, DNS, portas 80 e 443, versão);
+  exit 0/1; funciona com o `office.yaml` inválido.
+- **`estado.json` do runner** (`<dados>/runner-estado/`, gravado a cada passagem, só valores de uma lista conhecida e
+  sem segredos), montado só de leitura no contentor (`RUNNER_ESTADO_DIR`). O `/api/state` ganha `runner` e
+  `tarefa_entregue`; o `/healthz` não muda. `officecfg.VERSAO` é a única fonte da versão.
+
+### Primeira tarefa sem jargão
+
+- **«Primeiros passos»** no escritório até à primeira tarefa entregue (runner, `claude`, credencial, `gh`, com ✓/✗ e
+  o comando que corrige) e a faixa «O runner não dá sinal desde HH:MM» (mais de 3 min sem passagem).
+- **Diálogo «Lançar»:** «Tipo: funcionalidade nova / correcção», «Tamanho: tarefa curta (até 3 h) / objectivo com
+  plano (até 8 h)», «O que queres? Escreve como a um colega.»; o slug é gerado e fica em «Avançado». Os valores
+  enviados à API não mudam. Cartão novo com o único projecto lançável já escolhido. «a lançar…» passa, ao fim de
+  3 min, a «O runner ainda não pegou nisto» com «Tentar de novo» (só relê). No telemóvel: dica de arrastar na 1.ª vez
+  e «Lançar…» no menu ⋯.
+- **Rótulos de estado na UI:** «PR aberto em rascunho» e «Terminou sem PR» em vez de `parcial (PR draft)` e
+  `incompleta` (os dados não mudam).
+- **Acessibilidade:** `lang="pt-PT"`, contraste do nome das secretárias livres e foco mais visível.
+- **`runner.ferramentas` por omissão** ganha `TaskCreate`, `TaskGet`, `TaskList` e `TaskUpdate`.
+
+### Instalador e documentação
+
+- **Pré-voo do `gh`:** sem sessão avisa («as tarefas acabam sem PR») e continua.
+- **Palavra-passe:** se as duas não coincidem, pede de novo (até 3 vezes).
+- **Menu das credenciais:** «1) chave de API (recomendada; paga por uso) · 2) token da subscrição (escreves tu no
+  ficheiro; o instalador mostra como) · 3) login já feito no claude (expira; só para experimentar)». A opção 2 mostra
+  o `ssh -t <utilizador>@<vps> claude setup-token` já preenchido.
+- **DNS:** com domínio, antes do «Pronto», avisa se não resolve ou se aponta para outro IP.
+- **`get.sh`:** como root, mostra os 4 comandos de «VPS nova só com root» antes do erro; cabeçalho com o endereço
+  público e a verificação opcional da atestação.
+- **README:** só VPS Linux (Windows/macOS: pelo browser), endereços da 0.1.3, verificação da origem, `doctor` à cabeça
+  de «O que fazer se…», «Backups» (`~/office-lite/`, com `push/`, e o volume `caddy_data`), «Desinstalar»,
+  `estado.json`, cabeçalhos e digests.
+
 ## Lite 0.1.2 (2026-11-08)
 
 Credenciais e travões: o Lite deixa de recolher o token da subscrição e, por omissão, não deixa o agente ler segredos

@@ -4,9 +4,11 @@
     office_runner.py --uma-vez [--config FICH]            uma passagem: decisões → retomas → fila do Quadro → rotação
     office_runner.py correr TASK_ID [--retomar] [--config FICH]   (interno) corre o claude numa tarefa já preparada
     office_runner.py parar TASK_ID [--config FICH]        pára uma tarefa «a correr» (fecha em erro; não é retomada)
+    office_runner.py doctor [--config FICH]               diagnóstico: uma linha ✓/✗ por verificação (exit 0/1)
 
 Config: --config, senão $OFFICE_CONFIG, senão ~/office-lite/office.yaml. Lida em modo estrito: inválida → erro em
-stderr, exit 1 e nada lançado (o `parar` usa então só `raizes.dados`). Lock não bloqueante em <dados>/runner/.lock: nunca há duas passagens ao mesmo tempo.
+stderr, exit 1 e nada lançado (o `parar` usa então só `raizes.dados`; o `doctor` di-lo e segue). Lock não
+bloqueante em <dados>/runner/.lock: nunca há duas passagens ao mesmo tempo.
 Imprime uma linha por coisa tratada (vai para o journal); sem nada para fazer não imprime nada.
 """
 from __future__ import annotations
@@ -24,6 +26,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(1, str(Path(__file__).resolve().parent.parent))
 import decisoes
+import diagnostico
 import lancador
 import seguro
 
@@ -149,6 +152,10 @@ def uma_vez(cfg, cfg_path: str, now: float | None = None) -> list[str]:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
             return []
+        try:   # o sinal do runner para o Office; um erro de I/O nunca derruba a passagem
+            diagnostico.gravar_estado(cfg, cfg_path, now)
+        except (OSError, ValueError):
+            pass
         linhas = vigiar_config(cfg, cfg_path)
         linhas += decisoes.processar(officecfg.caminho(cfg, "decisoes_fila"), officecfg.caminho(cfg, "decisoes"),
                                      runner / ".historico.json", cfg["utilizador"]["nome"], lancador.agora(cfg, now))
@@ -172,14 +179,20 @@ def main(argv: list[str]) -> int:
     p = sub.add_parser("parar", help="pára uma tarefa «a correr» (fecha em erro; não é retomada)")
     p.add_argument("task_id")
     p.add_argument("--config", dest="config_sub")
+    d = sub.add_parser("doctor", help="diagnóstico da instalação: ✓/✗ e o comando que corrige")
+    d.add_argument("--config", dest="config_sub")
     a = ap.parse_args(argv)
-    if not a.uma_vez and a.accao not in ("correr", "parar"):
+    if not a.uma_vez and a.accao not in ("correr", "parar", "doctor"):
         ap.print_usage(sys.stderr)
         return 2
     if a.accao == "correr":   # destacado: os segredos chegam por um pipe no stdin (à mão, sem pipe: só o ambiente)
         lancador.ler_segredos_stdin()
     cfg_path = (getattr(a, "config_sub", None) or a.config or os.environ.get("OFFICE_CONFIG")
                 or os.path.expanduser("~/office-lite/office.yaml"))
+    if a.accao == "doctor":   # antes de validar a config: o doctor diz se é inválida e segue
+        codigo, linhas = diagnostico.doctor(cfg_path)
+        print("\n".join(linhas), flush=True)
+        return codigo
     try:
         cfg, _ = officecfg.carregar(cfg_path, estrito=True)
     except officecfg.ConfigErro as e:

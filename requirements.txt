@@ -1,0 +1,7 @@
+# Só para a imagem do Office (Dockerfile); o servidor e o runner correm sem elas.
+# miniaturas da Biblioteca (sem Pillow o servidor serve os originais) e Web Push, ADR-004 (sem cryptography o push
+# fica a 503); só wheel, versões fixas, também as dependências da cryptography (wheel abi3 musllinux_1_2_x86_64)
+pillow==12.0.0
+cryptography==46.0.3
+cffi==2.1.1
+pycparser==3.12

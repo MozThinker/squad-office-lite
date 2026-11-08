@@ -46,7 +46,8 @@ runner:
   # modelo do claude (--model): alias ou nome completo; sem esta chave, o do claude
   # modelo: sonnet
   # ferramentas pré-autorizadas (--allowedTools). Sem esta chave vale a lista por omissão (README, «Runner»):
-  # leitura/edição, Agent, git, gh pr create/view/checks/edit/list/ready, gh run e testes/build comuns (sem web).
+  # leitura/edição, tarefas (Task*), Agent, git, gh pr create/view/checks/edit/list/ready, gh run e testes/build
+  # comuns (sem web).
   # Para a substituir, descomenta e ajusta (os proibidos do runner ganham sempre):
   # ferramentas:
   #   - Read

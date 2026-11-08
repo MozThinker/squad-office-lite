@@ -161,7 +161,10 @@ class SquadLaunchersTest(unittest.TestCase):
                 self.assertEqual(by[f"{squad}-viva"]["status"], "a correr")
         self.assertEqual(sorted(i for i in st["alerts"]["items"] if i.startswith("tarefa:")),
                          ["tarefa:marketing-morta", "tarefa:rnd-morta", "tarefa:support-morta"])
-        self.assertNotIn("nunca no estado", str(st))
+        # 0.1.3: o result só sai mascarado em tasks[].resultado (cartão com o erro), em mais nenhum sítio
+        self.assertEqual({t["resultado"] for t in st["tasks"]}, {"nunca no estado"})
+        sem = dict(st, tasks=[{k: v for k, v in t.items() if k != "resultado"} for t in st["tasks"]])
+        self.assertNotIn("nunca no estado", str(sem))
 
 
 if __name__ == "__main__":

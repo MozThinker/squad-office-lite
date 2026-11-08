@@ -217,7 +217,8 @@ class PesoTest(unittest.TestCase):
     def test_peso(self):
         # CA-27 pedia ≤ 50 KB juntos sem minificar; o tech lead aceitou ~70 KB (~22 KB gzip): estes tectos impedem que cresça mais
         # 49 500 → 63 500: diálogo «Lançar» (ADR-005), só carrega com o Quadro; o index.html não cresce (tech lead, 6/11/2026)
-        self.assertLess(len(JS.read_bytes()), 63_500)
+        # 63 500 → 66 500: 0.1.3 (F4: Tipo/Tamanho/Avançado, «Lançar…» no menu, lançamento parado, dica de arrastar, dica de erro)
+        self.assertLess(len(JS.read_bytes()), 66_500)
         self.assertLess(len(CSS.read_bytes()), 27_800)   # era 25 000; +2 KB temas (5/11/2026); +0,8 KB diálogo «Lançar» (6/11/2026)
         self.assertNotRegex(Q, r"^import |\brequire\(")   # sem dependências
 

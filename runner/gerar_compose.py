@@ -21,7 +21,8 @@ REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO))
 import officecfg  # noqa: E402
 
-CADDY_IMAGEM = "caddy:2.10-alpine"
+# digest do index multi-arquitectura (amd64 e arm64); actualizar à mão (o Dependabot não lê este ficheiro)
+CADDY_IMAGEM = "caddy:2.11.9-alpine@sha256:0bbb055bda6793c999bde78b1b5ce3e89f829fb031af2cf50056ea1246559fee"
 _NOME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")
 # o proxy põe-no no cabeçalho X-Office-Segredo depois do basic auth e o Office exige-o (ADR-006)
 SEGREDO = "${OFFICE_PROXY_SEGREDO:?falta no .env, corre o install.sh}"
@@ -66,10 +67,15 @@ def gerar(cfg, config, proxy="caddy", rede=None, certresolver="letsencrypt", dom
                 f'      - "traefik.http.routers.{r}.rule=Host(`${{OFFICE_DOMINIO}}`)"',
                 f'      - "traefik.http.routers.{r}.entrypoints=websecure"',
                 f'      - "traefik.http.routers.{r}.tls.certresolver={certresolver}"',
-                # pela ordem: basic auth e só depois o cabeçalho com o segredo (substitui o que vier do cliente)
-                f'      - "traefik.http.routers.{r}.middlewares={r}-auth,{r}-segredo"',
+                # pela ordem: os cabeçalhos de resposta (primeiro, para o 401 do basic auth também os levar), o basic
+                # auth e o cabeçalho com o segredo (substitui o que vier do cliente). Sem contentsecuritypolicy: o
+                # Traefik substituiria a CSP do Office (a da Biblioteca leva sandbox); o framedeny chega
+                f'      - "traefik.http.routers.{r}.middlewares={r}-cab,{r}-auth,{r}-segredo"',
                 f'      - "traefik.http.middlewares.{r}-auth.basicauth.users=${{OFFICE_AUTH_USER}}:${{OFFICE_AUTH_HASH}}"',
                 f'      - "traefik.http.middlewares.{r}-segredo.headers.customrequestheaders.X-Office-Segredo={SEGREDO}"',
+                f'      - "traefik.http.middlewares.{r}-cab.headers.framedeny=true"',
+                f'      - "traefik.http.middlewares.{r}-cab.headers.referrerpolicy=same-origin"',
+                f'      - "traefik.http.middlewares.{r}-cab.headers.stsseconds=31536000"',
                 f'      - "traefik.http.services.{r}.loadbalancer.server.port=8080"',
                 "networks:", f"  {rede}:", "    external: true"]
     else:

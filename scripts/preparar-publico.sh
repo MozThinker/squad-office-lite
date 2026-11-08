@@ -3,11 +3,13 @@
 # nomes internos, a lista deles (mesmo na forma nom[e]) ou caminhos de pastas pessoais (/home/<x>, /Users/<x>) que não
 # sejam os exemplos (u, utilizador). Procura também nos ficheiros binários. Não publica nada.
 #
-#   scripts/preparar-publico.sh DESTINO      (DESTINO não pode existir ou tem de estar vazio)
+#   scripts/preparar-publico.sh [--publica] DESTINO      (DESTINO não pode existir ou tem de estar vazio)
 #
 # A lista de nomes não está neste ficheiro: vem do git grep do passo «Genérico» do .github/workflows/ci.yml do HEAD
 # (a linha «nada -niE '…' -- . ':!CHANGELOG.md' …»). Na cópia pública do ci.yml essa linha sai e os nomes saem dos
 # outros padrões; o resto do passo fica.
+# --publica: para correr na árvore pública (que já não tem a lista): exige que o ci.yml não a tenha, salta a
+# verificação de nomes e mantém a de caminhos pessoais. Sem a flag, a falta da lista continua a ser erro.
 set -euo pipefail
 
 CI=.github/workflows/ci.yml
@@ -33,7 +35,9 @@ copyright_fora() {
 }
 
 main() {
-  [ $# -eq 1 ] && [ -n "$1" ] || erro "uso: scripts/preparar-publico.sh DESTINO"
+  local publica=0
+  if [ "${1:-}" = --publica ]; then publica=1; shift; fi
+  [ $# -eq 1 ] && [ -n "$1" ] || erro "uso: scripts/preparar-publico.sh [--publica] DESTINO"
   local destino=$1 raiz achados nomes linha texto alt
   local -a alts linhas
   raiz=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
@@ -59,18 +63,24 @@ main() {
       texto+="$linha"$'\n'
     fi
   done
-  [ -n "$nomes" ] || erro "não encontrei a lista de nomes internos no $CI"
-  IFS='|' read -ra alts <<< "$nomes"
-  for alt in "${alts[@]}"; do
-    texto=${texto//"$alt|"/}
-    texto=${texto//"|$alt"/}
-  done
-  printf '%s' "$texto" > "$destino/$CI"
+  if [ "$publica" = 1 ]; then
+    [ -z "$nomes" ] || erro "--publica só na árvore pública"
+  else
+    [ -n "$nomes" ] || erro "não encontrei a lista de nomes internos no $CI"
+    IFS='|' read -ra alts <<< "$nomes"
+    for alt in "${alts[@]}"; do
+      texto=${texto//"$alt|"/}
+      texto=${texto//"|$alt"/}
+    done
+    printf '%s' "$texto" > "$destino/$CI"
+  fi
 
   # ficheiro:linha de cada ocorrência (grep -o: um /home/u/ na mesma linha não esconde outro caminho; -a: binários)
   achados=$(cd "$destino" && {
-    grep -rnaoiE "$nomes" . || true
-    grep -rnaoiF -f <(printf '%s\n' "${alts[@]}") . || true
+    if [ "$publica" = 0 ]; then
+      grep -rnaoiE "$nomes" . || true
+      grep -rnaoiF -f <(printf '%s\n' "${alts[@]}") . || true
+    fi
     grep -rnaoE "$CASAS" . | grep -vE "$CASAS_EXEMPLO" || true
   } | cut -d: -f1,2 | sed 's|^\./||' | sort -u | copyright_fora "$destino")
   if [ -n "$achados" ]; then

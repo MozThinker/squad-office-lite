@@ -1,0 +1,2 @@
+# Falsos positivos já no histórico (valores de teste, não segredos): commit:ficheiro:regra:linha
+f573ccb7235e1ce29485480b6d9839b48a8be97b:tests/test_runner_doctor.py:generic-api-key:196

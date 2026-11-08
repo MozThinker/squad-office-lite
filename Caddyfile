@@ -1,7 +1,16 @@
 # Squad Office Lite: proxy à frente do Office (único serviço com portas publicadas).
 # OFFICE_SITE = domínio (TLS automático, portas 80/443) ou :80 (só HTTP, sem TLS). Valores no .env (install.sh).
 # X-Office-Segredo: só depois do basic auth, substitui o que vier do cliente; o Office exige-o (ADR-006).
+# Cabeçalhos: o Caddy ordena header antes de basic_auth, por isso o 401 também os leva. HSTS só com HTTPS (domínio):
+# com OFFICE_SITE=:80 nunca sai. A CSP completa fica de fora (o JS inline obrigaria a hashes).
 {$OFFICE_SITE} {
+	header {
+		Content-Security-Policy "frame-ancestors 'none'"
+		X-Frame-Options DENY
+		Referrer-Policy same-origin
+	}
+	@https protocol https
+	header @https Strict-Transport-Security "max-age=31536000"
 	basic_auth {
 		{$OFFICE_AUTH_USER} {$OFFICE_AUTH_HASH}
 	}

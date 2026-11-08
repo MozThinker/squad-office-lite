@@ -12,6 +12,7 @@ GET /api/config devolve a parte pública (officecfg.publico: sem caminhos, conta
   /data/claude/<claude_dir>/<session_id>.jsonl
 - worktree: fim do <tarefa>/claude.log (só custo, turnos e duração das linhas "result")
 - /data/claude/**/*.jsonl em fundo: só contagens de tokens das linhas "assistant" (por message.id)
+- RUNNER_ESTADO_DIR/estado.json (só leitura): o sinal do runner, só enumerados ("runner"; inválido → null)
 
 Excepção, só a pedido: /api/transcript/<id> (reader.py) mostra a entrega e o transcript das sessões
 principais de uma tarefa com meta.json, com máscara de segredos e resultados de ficheiros .env* ocultados.
@@ -46,6 +47,7 @@ import math
 import os
 import re
 import secrets
+import stat
 import sys
 import threading
 import time
@@ -168,6 +170,12 @@ QUADRO_POST_MAX = 16384
 LANCAR = Path(os.environ.get("QUADRO_LANCAR_DIR", "/data/quadro-lancar"))
 LANCAR_POST_MAX = 32768
 BIBLIOTECA_DIR = Path(os.environ.get("BIBLIOTECA_DIR", "/data/biblioteca"))
+# estado.json do runner (só leitura, sem segredos): chaves exactas, só enumerados; inválido ⇒ "runner": null
+RUNNER_ESTADO_DIR = Path(os.environ.get("RUNNER_ESTADO_DIR", "/data/runner-estado"))
+RUNNER_ESTADO_MAX = 4096
+RUNNER_ENUM = {"claude": ("ok", "falta"), "credencial": ("ok", "falta", "modo"), "gh": ("ok", "sem sessão")}
+RUNNER_CHAVES = ("v", "em", "versao", "claude", "credencial", "gh")
+RUNNER_VERSAO = re.compile(r"\d+\.\d+\.\d+")
 
 
 def _load_tz(name: str):
@@ -842,6 +850,7 @@ def build_state(now: float | None = None) -> dict:
     global _aux
     now = time.time() if now is None else now
     aux_metas, aux_result, aux_titulo = [], {}, {}
+    entregue = False   # «Primeiros passos»: há uma tarefa dev entregue (com PR), de qualquer idade
     tasks, waiting, totals, wins = [], [], _empty_totals(), _windows(now)
     days, today_tasks, dead_ids = _empty_days(now), [], []
     amostras, vivas = {}, []   # barra de progresso (progresso.py): durações das concluídas e tarefas a preencher
@@ -883,8 +892,9 @@ def build_state(now: float | None = None) -> dict:
                               quadro.chave_titulo(h1)))
             if h1:   # em bruto: o quadro.py mascara só o que emite
                 aux_titulo[(squad, tid)] = h1
-            if not dev and isinstance(m.get("result"), str):
+            if isinstance(m.get("result"), str):
                 aux_result[(squad, tid)] = m["result"]
+            entregue = entregue or (dev and status in ("concluída", "parcial (PR draft)"))
         item = _waiting_item(m, tid, squad) if dev else None
         if item:
             waiting.append((item["finished"] or "", _iso_local(m.get("started_at")) or "", item))
@@ -940,6 +950,7 @@ def build_state(now: float | None = None) -> dict:
                      "stuck": live and _stuck(main[0], main[1], now)},
             "gh": _gh_task(states),
             "progress": None,
+            "resultado": quadro.txt(m.get("result"), quadro.RESULTADO_MAX) or None,
         })
         if live:
             t = tasks[-1]
@@ -963,7 +974,41 @@ def build_state(now: float | None = None) -> dict:
             "feed": sorted(({k: v for k, v in e.items() if k != "_pr"} for e in reversed(_feed)),
                            key=lambda e: e["at"], reverse=True),
             "alerts": _alerts(dead_ids), "history": history, "today": today_sum,
-            "aprovacoes": aprovacoes.listar(APROVACOES, FILA, LOCAL_TZ, now), "token": TOKEN}
+            "aprovacoes": aprovacoes.listar(APROVACOES, FILA, LOCAL_TZ, now), "token": TOKEN,
+            "runner": runner_estado(), "tarefa_entregue": entregue}
+
+
+def runner_estado() -> dict | None:
+    # <RUNNER_ESTADO_DIR>/estado.json: ficheiro regular (sem symlink), <= 4 KB, objecto com as chaves exactas e só
+    # valores conhecidos; qualquer falha ⇒ None (o painel diz «o runner ainda não deu sinal»)
+    try:
+        fd = os.open(RUNNER_ESTADO_DIR / "estado.json", os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC)
+    except OSError:
+        return None
+    try:
+        if not stat.S_ISREG(os.fstat(fd).st_mode):
+            return None
+        raw = os.read(fd, RUNNER_ESTADO_MAX + 1)
+    except OSError:
+        return None
+    finally:
+        os.close(fd)
+    try:
+        d = json.loads(raw.decode("utf-8")) if len(raw) <= RUNNER_ESTADO_MAX else None
+    except ValueError:
+        return None
+    if not isinstance(d, dict) or sorted(d) != sorted(RUNNER_CHAVES) or type(d["v"]) is not int or d["v"] != 1:
+        return None
+    if not isinstance(d["versao"], str) or not RUNNER_VERSAO.fullmatch(d["versao"]):
+        return None
+    if any(d[k] not in vals for k, vals in RUNNER_ENUM.items()):
+        return None
+    try:
+        if datetime.fromisoformat(d["em"]).tzinfo is None:
+            return None
+    except (TypeError, ValueError):
+        return None
+    return {k: d[k] for k in RUNNER_CHAVES}
 
 
 def _log_delivery(path: Path) -> str | None:

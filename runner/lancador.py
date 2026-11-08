@@ -778,7 +778,7 @@ def settings_base(cfg, cfg_path: str | None) -> dict:
             _regra("Read", home / ".ssh" / "**")] + [_regra("Read", f) for f in cred_home] + ["Read(//proc/**)"]
     editar += [_regra("Edit", f) for f in cred_home + executa]
     editar += [_regra("Edit", officecfg.caminho(cfg, k) / "**")
-               for k in ("quadro_lancar", "decisoes_fila", "decisoes", "quadro", "runner")]
+               for k in ("quadro_lancar", "decisoes_fila", "decisoes", "quadro", "runner", "runner_estado")]
     editar.append(_regra("Edit", RUNNER_REPO / "**"))
     if cfg["runner"]["settings"]:
         editar.append(_regra("Edit", cfg["runner"]["settings"]))

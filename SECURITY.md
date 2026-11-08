@@ -39,11 +39,12 @@ purchase.*
 O mesmo comando da instalação (ver README, «Actualizar»):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/<dono>/<repo>/v0.1.2/get.sh | bash
+curl -fsSL https://raw.githubusercontent.com/MozThinker/squad-office-lite/v0.1.3/get.sh | bash
 ```
 
 Descarrega a última versão publicada, confirma o sha256 e corre o `install.sh`. A versão anterior fica em
-`~/squad-office-lite.anterior-<data>`; `~/office-lite` (config, credenciais e dados) não é tocada.
+`~/squad-office-lite.anterior-<data>`; `~/office-lite` (config, credenciais e dados) não é tocada. Para confirmar
+também a origem do pacote (opcional), ver README, «Instalação» (`gh attestation verify`).
 
 ## Âmbito
 

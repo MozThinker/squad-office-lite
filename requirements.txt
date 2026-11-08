@@ -2,6 +2,6 @@
 # miniaturas da Biblioteca (sem Pillow o servidor serve os originais) e Web Push, ADR-004 (sem cryptography o push
 # fica a 503); só wheel, versões fixas, também as dependências da cryptography (wheel abi3 musllinux_1_2_x86_64)
 pillow==12.0.0
-cryptography==46.0.3
+cryptography==50.0.2
 cffi==2.1.1
 pycparser==3.12

@@ -1,0 +1,89 @@
+# Gerado por runner/gerar_compose.py a partir do office.yaml; não editar à mão (corre de novo o install.sh).
+name: office-lite
+services:
+  office:
+    build: "/home/utilizador/squad-office-lite"
+    restart: unless-stopped
+    read_only: true
+    # Pillow descodifica uma miniatura de cada vez (até ~330 MB) + tmpfs das miniaturas + servidor
+    mem_limit: 768m
+    user: "${OFFICE_UID}:${OFFICE_GID}"
+    environment:
+      OFFICE_CONFIG: /config/office.yaml
+      OFFICE_PROXY_SEGREDO: ${OFFICE_PROXY_SEGREDO:?falta no .env, corre o install.sh}
+      TASKS_DIR: /data/tasks
+      CLAUDE_PROJECTS_DIR: /data/claude
+      SQUADS_DIR: /data/squads
+      APROVACOES_DIR: /data/aprovacoes
+      BIBLIOTECA_DIR: /data/biblioteca
+      DECISOES_FILA_DIR: /data/decisoes-fila
+      QUADRO_DIR: /data/quadro
+      QUADRO_LANCAR_DIR: /data/quadro-lancar
+      PUSH_DIR: /data/push
+    volumes:
+      - type: bind
+        source: "/home/utilizador/office-lite/dados/tasks"
+        target: /data/tasks
+        read_only: true
+      - type: bind
+        source: "/home/utilizador/.claude/projects"
+        target: /data/claude
+        read_only: true
+      - type: bind
+        source: "/home/utilizador/office-lite/dados/squads"
+        target: /data/squads
+        read_only: true
+      - type: bind
+        source: "/home/utilizador/office-lite/dados/decisoes"
+        target: /data/aprovacoes
+        read_only: true
+      - type: bind
+        source: "/home/utilizador/office-lite/dados/biblioteca"
+        target: /data/biblioteca
+        read_only: true
+      - type: bind
+        source: "/home/utilizador/office-lite/dados/decisoes-fila"
+        target: /data/decisoes-fila
+        read_only: false
+      - type: bind
+        source: "/home/utilizador/office-lite/dados/quadro"
+        target: /data/quadro
+        read_only: false
+      - type: bind
+        source: "/home/utilizador/office-lite/dados/quadro-lancar"
+        target: /data/quadro-lancar
+        read_only: false
+      - type: bind
+        source: "/home/utilizador/office-lite/dados/push"
+        target: /data/push
+        read_only: false
+      - type: bind
+        source: "/home/utilizador/office-lite/office.yaml"
+        target: /config/office.yaml
+        read_only: true
+    tmpfs:
+      - /tmp/miniaturas:size=128m,uid=${OFFICE_UID},gid=${OFFICE_GID},mode=0700
+  caddy:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    depends_on:
+      - office
+    mem_limit: 256m
+    # único serviço com portas publicadas
+    ports:
+      - "80:80"
+    environment:
+      OFFICE_SITE: ${OFFICE_SITE}
+      OFFICE_AUTH_USER: ${OFFICE_AUTH_USER}
+      OFFICE_AUTH_HASH: ${OFFICE_AUTH_HASH}
+      OFFICE_PROXY_SEGREDO: ${OFFICE_PROXY_SEGREDO:?falta no .env, corre o install.sh}
+    volumes:
+      - type: bind
+        source: "/home/utilizador/squad-office-lite/Caddyfile"
+        target: /etc/caddy/Caddyfile
+        read_only: true
+      - caddy_data:/data
+      - caddy_config:/config
+volumes:
+  caddy_data:
+  caddy_config:

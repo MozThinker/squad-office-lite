@@ -1,0 +1,12 @@
+# Runner do Squad Office Lite (systemd de utilizador). O install.sh substitui @REPO@ @CONFIG@ @PATH@ @CASA@
+# e copia esta unit e o .timer para ~/.config/systemd/user/.
+[Unit]
+Description=Squad Office Lite: runner (decisões, fila do Quadro, rotação)
+
+[Service]
+Type=oneshot
+# o runner lança o claude destacado; o fim da passagem não o pode matar
+KillMode=process
+Environment=PATH=@PATH@
+EnvironmentFile=-@CASA@/runner.env
+ExecStart=/usr/bin/env python3 @REPO@/runner/office_runner.py --uma-vez --config @CONFIG@

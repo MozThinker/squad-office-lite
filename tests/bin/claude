@@ -1,0 +1,44 @@
+#!/usr/bin/env python3
+"""`claude` falso e determinístico (testes e teste de fumo): nunca chama a rede.
+
+Lê o stdin todo; FAKE_CLAUDE_ARGV=<ficheiro> anexa json.dumps(argv); FAKE_CLAUDE_STDIN=<ficheiro> grava o stdin.
+Escreve em stream-json um init e um result; com --resume <id> reutiliza essa sessão.
+FAKE_CLAUDE_FALHA=1 → is_error true e exit 1.
+FAKE_CLAUDE_EXIGE_CRED=1 → falha (como FAKE_CLAUDE_FALHA) sem ANTHROPIC_API_KEY nem CLAUDE_CODE_OAUTH_TOKEN no env.
+FAKE_CLAUDE_CRED=<ficheiro> anexa {variável: sha256 do valor} das credenciais presentes (nunca o valor).
+FAKE_CLAUDE_SETTINGS=<ficheiro> anexa {"texto", "modo", "uid"} do ficheiro de --settings (o runner apaga-o no fim).
+"""
+import hashlib
+import json
+import os
+import sys
+import uuid
+
+argv = sys.argv[1:]
+entrada = sys.stdin.read()
+if os.environ.get("FAKE_CLAUDE_ARGV"):
+    with open(os.environ["FAKE_CLAUDE_ARGV"], "a", encoding="utf-8") as f:
+        f.write(json.dumps(argv) + "\n")
+if os.environ.get("FAKE_CLAUDE_STDIN"):
+    with open(os.environ["FAKE_CLAUDE_STDIN"], "w", encoding="utf-8") as f:
+        f.write(entrada)
+if os.environ.get("FAKE_CLAUDE_SETTINGS") and "--settings" in argv[:-1]:
+    st = os.stat(argv[argv.index("--settings") + 1])
+    with open(argv[argv.index("--settings") + 1], encoding="utf-8") as f:
+        copia = {"texto": f.read(), "modo": st.st_mode & 0o777, "uid": st.st_uid}
+    with open(os.environ["FAKE_CLAUDE_SETTINGS"], "a", encoding="utf-8") as f:
+        f.write(json.dumps(copia) + "\n")
+CRED = ("ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN")
+if os.environ.get("FAKE_CLAUDE_CRED"):
+    with open(os.environ["FAKE_CLAUDE_CRED"], "a", encoding="utf-8") as f:
+        f.write(json.dumps({k: hashlib.sha256(os.environ[k].encode()).hexdigest() for k in CRED if k in os.environ})
+                + "\n")
+sid = argv[argv.index("--resume") + 1] if "--resume" in argv[:-1] else str(uuid.uuid4())
+falha = os.environ.get("FAKE_CLAUDE_FALHA") == "1" or (
+    os.environ.get("FAKE_CLAUDE_EXIGE_CRED") == "1" and not any(os.environ.get(k) for k in CRED))
+compacto = {"separators": (",", ":")}
+print(json.dumps({"type": "system", "subtype": "init", "session_id": sid}, **compacto), flush=True)
+print(json.dumps({"type": "result", "subtype": "error_during_execution" if falha else "success", "is_error": falha,
+                  "total_cost_usd": 0.01, "num_turns": 1, "duration_ms": 1000, "session_id": sid,
+                  "result": "falhou" if falha else "ok"}, **compacto), flush=True)
+sys.exit(1 if falha else 0)

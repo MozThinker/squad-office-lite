@@ -1,0 +1,1321 @@
+<!doctype html>
+<html lang="pt">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Squad Office</title>
+<link rel="manifest" href="manifest.json" crossorigin="use-credentials">
+<meta name="theme-color" content="#12141c">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Squad Office">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10' shape-rendering='crispEdges'><rect width='10' height='10' fill='%23263238'/><rect x='2' y='1' width='6' height='3' fill='%23ffcc80'/><rect x='1' y='5' width='8' height='4' fill='%2342a5f5'/></svg>">
+<script>
+// tema antes do 1.º paint: <html data-theme> leva o tema efectivo (auto = claro/escuro do sistema); escolha em localStorage["tema"]
+var TEMA_COR = { escuro: "#12141c", claro: "#f4f5f9", sepia: "#f3ead6", contraste: "#000000" }, temaEscolha = "auto", temaMq = null;
+function temaAplicar(v) {
+  temaEscolha = v === "auto" || Object.prototype.hasOwnProperty.call(TEMA_COR, v) ? v : "auto";
+  var ef = temaEscolha === "auto" ? (temaMq && temaMq.matches ? "claro" : "escuro") : temaEscolha, m = document.querySelector('meta[name="theme-color"]');
+  document.documentElement.setAttribute("data-theme", ef);
+  if (m) m.content = TEMA_COR[ef];
+}
+try {
+  temaMq = window.matchMedia ? matchMedia("(prefers-color-scheme: light)") : null;
+  var temaV = "auto";
+  try { temaV = localStorage.getItem("tema"); } catch (e) {}
+  temaAplicar(temaV);
+  var temaF = function () { if (temaEscolha === "auto") temaAplicar("auto"); };
+  if (temaMq) temaMq.addEventListener ? temaMq.addEventListener("change", temaF) : temaMq.addListener(temaF);
+} catch (e) {}
+</script>
+<style>
+:root {
+  --bg: #12141c; --panel: #1b1f2b; --line: #2c3245; --text: #e8eaf2; --muted: #9aa3b8;
+  --ok: #66bb6a; --warn: #ffb74d; --bad: #ef5350; --accent: #64b5f6;
+  --well: #0d0f15; --sunk: #232838; --ctl: #2c3245; --ok-bg: #1e3a2a; --warn-bg: #2e2716; --bad-bg: #2e1719; --on-accent: #0d0f15;
+  --on-warn: #212121; --backdrop: #000000bb; --focus: #64b5f6; --imgbg: #0d0f15; --skel: #232838; color-scheme: dark;
+  --now-bg: #3a3220; --act-bg: #1f2a1f; --well-focus: #64b5f6;
+}
+/* temas (data-theme posto pelo script do <head>; :root = escuro). O escritório (pixel-art) fica igual em todos */
+[data-theme="claro"] {
+  --bg: #f4f5f9; --panel: #ffffff; --line: #d5d9e3; --text: #171a24; --muted: #5c6577; --ok: #1a6e33; --warn: #a04e00; --bad: #c62828; --accent: #2460d0;
+  --well: #0d0f15; --sunk: #e3e6ee; --ctl: #7f8698; --ok-bg: #dcf3e2; --warn-bg: #fff3e6; --bad-bg: #fde3e3; --on-accent: #ffffff;
+  --on-warn: #ffffff; --backdrop: #0a0c14b3; --focus: #2460d0; --imgbg: #e3e6ee; --skel: #e3e6ee; color-scheme: light;
+  --now-bg: var(--warn-bg); --act-bg: var(--ok-bg); --well-focus: #64b5f6;
+}
+[data-theme="sepia"] {
+  --bg: #f3ead6; --panel: #faf4e6; --line: #dccfb2; --text: #3d3224; --muted: #6b5b46; --ok: #3d6b21; --warn: #8a4b0f; --bad: #a12a1e; --accent: #1f5a96;
+  --well: #0d0f15; --sunk: #e6dcc6; --ctl: #8c7b63; --ok-bg: #dfe9cb; --warn-bg: #f6e3c0; --bad-bg: #f2d8cf; --on-accent: #ffffff;
+  --on-warn: #ffffff; --backdrop: #2a1e10b3; --focus: #1f5a96; --imgbg: #e6dcc6; --skel: #e3d7bf; color-scheme: light;
+  --now-bg: var(--warn-bg); --act-bg: var(--ok-bg); --well-focus: #64b5f6;
+}
+[data-theme="contraste"] {
+  --bg: #000000; --panel: #121212; --line: #bdbdbd; --text: #ffffff; --muted: #d6d6d6; --ok: #66ff8c; --warn: #ffd740; --bad: #ff7a7a; --accent: #5ad1ff;
+  --well: #000000; --sunk: #1f1f1f; --ctl: #bdbdbd; --ok-bg: #0b2e14; --warn-bg: #2e2300; --bad-bg: #2a0606; --on-accent: #000000;
+  --on-warn: #000000; --backdrop: #000000e6; --focus: #ffff00; --imgbg: #000000; --skel: #2a2a2a; color-scheme: dark;
+  --now-bg: var(--warn-bg); --act-bg: var(--ok-bg); --well-focus: #ffff00;
+}
+* { box-sizing: border-box; }
+::placeholder { color: var(--muted); opacity: 1; }
+body { margin: 0; background: var(--bg); color: var(--text);
+  font: 14px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+header { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+header h1 { font-size: 16px; margin: 0; letter-spacing: .5px; }
+#def-b, #bell, #music, #tema { background: var(--panel); color: var(--muted); border: 1px solid var(--ctl);
+  min-height: 36px; padding: 4px 10px; font: inherit; font-size: 12px; cursor: pointer; }
+#bell { margin-left: auto; }
+/* 16 px: o iOS faz zoom em selects mais pequenos; rótulos curtos para música + tema + ao vivo caberem numa linha a 360 px */
+#tema { min-height: 44px; font-size: 16px; padding: 4px 0 4px 4px; }
+/* Biblioteca: botão preenchido na 1.ª linha do header (em 360 px o resto desce); a secção substitui o escritório */
+#quad-b, #bib-b { min-height: 44px; padding: 4px 12px; background: var(--accent); color: var(--on-accent); border: 1px solid var(--accent);
+  font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+#quad-b:focus-visible, #bib-b:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+@media (max-width: 520px) { header { column-gap: 8px; } header h1 { flex: 1 1 0; min-width: 0; } header > :not(h1, #bib-b) { order: 2; }
+  header::after { content: ""; order: 1; flex-basis: 100%; margin-top: -8px; } }
+header > #def-b { min-width: 44px; min-height: 44px; font-size: 18px; order: 0; }
+body[data-view="biblioteca"] :is(#rooms, #filt, #tabs, #totals, main, #fabrica) { display: none; }
+body[data-view="quadro"] :is(#aprovacoes, #rooms, #filt, #tabs, #totals, main, #fabrica) { display: none; }
+#bell[aria-pressed="true"], #music[aria-pressed="true"] { color: var(--text); border-color: var(--accent); }
+#vol { width: 90px; accent-color: var(--accent); }
+#live { color: var(--muted); font-size: 12px; display: flex; align-items: center; gap: 6px; }
+#live i { width: 8px; height: 8px; background: var(--ok); display: inline-block; }
+#live.off i { background: var(--bad); }
+#tabs, #rooms { display: flex; gap: 8px; padding: 10px 16px; overflow-x: auto; border-bottom: 1px solid var(--line); }
+#tabs button, #rooms button { flex: none; background: var(--panel); color: var(--text); border: 1px solid var(--ctl);
+  padding: 6px 10px; font: inherit; font-size: 12px; cursor: pointer; }
+#tabs button[aria-pressed="true"], #rooms button[aria-pressed="true"] { border-color: var(--accent); box-shadow: inset 0 -2px 0 var(--accent); }
+#rooms { padding-bottom: 0; border-bottom: 0; }
+#rooms button { min-height: 36px; padding: 6px 14px; font-size: 13px; }
+#tabs .dot, #rooms .dot { display: inline-block; width: 7px; height: 7px; margin-right: 6px; background: var(--muted); }
+#tabs .dot.run, #rooms .dot.run { background: var(--ok); animation: blink 1s steps(2) infinite; }
+main { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 16px; padding: 16px; }
+@media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+#office { background: var(--well); border: 1px solid var(--line); }
+#office svg { display: block; width: 100%; height: auto; image-rendering: pixelated; }
+aside { background: var(--panel); border: 1px solid var(--line); padding: 14px; min-width: 0; }
+aside h2 { font-size: 14px; margin: 0 0 4px; }
+.sub { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+.badge { display: inline-block; padding: 1px 6px; font-size: 11px; border: 1px solid currentColor; margin-left: 6px; }
+.s-run { color: var(--ok); } .s-ok { color: var(--accent); } .s-warn { color: var(--warn); } .s-bad { color: var(--bad); }
+.steps { display: flex; gap: 4px; margin: 12px 0; }
+.steps span { flex: 1; text-align: center; font-size: 11px; padding: 4px 0; background: var(--sunk); color: var(--muted); }
+.steps span.done { background: var(--ok-bg); color: var(--ok); }
+.steps span.now { background: var(--now-bg); color: var(--warn); }
+/* barra de progresso */
+.prog { margin: 12px 0; } .prog .steps { margin: 0 0 6px; } .prog-t { margin-top: 4px; color: var(--muted); font-size: 12px; }
+.prog-m { height: 6px; background: var(--sunk); outline: 1px solid var(--line); }
+.prog-m i { display: block; height: 100%; background: var(--accent); } .late i { background: var(--warn); }
+a { color: var(--accent); }
+ol { list-style: none; margin: 10px 0 0; padding: 0; max-height: 52vh; overflow-y: auto; }
+li { display: grid; grid-template-columns: 10px 1fr auto; gap: 8px; padding: 6px 0; border-top: 1px solid var(--line); font-size: 12px; }
+li i { width: 10px; height: 10px; margin-top: 3px; }
+li b { font-weight: 600; } li .t { color: var(--muted); white-space: nowrap; }
+li.act { background: var(--act-bg); }
+.issues { color: var(--warn); font-size: 12px; margin-top: 8px; white-space: pre-line; }
+#who { border: 1px solid var(--accent); padding: 8px 10px; margin-bottom: 12px; font-size: 12px; }
+#who button { float: right; min-height: 32px; margin: -4px -4px 0 8px; background: var(--bg); color: var(--text);
+  border: 1px solid var(--ctl); font: inherit; font-size: 12px; cursor: pointer; }
+#office .seat { cursor: pointer; }
+#office .seat:focus { outline: none; }
+#office .seat:focus-visible > rect:first-of-type { stroke: var(--well-focus); stroke-width: 1; }
+/* ecrã estreito: o papel seria ilegível (fica no toque/tooltip) e o nome ganha 1 unidade (cabe em 64 u) */
+@media (max-width: 520px) { #office .role { display: none; } #office .seat > text { font-size: 8px; } }
+/* 4 salas a 360 px sem scroll horizontal */
+@media (max-width: 520px) { #rooms { gap: 4px; padding-inline: 8px; } #rooms button { padding: 6px 8px; } }
+.empty { color: var(--muted); padding: 40px 16px; text-align: center; }
+#totals { padding: 6px 16px 0; }
+#totals:empty { display: none; }
+/* faixa Fábrica: igual em todas as salas; <details> fechados por defeito */
+#fabrica { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 12px; padding: 0 16px 16px; }
+#fabrica h2 { flex-basis: 100%; font-size: 14px; margin: 0; }
+#fabrica details { flex: 1 1 300px; background: var(--panel); border: 1px solid var(--line); padding: 0 12px 6px; min-width: 0; }
+#fabrica table { width: 100%; border-collapse: collapse; font-size: 12px; margin: 6px 0; }
+#fabrica th, #fabrica td { padding: 3px 4px; text-align: right; border-top: 1px solid var(--line); }
+#fabrica th:first-child, #fabrica td:first-child { text-align: left; overflow-wrap: anywhere; }
+#fabrica details[data-k="wait"] ol { max-height: 40vh; overflow-y: auto; overscroll-behavior: contain; }
+#fabrica caption { text-align: left; font-weight: 600; padding-top: 6px; }
+li.warn { background: var(--warn-bg); } li.warn b { color: var(--warn); }
+li.bad { background: var(--bad-bg); } li.bad b { color: var(--bad); }
+li.off { opacity: .5; }
+details summary { cursor: pointer; color: var(--accent); min-height: 32px; padding-top: 6px; }
+details summary:focus-visible { outline: 1px solid var(--focus); outline-offset: 2px; }
+/* alto contraste: foco amarelo de 2 px em todos os controlos (os outros temas mantêm o anel do browser) */
+[data-theme="contraste"] :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+@keyframes blink { 50% { opacity: .2; } }
+svg .typeA { animation: blink .5s steps(1) infinite; }
+svg .typeB { animation: blink .5s steps(1) infinite reverse; }
+svg .glow { animation: blink 1.2s steps(2) infinite; }
+svg .idle { opacity: .55; }
+svg .zz { animation: float 2s steps(4) infinite; }
+@keyframes float { 0% { transform: translateY(0); opacity: 1; } 100% { transform: translateY(-6px); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { svg *, .dot.run { animation: none !important; } }
+/* v2: luz rotativa de CI vermelho (sem feixe com reduced-motion), etiqueta «preso?», «Agora:» */
+svg .beam { transform-origin: 19px 198px; animation: spin 1.6s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { svg .beam { display: none; } }
+.tag { display: inline-block; padding: 0 5px; font-size: 11px; background: var(--warn); color: var(--on-warn); font-weight: 600; }
+.now { margin-top: 4px; font-size: 12px; }
+/* config inválida ou ausente: o servidor usa o exemplo e diz porquê */
+#aviso { margin: 0; padding: 6px 16px; font-size: 12px; background: var(--warn-bg); color: var(--warn); border-bottom: 1px solid var(--line); }
+#banner { position: fixed; top: 8px; left: 50%; transform: translateX(-50%); z-index: 10; width: max-content; max-width: calc(100vw - 16px);
+  background: var(--ok-bg); color: var(--text); border: 2px solid var(--ok); padding: 8px 14px; font-weight: 600; box-shadow: 0 4px 0 #0008; overflow-wrap: anywhere; }
+/* filtro e pesquisa das tarefas terminadas */
+#filt { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 16px 0; }
+#filt [role="group"], #rd-f, .btns { display: flex; flex-wrap: wrap; gap: 4px; }
+#filt button, #rd-f button, .btns button, #rd-x, #rd-more { background: var(--panel); color: var(--text); border: 1px solid var(--ctl);
+  min-height: 36px; padding: 4px 10px; font: inherit; font-size: 12px; cursor: pointer; }
+#filt button[aria-pressed="true"], #rd-f button[aria-pressed="true"] { border-color: var(--accent); box-shadow: inset 0 -2px 0 var(--accent); }
+#q, #rd-q { flex: 1 1 140px; min-width: 0; min-height: 36px; background: var(--bg); color: var(--text); border: 1px solid var(--ctl);
+  padding: 4px 8px; font: inherit; font-size: 16px; }
+@media (max-width: 520px) { #filt { padding-inline: 8px; } }
+/* «O meu dia» */
+#fabrica details[data-k="day"] { flex: 2 1 420px; }
+.nums { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin: 6px 0 10px; }
+.nums div { background: var(--sunk); padding: 6px 8px; overflow-wrap: anywhere; }
+.nums b { display: block; font-size: 15px; } .nums span { color: var(--muted); font-size: 11px; }
+.chart { display: block; width: 100%; height: auto; max-width: 620px; }
+.chart text { fill: var(--muted); }
+.leg { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 11px; color: var(--muted); margin: 4px 0 10px; }
+.leg i { display: inline-block; width: 8px; height: 8px; margin-right: 4px; }
+.tl { display: grid; grid-template-columns: minmax(0, 10em) 1fr; gap: 8px; align-items: center; font-size: 11px; padding: 2px 0; }
+.tl-t { position: relative; height: 10px; background: var(--sunk); }
+.tl-t i { position: absolute; top: 0; bottom: 0; min-width: 3px; }
+.tk { display: flex; justify-content: space-between; font-size: 10px; color: var(--muted); }
+/* entrega e leitor (markdown escapado: as listas não herdam o estilo das listas do painel) */
+.deliv { margin-top: 12px; border-top: 1px solid var(--line); padding-top: 8px; }
+.deliv h3 { font-size: 13px; margin: 0 0 6px; }
+.deliv .md { max-height: 45vh; overflow-y: auto; margin-top: 8px; overscroll-behavior: contain; }
+.md { font-size: 12px; overflow-wrap: anywhere; }
+.md h3, .md h4, .md h5 { font-size: 13px; margin: 8px 0 4px; } .md p { margin: 4px 0; }
+.md ul, .md ol { list-style: revert; max-height: none; overflow: visible; margin: 4px 0; padding-left: 20px; }
+.md li { display: list-item; border: 0; padding: 1px 0; }
+.md code { background: var(--bg); padding: 0 3px; }
+.md blockquote { margin: 4px 0; padding: 2px 0 2px 10px; border-left: 3px solid var(--line); }
+.md pre, .ent pre { white-space: pre-wrap; overflow-wrap: anywhere; background: var(--bg); padding: 6px 8px; margin: 4px 0; font: inherit; font-size: 12px; max-height: 40vh; overflow-y: auto; }
+#reader { width: min(900px, calc(100vw - 16px)); max-height: calc(100dvh - 16px); padding: 0; background: var(--panel); color: var(--text); border: 1px solid var(--line); }
+#reader[open] { display: flex; flex-direction: column; }
+#reader::backdrop { background: var(--backdrop); }
+.rd-top { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--line); }
+.rd-top h2 { flex: 1; font-size: 14px; margin: 0; overflow-wrap: anywhere; }
+.rd-ctl { display: flex; flex-wrap: wrap; gap: 8px; padding: 8px 12px; }
+#rd-s { margin: 0 12px 6px; }
+#rd-list { flex: 1; min-height: 0; overflow-y: auto; padding: 0 12px; overscroll-behavior: contain; }
+.ent { border-top: 1px solid var(--line); padding: 6px 0; }
+.ent.k-pedido { border-left: 3px solid var(--accent); padding-left: 8px; }
+.ent.err pre { border-left: 3px solid var(--bad); }
+#rd-more { margin: 8px 12px 12px; align-self: flex-start; }
+/* tabelas markdown: scroll só dentro do próprio bloco */
+.md .tw { overflow-x: auto; margin: 4px 0; }
+.md table { border-collapse: collapse; overflow-wrap: normal; }
+.md th, .md td { border: 1px solid var(--line); padding: 3px 6px; text-align: left; vertical-align: top; }
+/* Aprovações (fim da página; escondida sem pedidos; a secção e cada pedido recolhem) */
+#aprovacoes { padding: 0 16px 16px; }
+#apr-d > summary { min-height: 44px; color: var(--text); }
+#apr-d h2 { display: inline; font-size: 14px; margin: 0; }
+#apr-n { color: var(--muted); font-size: 12px; }
+.apr { background: var(--panel); border: 1px solid var(--line); margin-bottom: 8px; min-width: 0; }
+.apr button, #ad-x { min-height: 44px; background: var(--bg); color: var(--text); border: 1px solid var(--ctl);
+  padding: 6px 12px; font: inherit; font-size: 13px; cursor: pointer; }
+.apr button:disabled { opacity: .45; cursor: not-allowed; }
+.apr button:focus-visible, .apr textarea:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.apr .apr-h { display: block; width: 100%; text-align: left; border: 0; background: none; padding: 10px 12px; overflow-wrap: anywhere; }
+.apr-h b { display: block; font-size: 14px; }
+.apr-b { padding: 0 12px 12px; border-top: 1px solid var(--line); min-width: 0; }
+.apr-b > h3 { font-size: 12px; color: var(--muted); margin: 10px 0 2px; }
+.dec { border-top: 1px solid var(--line); margin-top: 10px; padding-top: 8px; overflow-wrap: anywhere; }
+.dec p { margin: 0 0 6px; }
+.dec textarea { display: block; width: 100%; min-height: 64px; background: var(--bg); color: var(--text); border: 1px solid var(--ctl);
+  padding: 6px 8px; font: inherit; font-size: 16px; resize: vertical; }
+.apr .btns { gap: 6px; margin-top: 6px; }
+.apr .ok-b { border-color: var(--ok); } .apr .no-b { border-color: var(--bad); }
+.cf { margin-top: 8px; padding: 8px; border: 1px solid var(--warn); background: var(--warn-bg); }
+.cf span { display: block; font-weight: 600; margin-bottom: 6px; overflow-wrap: anywhere; }
+.apr .msg { margin: 6px 0 0; font-size: 12px; }
+@media (max-width: 520px) { #aprovacoes { padding-inline: 8px; } }
+#apr-dlg { width: min(900px, calc(100vw - 16px)); max-height: calc(100dvh - 16px); padding: 0; background: var(--panel); color: var(--text); border: 1px solid var(--line); }
+#apr-dlg[open] { display: flex; flex-direction: column; }
+#apr-dlg::backdrop { background: var(--backdrop); }
+#ad-b { flex: 1; min-height: 0; overflow-y: auto; padding: 8px 12px 12px; overscroll-behavior: contain; }
+</style>
+</head>
+<body>
+<header>
+  <h1>▣ Squad Office</h1>
+  <button id="bib-b" type="button" aria-pressed="false">▤ Biblioteca</button>
+  <button id="quad-b" type="button" aria-pressed="false">▦ Quadro</button>
+  <button id="bell" aria-pressed="false" title="Notificar quando um goal termina ou há um alerta">🔕 notificações</button>
+  <button id="music" aria-pressed="false" aria-label="Música de fundo">🔈 música</button>
+  <input id="vol" type="range" min="0" max="100" step="10" value="30" aria-label="Volume da música" hidden>
+  <select id="tema" aria-label="Tema"><option value="auto">auto</option><option value="escuro">escuro</option><option value="claro">claro</option><option value="sepia">sépia</option><option value="contraste">contraste</option></select>
+  <button id="def-b" type="button" aria-label="Definições" aria-haspopup="dialog">⚙</button>
+  <div id="live"><i></i><span>a ligar…</span></div>
+</header>
+<p id="aviso" role="status" hidden></p>
+<section id="bib" aria-labelledby="bib-h" hidden></section>
+<section id="quadro" aria-labelledby="q-h" hidden></section>
+<nav id="rooms" aria-label="Salas"></nav>
+<div id="filt"><div role="group" aria-label="Tarefas terminadas de"><button type="button" data-p="hoje">hoje</button><button type="button" data-p="7d">7 d</button><button type="button" data-p="30d">30 d</button></div>
+  <input id="q" type="search" placeholder="pesquisar tarefa" aria-label="Pesquisar tarefas por projecto ou id" autocomplete="off"></div>
+<nav id="tabs" aria-label="Execuções"></nav>
+<div id="totals" class="sub"></div>
+<main>
+  <section id="office" aria-label="Escritório da squad"></section>
+  <aside id="info"></aside>
+</main>
+<section id="fabrica" aria-labelledby="fab-h">
+  <h2 id="fab-h">Fábrica</h2>
+  <details data-k="day"><summary>O meu dia</summary><div></div></details>
+  <details data-k="feed"><summary>Actividade</summary><div></div></details>
+  <details data-k="wait"><summary>À tua espera</summary><div></div></details>
+  <details data-k="usage"><summary>Consumo da conta (estimativa)</summary><div></div></details>
+</section>
+<section id="aprovacoes" aria-labelledby="apr-h" hidden><details id="apr-d" open><summary><h2 id="apr-h">Aprovações</h2> <span id="apr-n"></span></summary><div id="apr-list"></div></details></section>
+<div id="banner" role="status" hidden></div>
+<dialog id="reader" aria-labelledby="rd-h">
+  <div class="rd-top"><h2 id="rd-h">Transcript</h2><button type="button" id="rd-x">fechar</button></div>
+  <div class="rd-ctl"><input id="rd-q" type="search" maxlength="100" placeholder="pesquisar no transcript" aria-label="Pesquisar no transcript" autocomplete="off">
+    <div id="rd-f" role="group" aria-label="Mostrar"><button type="button" data-f="tudo">tudo</button><button type="button" data-f="mensagens">mensagens</button><button type="button" data-f="sem-ferramentas">sem ferramentas</button></div></div>
+  <p id="rd-s" class="sub" aria-live="polite"></p>
+  <div id="rd-list"></div>
+  <button type="button" id="rd-more" hidden>Mais</button>
+</dialog>
+<dialog id="apr-dlg" aria-labelledby="ad-h">
+  <div class="rd-top"><h2 id="ad-h">Pedido</h2><button type="button" id="ad-x">fechar</button></div>
+  <p id="ad-s" class="sub" aria-live="polite" style="margin: 6px 12px 0"></p>
+  <div id="ad-b" class="md"></div>
+</dialog>
+<script>
+"use strict";
+// nomes e papéis num só sítio: mudar um nome é só aqui
+const ROLES = {
+  "tech-lead":         { name: "Maestro",       short: "Tech lead",   full: "Tech lead",                  shirt: "#26a69a", hair: "#4e342e" },
+  "product-owner":     { name: "Dona Ideia",    short: "PO",          full: "Product owner",              shirt: "#ec407a", hair: "#212121" },
+  "architect":         { name: "Planta",        short: "Arquitecto",  full: "Arquitecto",                 shirt: "#5c6bc0", hair: "#9e9e9e" },
+  "backend-engineer":  { name: "Zé Bastidores", short: "Backend",     full: "Engenheiro backend",         shirt: "#42a5f5", hair: "#3e2723" },
+  "frontend-engineer": { name: "Pixel",         short: "Frontend",    full: "Engenheiro frontend",        shirt: "#ffa726", hair: "#f9a825" },
+  "devops-engineer":   { name: "Esteira",       short: "DevOps",      full: "Engenheiro DevOps",          shirt: "#8d6e63", hair: "#000000" },
+  "infra-engineer":    { name: "Chico Cabos",   short: "Infra",       full: "Engenheiro de infra",        shirt: "#78909c", hair: "#5d4037" },
+  "test-engineer":     { name: "Tomé",          short: "Testes",      full: "Testes (só acredita vendo)", shirt: "#9ccc65", hair: "#6d4c41" },
+  "code-reviewer":     { name: "Lupa",          short: "Code review", full: "Revisão de código",          shirt: "#ab47bc", hair: "#263238" },
+  "security-reviewer": { name: "Cadeado",       short: "Segurança",   full: "Revisão de segurança",       shirt: "#ef5350", hair: "#1b1b1b" },
+  "ajudante":          { name: "Faz-Tudo",      short: "Ajudante",    full: "Ajudante",                   shirt: "#ffee58", hair: "#795548" },
+  "general":           { name: "Biscate",       short: "Avulso",      full: "Agente genérico",            shirt: "#bdbdbd", hair: "#424242" },
+  "cmo":               { name: "Capitã Funil",  short: "CMO",         full: "Directora de marketing",     shirt: "#ff7043", hair: "#3e2723" },
+  "analista":          { name: "Tia Contas",    short: "Análise",     full: "Análise de números",         shirt: "#26c6da", hair: "#9e9e9e" },
+  "revisor":           { name: "Vírgula",       short: "Revisão",     full: "Revisão de materiais",       shirt: "#d4e157", hair: "#212121" },
+  "copy":              { name: "Lábia",         short: "Copy",        full: "Textos (copy)",              shirt: "#f06292", hair: "#f9a825" },
+  "crm":               { name: "Fiel",          short: "CRM",         full: "Relação com clientes (CRM)", shirt: "#66bb6a", hair: "#5d4037" },
+  "estratega":         { name: "Xadrez",        short: "Estratégia",  full: "Estratégia",                 shirt: "#3949ab", hair: "#000000" },
+  "juridico":          { name: "Dra. Alínea",   short: "Jurídico",    full: "Jurídico",                   shirt: "#8e244d", hair: "#4e342e" },
+  "criativo":          { name: "Pincel",        short: "Criativo",    full: "Criativos (imagem e vídeo)", shirt: "#8e24aa", hair: "#d84315" },
+  "social":            { name: "Hashtag",       short: "Social media", full: "Redes sociais",             shirt: "#00897b", hair: "#212121" },
+  "gestor":            { name: "Leme",          short: "Campanhas",   full: "Gestão de campanhas (Meta)", shirt: "#0277bd", hair: "#bf360c" },
+  "lider-rnd":         { name: "Bússola",       short: "Líder R&D",   full: "Líder R&D",                  shirt: "#b8860b", hair: "#3e2723" },
+  "vigia":             { name: "Sentinela",     short: "Tendências",  full: "Vigia de tendências",        shirt: "#43a047", hair: "#212121" },
+  "analista-mercado":  { name: "Radar",         short: "Mercado",     full: "Análise de mercado",         shirt: "#e64a19", hair: "#9e9e9e" },
+  "sre":               { name: "Plantão",       short: "SRE",         full: "SRE",                        shirt: "#c62828", hair: "#4e342e" },
+  "investigador":      { name: "Pista",         short: "Investigação", full: "Investigação",              shirt: "#00acc1", hair: "#5d4037" },
+};
+// ficha do papel na sala s: o líder leva a «personagem» da config; um líder sem ficha usa a do tech-lead com o nome do papel
+const rl = (r, s = R()) => { const b = ROLES[r] || (r === s?.lead ? { ...ROLES["tech-lead"], name: r, short: "Líder", full: "Líder da squad" } : ROLES.general);
+  return r === s?.lead && s.personagem ? { ...b, name: s.personagem } : b; };
+const label = (r, s) => `${rl(r, s).name} (${rl(r, s).short})`;
+// Salas: uma por squad da config, todas com a planta da Dev; o líder senta-se no lugar do tech-lead. Secretárias opcionais só
+// aparecem quando usadas; posição de cada personagem (canto sup. esq. do sprite, antes da escala ×2), viewBox 320×258
+const SEATS = { "product-owner": [27, 62], "architect": [91, 62], "tech-lead": [155, 62], "devops-engineer": [219, 62], "infra-engineer": [283, 62],
+  "backend-engineer": [27, 140], "frontend-engineer": [91, 140], "test-engineer": [155, 140], "code-reviewer": [219, 140], "security-reviewer": [283, 140],
+  "ajudante": [219, 210], "general": [283, 210] };
+function salasDe(c) {
+  const sqs = Array.isArray(c?.squads) && c.squads.length ? c.squads : [{ id: "dev", nome: "Dev", lead: "tech-lead", personagem: null, formato: "worktree" }];
+  return Object.fromEntries(sqs.map((s) => {
+    const seats = { ...SEATS }, p = seats["tech-lead"];
+    if (s.lead !== "tech-lead") { delete seats["tech-lead"]; delete seats[s.lead]; seats[s.lead] = p; }
+    return [s.id, { name: s.nome, lead: s.lead, personagem: s.personagem || null, fases: s.formato === "worktree", coord: "a coordenar a squad",
+      optional: ["general", "ajudante"].filter((r) => r !== s.lead), seats }];
+  }));
+}
+const leadOf = (t) => ROOMS[sq(t)];
+const sq = (t) => (Object.hasOwn(ROOMS, t.squad ?? "") ? t.squad : SQS[0]); // squad desconhecida → 1.ª sala
+const SPRITE = [
+  "...hhhh...",
+  "..hhhhhh..",
+  "..hssssh..",
+  "..sesses..",
+  "..ssssss..",
+  "...ssss...",
+  ".cccccccc.",
+  "cccccccccc",
+  "cccccccccc",
+];
+const SKIN = ["#ffcc80", "#d7a27a", "#8d5b3e", "#f1c27d", "#c68642"];
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const R = () => ROOMS[roomKey] || ROOMS[SQS[0]]; // sala visível
+const roleOf = (r) => (R().seats[r] ? r : "general");
+const fmtT = (iso) => (iso ? new Date(iso).toLocaleTimeString("pt-PT", { timeZone: TZ, hour: "2-digit", minute: "2-digit" }) : "…");
+const fmtNum = (n, d = 0) => Number(n).toLocaleString("pt-PT", { minimumFractionDigits: d, maximumFractionDigits: d });
+const fmtDur = (a, b) => {
+  if (!a) return "";
+  const s = Math.max(0, ((b ? new Date(b) : new Date()) - new Date(a)) / 1000);
+  return s < 3600 ? `${Math.round(s / 60)} min` : `${(s / 3600).toFixed(1)} h`;
+};
+
+let state = null, roomKey = null, selected = location.hash.match(/^#(biblioteca|quadro)/) ? null : decodeURIComponent(location.hash.slice(1)) || null, prevWorking = {}, firstPaint = true, picked = null;
+
+// ---- config do Office (GET api/config): lida antes da 1.ª pintura; sem resposta, omissões e nova tentativa a cada 5 s
+const CFG0 = { marca: "Squad Office", utilizador: { nome: "Utilizador" }, squads: [], projectos: [], colunas: [], biblioteca: [], aviso: null }; // sem listas lançáveis: os módulos tratam a falta
+const SQ_COR = ["#64b5f6", "#ff8a65", "#ffd54f", "#ce93d8", "#81c784", "#4dd0e1"]; // cor de cada squad nos gráficos, pela ordem da config
+let cfg = CFG0, TZ, ROOMS, SQS, SQC;
+function aplicarCfg(c) {
+  cfg = { ...CFG0, ...(c && typeof c === "object" ? c : {}) };
+  try { TZ = cfg.fuso ? new Intl.DateTimeFormat("en", { timeZone: cfg.fuso }).resolvedOptions().timeZone : undefined; } catch { TZ = undefined; } // fuso que o browser não conhece: o local
+  ROOMS = salasDe(cfg); SQS = Object.keys(ROOMS); SQC = Object.fromEntries(SQS.map((k, i) => [k, SQ_COR[i % SQ_COR.length]]));
+  if (roomKey && !ROOMS[roomKey]) roomKey = null;
+  $("header h1").textContent = "▣ " + cfg.marca;
+  $("#aviso").textContent = cfg.aviso ? "Configuração com problemas, a usar o exemplo: " + cfg.aviso : "";
+  $("#aviso").hidden = !cfg.aviso;
+}
+aplicarCfg(CFG0);
+async function lerCfg() {
+  try {
+    const r = await fetch("api/config", { cache: "no-store" });
+    if (!r.ok) throw new Error(r.status);
+    aplicarCfg(await r.json());
+    paint(false);
+  } catch { setTimeout(lerCfg, 5000); }
+}
+
+function person(role, x, y, mode) {
+  const r = rl(role), skin = SKIN[[...role].reduce((a, c) => a + c.charCodeAt(0), 0) % SKIN.length];
+  const col = { h: r.hair, s: skin, e: "#212121", c: r.shirt };
+  let out = `<g class="${mode === "idle" ? "idle" : ""}">`;
+  SPRITE.forEach((row, j) => [...row].forEach((ch, i) => {
+    if (col[ch]) out += `<rect x="${x + i}" y="${y + j}" width="1" height="1" fill="${col[ch]}"/>`;
+  }));
+  return out + "</g>";
+}
+
+// cores da secretária (madeira)
+const DESK = { top: "#a1887f", front: "#6d4c41", leg: "#4e342e" };
+function desk(role, active, used, done, tip) {
+  const [x, y] = R().seats[role], r = rl(role);
+  // secretária clicável (toque mostra #who); o rect transparente aumenta a área de toque
+  let g = `<g class="seat" data-role="${role}" tabindex="0" role="button" aria-label="${esc(r.name + ", " + r.full)}">`
+    + `<title>${esc(`${r.name} — ${r.full}: ${tip}`)}</title><rect x="${x - 19}" y="${y - 11}" width="48" height="60" fill="transparent"/>`;
+  // tudo desenhado à escala 1 e ampliado ×2 à volta do centro do sprite
+  g += `<g transform="translate(${x + 5} ${y + 9}) scale(2) translate(${-x - 5} ${-y - 9})">` + person(role, x, y, active ? "work" : "idle");
+  // secretária (à frente do corpo)
+  const k = DESK;
+  g += `<rect x="${x - 7}" y="${y + 8}" width="24" height="3" fill="${k.top}"/>`;
+  g += `<rect x="${x - 7}" y="${y + 11}" width="24" height="7" fill="${k.front}"/>`;
+  g += `<rect x="${x - 6}" y="${y + 18}" width="2" height="3" fill="${k.leg}"/><rect x="${x + 14}" y="${y + 18}" width="2" height="3" fill="${k.leg}"/>`;
+  // monitor à esquerda
+  g += `<rect x="${x - 6}" y="${y + 1}" width="7" height="6" fill="#37474f"/>`;
+  g += `<rect x="${x - 5}" y="${y + 2}" width="5" height="4" fill="${active ? "#4fc3f7" : "#263238"}" class="${active ? "glow" : ""}"/>`;
+  g += `<rect x="${x - 3}" y="${y + 7}" width="1" height="1" fill="#37474f"/>`;
+  if (active) {
+    g += `<g class="typeA"><rect x="${x + 1}" y="${y + 8}" width="2" height="1" fill="${SKIN[0]}"/></g>`;
+    g += `<g class="typeB"><rect x="${x + 7}" y="${y + 8}" width="2" height="1" fill="${SKIN[0]}"/></g>`;
+  } else {
+    g += `<text x="${x + 10}" y="${y - 1}" font-size="4" fill="#90a4ae" class="zz">z</text>`;
+  }
+  if (done) g += `<rect x="${x + 13}" y="${y + 3}" width="4" height="4" fill="#66bb6a"/><path d="M${x + 13.8} ${y + 5} l1 1 l1.6 -2" stroke="#0d0f15" stroke-width=".7" fill="none"/>`;
+  // placa: nome a negrito e papel curto por baixo (o papel esconde-se em ecrãs estreitos, ver CSS)
+  g += `</g><text x="${x + 5}" y="${y + 41}" text-anchor="middle" font-size="7" font-weight="bold" fill="${active ? "#ffffff" : used ? "#b0bec5" : "#607d8b"}" font-family="ui-monospace,monospace">${esc(r.name)}</text>`;
+  g += `<text class="role" x="${x + 5}" y="${y + 47}" text-anchor="middle" font-size="5" fill="#90a4ae" font-family="ui-monospace,monospace">${esc(r.short)}</text>`;
+  return g + `</g>`;
+}
+
+const cut = (s, n) => (s.length > n ? s.slice(0, n - 1) + "…" : s);
+// balão de 2 linhas («Nome (curto)» e o que faz), da largura de uma secretária (não se sobrepõe aos vizinhos)
+function bubble(role, text) {
+  const [x, y] = R().seats[role], w = 60, h = 15, bx = Math.min(Math.max(1, x + 5 - w / 2), 319 - w), by = y - 12 - h;
+  // nome+papel longo («Zé Bastidores (Backend)») é comprimido para caber, em vez de cortado
+  const t = (l, dy, b) => `<text x="${bx + w / 2}" y="${by + dy}" text-anchor="middle" font-size="5"${b ? ` font-weight="bold" fill="#37474f"` : ` fill="#212121"`}${l.length > 18 ? ` textLength="${w - 4}" lengthAdjust="spacingAndGlyphs"` : ""} font-family="ui-monospace,monospace">${esc(l)}</text>`;
+  return `<g><rect x="${bx}" y="${by}" width="${w}" height="${h}" fill="#fffde7" stroke="#212121" stroke-width=".8"/>`
+    + `<rect x="${x + 4}" y="${by + h}" width="3" height="3" fill="#fffde7"/>`
+    + t(label(role), 6.5, true) + t(cut(String(text ?? ""), 19), 12.5) + `</g>`;
+}
+
+// rect de pixel art (classe e estilo opcionais)
+const rc = (x, y, w, h, f, c = "", st = "") => `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${f}"${c ? ` class="${c}"` : ""}${st ? ` style="${st}"` : ""}/>`;
+
+function room(task) {
+  let s = `<svg viewBox="0 0 320 ${R().h || 258}" shape-rendering="crispEdges" role="group" aria-label="Escritório pixel art da sala ${esc(R().name)}${task?.gh?.ci === "vermelho" ? " · CI vermelho" : ""}">`;
+  // chão e parede
+  for (let j = 0; j < 15; j++) for (let i = 0; i < 20; i++)
+    s += `<rect x="${i * 16}" y="${32 + j * 16}" width="16" height="16" fill="${(i + j) % 2 ? "#2b2f3a" : "#262a34"}"/>`;
+  s += `<rect width="320" height="32" fill="#3b4256"/><rect y="30" width="320" height="3" fill="#2a2f3e"/>`;
+  s += `<rect x="12" y="6" width="34" height="18" fill="#1a237e"/><rect x="13" y="7" width="15" height="16" fill="#283593"/><rect x="30" y="7" width="15" height="16" fill="#283593"/><rect x="18" y="10" width="2" height="2" fill="#fff59d"/><rect x="38" y="14" width="1" height="1" fill="#fff"/>`;
+  s += `<rect x="290" y="14" width="8" height="10" fill="#6d4c41"/><rect x="288" y="6" width="12" height="9" fill="#43a047"/><rect x="291" y="3" width="6" height="4" fill="#66bb6a"/>`;
+  // quadro: fases nas squads com worktree; modo e estado nas de sessão (não têm fases)
+  s += `<rect x="104" y="4" width="112" height="24" fill="#eceff1"/><rect x="104" y="27" width="112" height="2" fill="#90a4ae"/>`;
+  if (!R().fases) {
+    const st = task ? task.status : "sem trabalho", w = st.length * 2.7 + 8;
+    const col = task ? { "s-run": "#66bb6a", "s-ok": "#64b5f6", "s-warn": "#ffb74d", "s-bad": "#ef5350" }[statusClass(task)] : "#cfd8dc";
+    s += `<text x="160" y="15" text-anchor="middle" font-size="8" font-weight="bold" fill="#263238" font-family="ui-monospace,monospace">${esc(task ? task.mode : R().name.toLowerCase())}</text>`;
+    s += `<rect x="${160 - w / 2}" y="18" width="${w}" height="7" fill="${col}"/>`;
+    s += `<text x="160" y="23.2" text-anchor="middle" font-size="4.5" fill="#263238" font-family="ui-monospace,monospace">${esc(st)}</text>`;
+  } else {
+    const ph = phases(task);
+    ph.forEach((p, i) => {
+      const x = 109 + i * 21;
+      s += `<rect x="${x}" y="9" width="18" height="10" fill="${p.state === "done" ? "#c8e6c9" : p.state === "now" ? "#ffe0b2" : "#cfd8dc"}"/>`;
+      s += `<text x="${x + 9}" y="16" text-anchor="middle" font-size="4.5" fill="#263238" font-family="ui-monospace,monospace">${p.name}</text>`;
+    });
+    s += `<text x="160" y="25" text-anchor="middle" font-size="3.6" fill="#546e7a" font-family="ui-monospace,monospace">${esc(task ? task.project + " · " + task.mode : "sem trabalho")}</text>`;
+  }
+  // porta + receção
+  s += `<rect x="6" y="206" width="26" height="40" fill="#5d4037"/><rect x="27" y="226" width="3" height="3" fill="#ffd54f"/>`;
+  const working = new Set(task ? task.working.map(roleOf) : []); // tipos desconhecidos (Explore…) acendem o Biscate
+  const used = new Set(task ? task.agents.map((a) => roleOf(a.role)) : []);
+  const done = new Set(task ? task.agents.filter((a) => a.finished).map((a) => roleOf(a.role)) : []);
+  const busy = task && task.running, L = task ? leadOf(task) : R();
+  if (busy || (task && R().optional.includes(L.lead))) used.add(L.lead); // o gestor fica na sala depois da sua execução
+  for (const role of Object.keys(R().seats)) {
+    if (R().optional.includes(role) && !used.has(role)) continue;
+    s += desk(role, working.has(role), used.has(role), done.has(role) && !working.has(role), doing(task, role));
+  }
+  if (task) {
+    for (const a of task.agents.filter((a) => a.active)) s += bubble(roleOf(a.role), a.act ? actText(a.act) : a.desc);
+    if (working.has(L.lead)) s += bubble(L.lead, task.lead?.act ? actText(task.lead.act) : L.coord);
+    if (!busy) s += bubble(L.lead, endText(task));
+    const stuck = new Set(task.agents.filter((a) => a.stuck).map((a) => roleOf(a.role)));
+    if (task.lead?.stuck) stuck.add(L.lead);
+    for (const r of stuck) if (R().seats[r] && (!R().optional.includes(r) || used.has(r))) s += stuckTag(r);
+    if (task.gh?.ci === "vermelho") s += ciLight();
+  }
+  s += `<g id="fly"></g></svg>`;
+  return s;
+}
+
+const endText = (t) => (t.status === "morreu" ? "a tarefa morreu" : ROOMS[sq(t)].fases && t.status === "concluída" ? `PR pronto para ${cfg.utilizador?.nome || "ti"}` : "terminou: " + t.status);
+
+// ---- v2: actividade ao vivo (o estado só traz kind/tool/error; os rótulos vivem aqui)
+const ACT = { ler: ["📖", "a ler"], editar: ["✏️", "a editar"], terminal: ["💻", "terminal"], testes: ["🧪", "testes"], web: ["🌐", "web"],
+  delegar: ["🤝", "a delegar"], pensar: ["💭", "a pensar"], pr_aberto: ["🎉", "PR aberto"], pr_integrado: ["✅", "PR integrado"],
+  push: ["⬆️", "push"], ci_vermelho: ["🔴", "CI vermelho"], ci_verde: ["🟢", "CI verde"] };
+const GH_KIND = /^(pr_|push$|ci_)/;
+const actText = (a) => (!a ? "" : GH_KIND.test(a.kind) ? ACT[a.kind].join(" ") : a.error ? `⚠️ erro em ${a.tool || a.kind}`
+  : ACT[a.kind] ? ACT[a.kind].join(" ") : `🔧 a usar ${a.tool || "outra"}`);
+// {act, stuck} de um papel numa tarefa a correr (o líder é a sessão principal)
+function nowOf(t, role) {
+  if (!t?.running) return null;
+  if (role === leadOf(t).lead && t.lead) return t.lead;
+  return t.agents.find((a) => roleOf(a.role) === role && !a.finished && (a.act || a.stuck)) || null;
+}
+const nowLine = (n) => (n && (n.act || n.stuck) ? `<div class="now">Agora: ${esc(n.act ? actText(n.act) : "—")}${n.stuck ? ` <span class="tag">preso?</span>` : ""}</div>` : "");
+// etiqueta «preso?» por cima do ombro (fica entre o balão e a secretária; não toca no vizinho)
+const stuckTag = (role) => { const [x, y] = R().seats[role];
+  return `<g pointer-events="none">${rc(x + 11, y - 10, 22, 8, "#ffb74d")}<text x="${x + 22}" y="${y - 4}" text-anchor="middle" font-size="5" font-weight="bold" fill="#212121" font-family="ui-monospace,monospace">preso?</text></g>`; };
+// luz rotativa por cima da porta enquanto o CI da tarefa visível estiver vermelho (sem feixe com reduced-motion, ver CSS)
+const ciLight = () => `<g pointer-events="none">${rc(0, 0, 320, R().h || 258, "#ef5350", "", "opacity:.07")}<g class="beam"><path d="M19 198 L250 150 L250 246 Z" fill="#ff1744" opacity=".22"/></g>`
+  + rc(11, 202, 16, 4, "#37474f") + rc(13, 195, 12, 7, "#ef5350", "glow") + rc(15, 196, 3, 2, "#ffcdd2")
+  + rc(29, 193, 44, 9, "#0d0f15") + `<text x="51" y="200" text-anchor="middle" font-size="6" font-weight="bold" fill="#ff8a80" font-family="ui-monospace,monospace">CI vermelho</text></g>`;
+// o que um papel está a fazer (tooltip e caixa #who)
+function doing(t, role) {
+  if (!t) return "sem execução";
+  const mine = t.agents.filter((a) => roleOf(a.role) === role), act = mine.find((a) => a.active);
+  if (act) return act.desc;
+  if (role === leadOf(t).lead && t.working.includes(role)) return leadOf(t).coord;
+  if (role === leadOf(t).lead && !t.running) return endText(t);
+  return mine.length ? "terminou: " + mine[mine.length - 1].desc : "sem trabalho nesta execução";
+}
+
+function phases(task) {
+  const out = [
+    { name: "SPEC", state: task?.phases.SPEC ? "done" : "" },
+    { name: "PLAN", state: task?.phases.PLAN ? "done" : "" },
+    { name: "CODE", state: "" },
+    { name: "QA", state: task?.phases.QA ? "done" : "" },
+    { name: "PR", state: task?.pr ? "done" : "" },
+  ];
+  if (!task) return out;
+  const roles = task.agents.map((a) => roleOf(a.role));
+  if (roles.some((r) => /engineer$/.test(r) && r !== "test-engineer")) out[2].state = "done";
+  if (task.mode === "task" && task.pr) out.forEach((p) => (p.state = "done"));
+  if (task.running) {
+    const i = out.findIndex((p) => p.state !== "done");
+    if (i >= 0) out[i].state = "now";
+  }
+  return out;
+}
+
+// barra de progresso
+function progPref(k) { try { return localStorage.getItem(k) !== "0"; } catch { return true; } }
+function progDur(s) {
+  const m = Math.ceil(s / 60);
+  return s < 60 ? "< 1 min" : m < 60 ? m + " min" : Math.floor(m / 60) + " h" + (m % 60 ? ` ${m % 60} min` : "");
+}
+function progTexto(p, est) {
+  const ap = (s) => (s < 60 ? "" : "~") + progDur(s);
+  return !est ? `a correr há ${progDur(p.decorrido_s)}` : p.atrasada ? `a demorar mais do que o costume (típico ${ap(p.tipico_s)})`
+    : p.pct != null ? `≈ ${+p.pct} % · faltam ${ap(p.faltam_s)} (estimativa)` : progTexto(p);
+}
+function progHtml(p) {
+  if (!p || !progPref("progBarra")) return "";
+  const est = progPref("progEstimativa"), w = !est ? null : p.atrasada ? 100 : p.pct;
+  return `<div class="prog">${p.fases ? `<div class="steps">${p.fases.map((f) => `<span class="${{ feito: "done", agora: "now" }[f.estado] || ""}">${esc(f.nome)}</span>`).join("")}</div>` : ""}`
+    + (typeof w === "number" ? `<div class="prog-m${p.atrasada ? " late" : ""}"><i style="width:${w}%"></i></div>` : "")
+    + `<div class="prog-t">${esc(progTexto(p, est))}</div></div>`;
+}
+
+function fly(from, to) {
+  const g = document.getElementById("fly");
+  const seats = R().seats;
+  if (!g || !seats[from] || !seats[to]) return;
+  const [x1, y1] = seats[from].map((v, i) => v + (i ? 4 : 2)), [x2, y2] = seats[to].map((v, i) => v + (i ? 4 : 2));
+  const el = document.createElementNS("http://www.w3.org/2000/svg", "g");
+  el.innerHTML = `<rect x="0" y="2" width="12" height="9" fill="#ffca28"/><rect x="0" y="0" width="5" height="2" fill="#ffb300"/><rect x="2" y="5" width="8" height="2" fill="#fff8e1"/>`;
+  el.style.transition = "transform 1.4s steps(14)";
+  el.style.transform = `translate(${x1 + 2}px, ${y1 + 2}px)`;
+  g.appendChild(el);
+  requestAnimationFrame(() => requestAnimationFrame(() => (el.style.transform = `translate(${x2 + 2}px, ${y2 + 2}px)`)));
+  setTimeout(() => el.remove(), 1700);
+}
+
+// confetti curto quando há PR novo (nada com reduced-motion)
+function confetti() {
+  const g = document.getElementById("fly");
+  if (!g || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  for (let i = 0; i < 40; i++) {
+    const el = document.createElementNS("http://www.w3.org/2000/svg", "rect"), x = 10 + Math.random() * 300, y = -6 - Math.random() * 30;
+    el.setAttribute("width", 3); el.setAttribute("height", 2);
+    el.setAttribute("fill", ["#ff7043", "#ffd54f", "#ec407a", "#66bb6a", "#64b5f6", "#ab47bc"][i % 6]);
+    el.style.transition = "transform 1.5s steps(12), opacity 1.5s steps(12)";
+    el.style.transform = `translate(${x}px, ${y}px)`;
+    g.appendChild(el);
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      el.style.transform = `translate(${x + (Math.random() - .5) * 60}px, ${y + 120 + Math.random() * 130}px)`;
+      el.style.opacity = 0;
+    }));
+    setTimeout(() => el.remove(), 1600);
+  }
+}
+
+function statusClass(t) {
+  if (t.running) return "s-run";
+  if (t.status === "concluída") return "s-ok";
+  if (/erro|incompleta|parada|falhou|morreu/.test(t.status)) return "s-bad";
+  return "s-warn";
+}
+
+// separador de salas (ponto verde = sala com execução a correr)
+function renderRooms() {
+  $("#rooms").innerHTML = Object.entries(ROOMS).map(([k, r]) =>
+    `<button aria-pressed="${k === roomKey}" data-room="${k}"><span class="dot ${state.tasks.some((t) => sq(t) === k && t.running) ? "run" : ""}"></span>${esc(r.name)}</button>`).join("");
+  $("#rooms").querySelectorAll("button").forEach((b) => (b.onclick = () => { if (b.dataset.room === roomKey) return; roomKey = b.dataset.room; selected = null; picked = null; paint(false); }));
+}
+
+// nas squads de sessão os ids podem repetir-se, por isso modo + dia e hora
+const tabName = (t) => (!ROOMS[sq(t)].fases && t.started
+  ? `${t.mode} ${new Date(t.started).toLocaleString("pt-PT", { timeZone: TZ, day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}`
+  : String(t.id).slice(14) || t.id);
+
+function renderTabs(list) {
+  const tabs = $("#tabs");
+  if (!list.length) { tabs.innerHTML = ""; return; }
+  tabs.innerHTML = list.map((t) =>
+    `<button aria-pressed="${t.id === selected}" data-id="${esc(t.id)}"><span class="dot ${t.running ? "run" : ""}"></span>${esc(tabName(t))}</button>`).join("");
+  tabs.querySelectorAll("button").forEach((b) => (b.onclick = () => { selected = b.dataset.id; picked = null; paint(false); }));
+}
+
+function whoBox(t) {
+  if (!picked || !R().seats[picked]) return "";
+  const r = rl(picked);
+  return `<div id="who"><button type="button">fechar</button><b>${esc(r.name)}</b><div class="sub">${esc(r.full)}</div><div>${esc(doing(t, picked))}</div>${nowLine(nowOf(t, picked))}</div>`;
+}
+
+function renderInfo(t) {
+  const keep = document.activeElement?.matches?.("#who button"); // o poll de 8 s não pode roubar o foco
+  const box = $("#info"), open = [...box.querySelectorAll("details[open]")].map((d) => d.dataset.k);
+  const fk = document.activeElement?.matches?.("#info summary") && document.activeElement.parentElement.dataset.k;
+  const fa = document.activeElement?.closest?.("#info [data-act]")?.dataset.act; // botões da entrega
+  box.innerHTML = whoBox(t) + (t ? infoHtml(t) : `<p class="sub">Sem execuções neste período${$("#q").value.trim() ? " com esta pesquisa" : ""}.</p>`);
+  for (const k of open) box.querySelector(`details[data-k="${k}"]`)?.setAttribute("open", ""); // um <details> aberto continua aberto
+  if (fk) box.querySelector(`details[data-k="${fk}"] summary`)?.focus();
+  if (fa) box.querySelector(`[data-act="${fa}"]`)?.focus();
+  const b = $("#who button");
+  if (b && keep) b.focus();
+  if (b) b.onclick = () => { picked = null; renderInfo(t); };
+}
+
+// custo equivalente, turnos e duração da execução do Claude (valor em falta → «—»)
+const fmtUsd = (n) => (n == null ? "—" : "≈ US$ " + fmtNum(n, 2));
+const costLine = (t) => esc(`custo equivalente ${fmtUsd(t.cost_usd)} · ${t.turns == null ? "—" : t.turns + (t.turns === 1 ? " turno" : " turnos")} · `
+  + (t.duration_s == null ? "—" : t.duration_s < 3600 ? fmtNum(t.duration_s / 60, 1) + "\u00a0min" : fmtNum(t.duration_s / 3600, 1) + "\u00a0h"));
+
+// totais da sala (dia e 7 dias civis, pela hora de início)
+function renderTotals() {
+  const x = state.totals?.[roomKey];
+  const win = (w) => fmtUsd(w.cost_usd) + (w.sem_custo > 0 ? ` (${w.sem_custo} sem custo)` : "");
+  $("#totals").textContent = x ? `Hoje ${win(x.day)} · 7 dias ${win(x.week)} · custo equivalente` : "";
+}
+
+// ---- faixa Fábrica: só reescreve o que mudou (o poll não fecha um <details> aberto nem tira o foco a um link)
+const setHtml = (el, h) => { if (el._h !== h) { el.innerHTML = h; el._h = h; } };
+const fmtDT = (iso) => (iso ? new Date(iso).toLocaleString("pt-PT", { timeZone: TZ, day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "—");
+const fmtTok = (n) => (n >= 999500 ? fmtNum(n / 1e6, 1) + " M" : n >= 1e3 ? fmtNum(n / 1e3, 0) + " k" : fmtNum(n));
+const PR_RE = /^https:\/\/github\.com\/([\w.-]+\/[\w.-]+)\/pull\/(\d+)$/;
+function waitHtml(list) {
+  const items = list.map((w) => {
+    const m = String(w.pr_url).match(PR_RE), name = m ? `${m[1]}#${m[2]}` : "";
+    return `<li><i style="background:${w.draft ? "var(--warn)" : "var(--accent)"}"></i><span><b>${esc(w.project ?? w.id)}</b> · `
+      + (m ? `<a href="${esc(w.pr_url)}" target="_blank" rel="noopener noreferrer">${esc(name)}</a>` : "PR sem link") + (w.draft ? " · rascunho" : "")
+      + `</span><span class="t">${fmtDT(w.finished)}</span></li>`;
+  }).join("");
+  return (items ? `<ol>${items}</ol>` : `<p class="sub">Nada à tua espera.</p>`)
+    + `<p class="sub">Estado do PR gravado no fim da tarefa; pode já ter sido integrado ou fechado.</p>`;
+}
+function usageHtml(u) {
+  const note = `<p class="sub">Estimativa a partir dos registos locais; o limite da conta não é conhecido.</p>`;
+  if (u?.status !== "ok") return `<p class="sub">A calcular…</p>` + note;
+  const tot = (x) => x.input + x.output + x.cache_read + x.cache_creation;
+  const table = (k, cap) => {
+    const rows = Object.entries(u.windows[k] || {}).sort((a, b) => tot(b[1]) - tot(a[1]))
+      .map(([m, x]) => `<tr><td>${esc(m)}</td><td>${esc(fmtTok(tot(x)))}</td><td>${esc(fmtTok(x.output))}</td></tr>`).join("");
+    return rows ? `<table><caption>${cap}</caption><tr><th scope="col">modelo</th><th scope="col">total</th><th scope="col">saída</th></tr>${rows}</table>`
+      : `<p class="sub"><b>${cap}</b>: sem registos.</p>`;
+  };
+  return table("5h", "Últimas 5 h") + table("7d", "Últimos 7 dias") + note + `<p class="sub">calculado às ${fmtT(u.computed_at)}</p>`;
+}
+// ---- v2: «O meu dia» (4 números, custo de 30 dias empilhado por squad, linha do tempo de hoje) e «Actividade»
+const tzMin = (iso) => { const p = Object.fromEntries(new Intl.DateTimeFormat("en-GB", { timeZone: TZ, hour: "numeric", minute: "numeric", hourCycle: "h23" })
+  .formatToParts(new Date(iso)).map((x) => [x.type, x.value])); return +p.hour * 60 + +p.minute; };
+function barsSvg(hist) {
+  const tot = (d) => SQS.reduce((a, k) => a + (d[k]?.cost_usd || 0), 0), max = Math.max(0.01, ...hist.map(tot)), H = 80;
+  let s = "";
+  hist.forEach((d, i) => {
+    let y = 8 + H;
+    const tip = `${d.date.slice(8)}/${d.date.slice(5, 7)}: ` + SQS.map((k) => `${ROOMS[k].name} ${fmtUsd(d[k]?.cost_usd || 0)}`).join(" · ");
+    s += `<g><title>${esc(tip)}</title>${rc(i * 10 + 1, 8, 8, H, "#232838", "", "fill:var(--sunk)")}`;
+    for (const k of SQS) { const h = ((d[k]?.cost_usd || 0) / max) * H; if (h > 0) { y -= h; s += rc(i * 10 + 1, y.toFixed(2), 8, Math.max(.5, h).toFixed(2), SQC[k]); } }
+    s += `</g>`;
+  });
+  const sum = hist.reduce((a, d) => a + tot(d), 0), t = (x, a, v) => `<text x="${x}" y="${a}" font-size="7" font-family="ui-monospace,monospace"${x > 150 ? ` text-anchor="end"` : ""}>${esc(v)}</text>`;
+  return `<svg class="chart" viewBox="0 0 300 100" role="img" aria-label="${esc(`Custo dos últimos 30 dias: ${fmtUsd(sum)}, máximo num dia ${fmtUsd(max)}`)}">`
+    + s + t(1, 6, "máx. " + fmtUsd(max)) + t(1, 98, hist[0] ? `${hist[0].date.slice(8)}/${hist[0].date.slice(5, 7)}` : "") + t(299, 98, "hoje") + `</svg>`;
+}
+function timelineHtml(tl) {
+  if (!tl?.length) return `<p class="sub">Nenhuma tarefa começou hoje.</p>`;
+  const now = tzMin(Date.now());
+  return tl.map((x) => {
+    const a = tzMin(x.start), b = x.end ? tzMin(x.end) : now, e = b < a ? 1440 : b, sqk = SQC[x.squad] ? x.squad : SQS[0];
+    const hm = (iso) => new Date(iso).toLocaleTimeString("pt-PT", { timeZone: TZ, hour: "2-digit", minute: "2-digit" });
+    const when = `${hm(x.start)}–${x.end ? hm(x.end) : "agora"}`;
+    return `<div class="tl"><span>${esc(x.project)}<br><span class="sub">${esc(when)}</span></span><span class="tl-t" role="img" aria-label="${esc(`${ROOMS[sqk].name}: ${x.project} ${when}`)}">`
+      + `<i style="left:${(a / 14.4).toFixed(2)}%;width:${(Math.max(0, e - a) / 14.4).toFixed(2)}%;background:${SQC[sqk]}"></i></span></div>`;
+  }).join("") + `<div class="tl" aria-hidden="true"><span></span><span class="tk"><span>0 h</span><span>6</span><span>12</span><span>18</span><span>24</span></span></div>`;
+}
+function dayHtml(td, hist) {
+  if (!td) return `<p class="sub">Sem dados do dia.</p>`;
+  const num = (v, l) => `<div><b>${esc(v)}</b><span>${l}</span></div>`;
+  return `<div class="nums">${num(fmtUsd(td.cost_usd), "custo hoje")}${num(td.done, "tarefas concluídas")}${num(fmtNum(td.hours, 1) + " h", "horas de trabalho")}`
+    + `${num(td.top ? `${td.top.project} ${fmtUsd(td.top.cost_usd)}` : "—", "tarefa mais cara")}</div>`
+    + (hist?.length ? barsSvg(hist) : "") + `<div class="leg">${SQS.map((k) => `<span><i style="background:${SQC[k]}"></i>${ROOMS[k].name}</span>`).join("")}</div>`
+    + `<p class="sub">Linha do tempo de hoje (${esc(TZ || "hora local")})</p>` + timelineHtml(td.timeline);
+}
+function feedHtml(f) {
+  const items = (f || []).map((e) => {
+    const t = state.tasks.find((x) => x.id === e.task), who = ROLES[e.role] || e.role === ROOMS[e.squad]?.lead ? label(e.role, ROOMS[e.squad]) : e.role || "?";
+    return `<li class="${e.kind === "ci_vermelho" || (e.error && !GH_KIND.test(e.kind)) ? "bad" : ""}"><i style="background:${SQC[e.squad] || "var(--muted)"}"></i>`
+      + `<span><b>${esc(actText(e))}</b> · ${esc(who)}<br><span class="sub">${esc(t ? `${t.project} · ${tabName(t)}` : e.task)}</span></span><span class="t">${fmtT(e.at)}</span></li>`;
+  }).join("");
+  return items ? `<ol>${items}</ol>` : `<p class="sub">Sem actividade recente.</p>`;
+}
+function renderFabrica() {
+  const w = state.waiting || [], part = (k) => $(`#fabrica details[data-k="${k}"]`);
+  const sums = { day: state.today ? `O meu dia (${fmtUsd(state.today.cost_usd)} hoje)` : "O meu dia", feed: `Actividade (${(state.feed || []).length})`,
+    wait: `À tua espera (${w.length})`, usage: "Consumo da conta (estimativa)" };
+  const bodies = { day: dayHtml(state.today, state.history), feed: feedHtml(state.feed),
+    wait: waitHtml(w), usage: usageHtml(state.usage) };
+  for (const k in sums) { setHtml(part(k).querySelector("summary"), esc(sums[k])); setHtml(part(k).querySelector("div"), bodies[k]); }
+}
+
+function infoHtml(t) {
+  const pr = t.pr ? t.pr.match(/^(\S+)\s*(.*)$/) : null;
+  const items = t.agents.slice().reverse().map((a) => {
+    const r = rl(roleOf(a.role));
+    const now = t.running && !a.finished && (a.act || a.stuck) ? `<br><span class="sub">Agora: ${esc(actText(a.act) || "—")}</span>${a.stuck ? ` <span class="tag">preso?</span>` : ""}` : "";
+    return `<li class="${a.active ? "act" : ""}"><i style="background:${r.shirt}"></i><span><b>${esc(label(roleOf(a.role)))}</b> — ${esc(a.desc)}${now}</span>`
+      + `<span class="t">${fmtT(a.start)}${a.active ? " · agora" : " · " + fmtDur(a.start, a.end || a.last)}</span></li>`;
+  }).join("");
+  const g = t.gh || {}, gm = String(g.pr_url ?? "").match(PR_RE);
+  const gh = g.pr || g.ci ? `<div class="sub">GitHub: ${g.pr ? (gm ? `<a href="${esc(g.pr_url)}" target="_blank" rel="noopener noreferrer">PR #${esc(gm[2])}</a>` : "PR") + " " + esc(g.pr) : ""}`
+    + `${g.pr && g.ci ? " · " : ""}${g.ci ? `<span class="${g.ci === "vermelho" ? "s-bad" : "s-run"}">CI ${esc(g.ci)}</span>` : ""}</div>` : "";
+  return `
+    <h2>${esc(t.project)} <span class="badge ${statusClass(t)}">${esc(t.status)}</span></h2>
+    <div class="sub">${esc(t.mode)}${t.branch ? " · " + esc(t.branch) : ""}</div>
+    <div class="sub">início ${fmtT(t.started)} · ${t.running ? "há " + fmtDur(t.started) : "duração " + fmtDur(t.started, t.finished)}
+      ${t.auto_resumes ? " · retomas auto: " + t.auto_resumes : ""}</div>
+    <div class="sub">${costLine(t)}</div>
+    ${t.running ? nowLine(t.lead) : ""}${gh}
+    ${pr ? `<div class="sub">PR: ${PR_RE.test(pr[1]) ? `<a href="${esc(pr[1])}" target="_blank" rel="noopener noreferrer">${esc(pr[1].replace(/^https:\/\/github.com\//, ""))}</a>` : esc(pr[1])} ${esc(pr[2])}</div>` : ""}
+    ${progHtml(t.progress) || (ROOMS[sq(t)].fases ? `<div class="steps">${phases(t).map((p) => `<span class="${p.state}">${p.name}</span>`).join("")}</div>` : "")}
+    ${t.issues.length ? `<div class="issues">${esc(t.issues.join("\n"))}</div>` : ""}
+    <ol>${items || `<li><i></i><span class="sub">${t.mode === "task" ? "Tarefa de um só engenheiro (sem subagentes)." : "Ainda sem passagens."}</span><span></span></li>`}</ol>
+    ${t.running ? "" : delivHtml(t)}`;
+}
+
+// ---- v2: entrega e leitor do transcript (só por clique; nunca no polling). O #info é reescrito a cada 8 s: a entrega fica em cache
+const delivs = {}, dkey = (t) => sq(t) + "/" + t.id;
+function delivHtml(t) {
+  const c = delivs[dkey(t)], open = !!c?.open;
+  const body = !open ? "" : c.loading ? `<p class="sub">A carregar…</p>` : c.err ? `<p class="sub s-bad">${esc(c.err)}</p>`
+    : c.delivery ? `<div class="md">${md(c.delivery)}</div>` : `<p class="sub">Sem entrega registada para esta tarefa.</p>`;
+  return `<div class="deliv"><h3>Entrega</h3><div class="btns"><button type="button" data-act="entrega" aria-expanded="${open}">${open ? "Esconder entrega" : "Ver entrega"}</button>`
+    + `<button type="button" data-act="ler">Ler transcript</button></div>${body}</div>`;
+}
+async function fetchT(t, page, f, q) {
+  const p = new URLSearchParams({ squad: sq(t), page, f });
+  if (q) p.set("q", q);
+  const r = await fetch(`api/transcript/${encodeURIComponent(t.id)}?${p}`, { cache: "no-store" });
+  if (!r.ok) throw new Error(r.status);
+  return r.json();
+}
+async function toggleDeliv(t) {
+  const k = dkey(t), c = delivs[k];
+  if (c && !c.err && !c.loading) { c.open = !c.open; return renderInfo(t); }
+  if (c?.loading) return;
+  delivs[k] = { open: true, loading: true };
+  renderInfo(t);
+  try { delivs[k] = { open: true, delivery: (await fetchT(t, 0, "tudo", "")).delivery }; }
+  catch (e) { delivs[k] = { open: true, err: e.message === "404" ? "Sem transcript para esta tarefa." : "Não foi possível carregar a entrega." }; }
+  const cur = state.tasks.find((x) => x.id === selected);
+  if (cur && dkey(cur) === k) renderInfo(cur);
+}
+$("#info").addEventListener("click", (e) => {
+  const b = e.target.closest?.("[data-act]"), t = state?.tasks.find((x) => x.id === selected);
+  if (!b || !t) return;
+  if (b.dataset.act === "ler") openReader(t); else toggleDeliv(t);
+});
+
+// markdown simples sem lib: TODO o texto passa por esc(); só títulos #–###, listas - e 1., tabelas |, citações >, **negrito**, *itálico*, `código`, ``` e ligações https://
+function inline(s) {
+  return String(s).split(/(`[^`\n]+`)/).map((p, i) => (i % 2 ? `<code>${esc(p.slice(1, -1))}</code>`
+    : p.split(/(https:\/\/[^\s<>"'`*]*[^\s<>"'`*.,;:!?)\]])/).map((u, j) => (j % 2 ? `<a href="${esc(u)}" target="_blank" rel="noopener noreferrer">${esc(u)}</a>`
+      : esc(u).replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>").replace(/(^|[^\w*])\*(?![\s*])([^*\n]*?[^\s*])\*(?![\w*])/g, "$1<em>$2</em>"))).join(""))).join("");
+}
+// tabelas: «| a | b |» seguida de «|---|---|»; cada célula passa por inline() (escapada); «\|» é uma barra dentro da célula
+const TROW = /^\s*\|/, TSEP = /^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*$/;
+const cells = (l, tag) => l.trim().replace(/^\|/, "").replace(/(?<!\\)\|$/, "").split(/(?<!\\)\|/)
+  .map((c) => `<${tag}${tag === "th" ? ` scope="col"` : ""}>${inline(c.trim().replace(/\\\|/g, "|"))}</${tag}>`).join("");
+function md(src) {
+  const out = [], lines = String(src ?? "").split("\n");
+  let para = [], list = null, code = null, tbl = null, quote = null;
+  const flush = () => { if (para.length) out.push(`<p>${para.map(inline).join("<br>")}</p>`); para = []; if (list) out.push(`</${list}>`); list = null;
+    if (quote) out.push(`<blockquote>${quote.map(inline).join("<br>")}</blockquote>`); quote = null;
+    if (tbl) out.push(`<div class="tw"><table>${tbl.join("")}</table></div>`); tbl = null; };
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (code) { if (/^\s*```/.test(line)) { out.push(`<pre><code>${esc(code.join("\n"))}</code></pre>`); code = null; } else code.push(line); continue; }
+    if (tbl) { if (TROW.test(line)) { tbl.push(`<tr>${cells(line, "td")}</tr>`); continue; } flush(); }
+    let m;
+    if (/^\s*```/.test(line)) { flush(); code = []; }
+    else if (TROW.test(line) && /\|/.test(lines[i + 1] ?? "") && TSEP.test(lines[i + 1])) { flush(); tbl = [`<tr>${cells(line, "th")}</tr>`]; i++; }
+    else if ((m = line.match(/^(#{1,3})\s+(.*)$/))) { flush(); const h = m[1].length + 2; out.push(`<h${h}>${inline(m[2])}</h${h}>`); }
+    else if ((m = line.match(/^\s*(?:(-)|\d+\.)\s+(.*)$/))) { const k = m[1] ? "ul" : "ol"; if (list !== k) { flush(); out.push(`<${k}>`); list = k; } out.push(`<li>${inline(m[2])}</li>`); }
+    else if ((m = line.match(/^\s*>\s?(.*)$/))) { if (!quote) { flush(); quote = []; } quote.push(m[1]); }
+    else if (!line.trim()) flush();
+    else { if (list || quote) flush(); para.push(line); }
+  }
+  if (code) out.push(`<pre><code>${esc(code.join("\n"))}</code></pre>`); // bloco sem fecho
+  flush();
+  return out.join("");
+}
+
+const rd = { t: null, f: "tudo", q: "", page: 0, seq: 0 };
+const KIND = { pedido: "Pedido", resposta: "Resposta", ferramenta: "Ferramenta", resultado: "Resultado" };
+const entryHtml = (e) => `<div class="ent k-${esc(e.kind)}${e.error ? " err" : ""}"><div class="sub">${fmtT(e.at)} · ${esc(KIND[e.kind] || e.kind)}${e.tool ? " · " + esc(e.tool) : ""}${e.error ? ` · <span class="s-bad">erro</span>` : ""}</div>`
+  + (e.kind === "pedido" || e.kind === "resposta" ? `<div class="md">${md(e.text)}</div>` : `<pre>${esc(e.text)}</pre>`) + `</div>`;
+async function readerLoad(more) {
+  const n = ++rd.seq, page = more ? rd.page + 1 : 0;
+  $("#rd-s").textContent = "A carregar…";
+  $("#rd-more").hidden = true;
+  try {
+    const d = await fetchT(rd.t, page, rd.f, rd.q);
+    if (n !== rd.seq) return; // resposta antiga (pesquisa/filtro mudou entretanto)
+    rd.page = d.page;
+    const h = d.entries.map(entryHtml).join("");
+    if (more) $("#rd-list").insertAdjacentHTML("beforeend", h);
+    else $("#rd-list").innerHTML = h || `<p class="sub">Nada encontrado.</p>`;
+    $("#rd-s").textContent = `${d.total} entradas · página ${d.page + 1} de ${d.pages}` + (d.truncated ? " · transcript longo: só a parte final" : "");
+    $("#rd-more").hidden = d.page >= d.pages - 1;
+  } catch (e) {
+    if (n === rd.seq) $("#rd-s").textContent = e.message === "404" ? "Sem transcript para esta tarefa." : "Não foi possível carregar o transcript.";
+  }
+}
+const paintRdF = () => $("#rd-f").querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", b.dataset.f === rd.f));
+function openReader(t) {
+  Object.assign(rd, { t, f: "tudo", q: "" });
+  $("#rd-q").value = "";
+  paintRdF();
+  $("#rd-h").textContent = `Transcript: ${t.project} · ${tabName(t)}`;
+  $("#rd-list").innerHTML = "";
+  $("#reader").showModal();
+  readerLoad(false);
+}
+$("#rd-x").onclick = () => $("#reader").close();
+$("#rd-more").onclick = () => readerLoad(true);
+$("#rd-f").onclick = (e) => { const b = e.target.closest("button"); if (!b || b.dataset.f === rd.f) return; rd.f = b.dataset.f; paintRdF(); readerLoad(false); };
+let rdT = 0;
+$("#rd-q").oninput = () => { clearTimeout(rdT); rdT = setTimeout(() => { rd.q = $("#rd-q").value.trim().slice(0, 100); readerLoad(false); }, 350); };
+
+// ---- v2: filtro hoje/7 d/30 d (guardado) e pesquisa sem maiúsculas/acentos; a correr e «morreu» aparecem sempre
+let period = (() => { try { const v = localStorage.getItem("periodo"); return ["hoje", "7d", "30d"].includes(v) ? v : "7d"; } catch { return "7d"; } })();
+const fold = (s) => String(s ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+const tzDay = (d) => new Date(d).toLocaleDateString("en-CA", { timeZone: TZ });
+function shown(t) {
+  if (t.running || t.status === "morreu") return true;
+  const q = fold($("#q").value.trim()), at = t.finished || t.started;
+  if (q && !fold(`${t.project} ${t.id}`).includes(q)) return false;
+  if (!at) return true;
+  return period === "hoje" ? tzDay(at) === tzDay(Date.now()) : Date.now() - new Date(at) <= (period === "7d" ? 7 : 30) * 864e5;
+}
+const paintFilt = () => $("#filt").querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", b.dataset.p === period));
+$("#filt").onclick = (e) => {
+  const b = e.target.closest("button");
+  if (!b || b.dataset.p === period) return;
+  period = b.dataset.p;
+  try { localStorage.setItem("periodo", period); } catch {}
+  paintFilt(); paint(false);
+};
+$("#q").oninput = () => paint(false);
+paintFilt();
+
+// mostra uma execução (clique na notificação), mudando para a sala dela
+function selectTask(id) {
+  if (isBib()) bibFechar();
+  if (isQuadro()) qFechar();
+  const t = state?.tasks.find((x) => x.id === id);
+  if (t) roomKey = sq(t);
+  selected = id; picked = null; paint(false);
+}
+
+function paint(animate) {
+  if (!state) return;
+  if (!roomKey) { // 1.ª pintura: sala da execução pedida (#id), senão a que tem trabalho a correr (empate: a 1.ª sala)
+    const h = state.tasks.find((t) => t.id === selected), run = state.tasks.filter((t) => t.running);
+    roomKey = h ? sq(h) : run.some((t) => sq(t) === SQS[0]) ? SQS[0] : run.length ? sq(run[0]) : state.tasks[0] ? sq(state.tasks[0]) : SQS[0];
+  }
+  const list = state.tasks.filter((t) => sq(t) === roomKey && shown(t));
+  if (!selected || !list.some((t) => t.id === selected)) selected = list[0]?.id ?? null;
+  const t = list.find((x) => x.id === selected);
+  const f = document.activeElement?.closest?.(".seat")?.dataset.role; // o repaint não pode roubar o foco
+  renderRooms();
+  renderTabs(list);
+  renderTotals();
+  renderApr();
+  renderFabrica();
+  $("#office").innerHTML = room(t);
+  if (f) $("#office").querySelector(`.seat[data-role="${f}"]`)?.focus();
+  renderInfo(t);
+  musicRoom();
+  if (!t || !animate) return;
+  const before = new Set((prevWorking[t.id] || []).map(roleOf)), now = new Set(t.working.map(roleOf));
+  let delay = 0;
+  const lead = leadOf(t).lead;
+  for (const r of now) if (!before.has(r) && r !== lead) { setTimeout(() => fly(lead, r), delay); delay += 500; }
+  for (const r of before) if (!now.has(r) && r !== lead) { setTimeout(() => fly(r, lead), delay); delay += 500; }
+}
+
+// tocar/Enter numa personagem abre a caixa #who (delegação: sobrevive ao repaint)
+function pick(e) {
+  const seat = e.target.closest?.(".seat");
+  if (!seat) return;
+  picked = seat.dataset.role;
+  renderInfo(state?.tasks.find((x) => x.id === selected));
+  $("#who")?.scrollIntoView({ block: "nearest" });
+  if (e.type === "keydown") $("#who button")?.focus(); // teclado/leitor de ecrã: vai para a caixa
+}
+$("#office").addEventListener("click", pick);
+$("#office").addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(e); } });
+
+// ---- aprovações: secção no fim; o Office só escreve na fila (POST api/decisao), nunca aplica
+// O poll repinta a cada 8 s: o estado de UI vive em aprUi (por fonte/ficheiro) e as notas NÃO entram no HTML comparado,
+// por isso um pedido só é reconstruído quando os dados ou a UI mudam; notas, foco e cursor são repostos depois.
+// pedidos abertos em localStorage["aprAbertos"] (JSON de chaves): grava-se só ao abrir/fechar, nunca no poll
+const aLerAbertos = (raw) => { try { const a = JSON.parse(raw); return new Set(Array.isArray(a) && a.every((x) => typeof x === "string") ? a : []); } catch { return new Set(); } };
+let aAbertos = new Set();
+try { aAbertos = aLerAbertos(localStorage.getItem("aprAbertos")); } catch {}
+const aprUi = {}, aKey = (p) => p.fonte + "/" + p.ficheiro;
+const aUi = (k) => (aprUi[k] ||= { open: aAbertos.has(k), notes: {}, confirm: null, err: null, busy: false, sent: {} });
+function aGravarAbertos() {
+  const ks = (state?.aprovacoes || []).map(aKey).filter((k) => aprUi[k]?.open).slice(0, 100);
+  aAbertos = new Set(ks);
+  try { localStorage.setItem("aprAbertos", JSON.stringify(ks)); } catch {}
+}
+const aFind = (k) => (state?.aprovacoes || []).find((p) => aKey(p) === k);
+const aIdade = (n) => (n <= 0 ? "hoje" : n === 1 ? "há 1 dia" : `há ${n} dias`);
+const aName = (id) => (id === "*" ? "o pedido" : id);
+// enviada daqui para a mesma versão do pedido: aprovar/recusar fecham a decisão até o servidor a dar como recebida
+const aSent = (u, p, d) => (u.sent[d.id]?.sha === p.sha256 ? u.sent[d.id].accao : null);
+const aOpen = (u, p) => p.decisoes.filter((d) => d.aberta && !["aprovar", "recusar"].includes(aSent(u, p, d)));
+const aTotal = (list) => list.reduce((a, p) => a + aOpen(aUi(aKey(p)), p).length, 0);
+const aVerb = { aprovar: "Aprovar", recusar: "Recusar", comentar: "Enviar comentário em" };
+function aConfirmText(p, c) {
+  if (c.id === "*todas") return `Aprovar todas: ${aOpen(aUi(aKey(p)), p).map((d) => d.id).join(", ")}?`;
+  const d = p.decisoes.find((x) => x.id === c.id);
+  return `${aVerb[c.accao]} ${aName(c.id)}${c.accao === "aprovar" && d?.valor ? " — " + d.valor : ""}?`;
+}
+const aCf = (p, u) => `<div class="cf" role="group" aria-label="Confirmação"><span>${esc(aConfirmText(p, u.confirm))}</span><div class="btns">`
+  + `<button type="button" class="ok-b" data-a="ok" data-f="ok">Confirmar</button><button type="button" data-a="no" data-f="no">Cancelar</button></div></div>`;
+const aErr = (u, id) => (u.err?.id === id ? `<p class="msg s-bad" role="alert">${esc(u.err.msg)}</p>` : "");
+function aDecHtml(p, u, d) {
+  const head = d.id === "*" ? "" : `<p><b>${esc(d.id)}</b> ${esc(d.texto)}</p>`, sent = aSent(u, p, d);
+  if (d.feito) return `<div class="dec">${head}<p class="${d.feito === "aprovado" ? "s-run" : "s-bad"}">${d.feito === "aprovado" ? "✓ aprovado" : "✗ recusado"}${d.data ? " · " + esc(d.data) : ""}</p></div>`;
+  if (d.recebido || sent === "aprovar" || sent === "recusar") return `<div class="dec">${head}<p class="s-ok">Recebido · a aplicar</p></div>`;
+  const dis = u.busy ? " disabled" : "", lab = aName(d.id);
+  return `<div class="dec">${head}<textarea data-id="${esc(d.id)}" data-f="n:${esc(d.id)}" maxlength="2000" rows="2" aria-label="${esc(`Observação para ${lab}`)}" placeholder="observação (obrigatória para recusar ou comentar)"></textarea>`
+    + `<div class="btns"><button type="button" class="ok-b" data-a="aprovar" data-id="${esc(d.id)}" data-f="aprovar:${esc(d.id)}"${dis}>${esc(d.valor ? "Aprovar · " + d.valor : "Aprovar")}</button>`
+    + `<button type="button" class="no-b" data-a="recusar" data-id="${esc(d.id)}" data-f="recusar:${esc(d.id)}" data-nota${dis}>Recusar</button>`
+    + `<button type="button" data-a="comentar" data-id="${esc(d.id)}" data-f="comentar:${esc(d.id)}" data-nota${dis}>Comentar</button></div>`
+    + `<p class="msg sub" data-hint="${esc(d.id)}">escreve o motivo para recusar ou comentar</p>`
+    + (sent === "comentar" ? `<p class="msg s-ok">comentário enviado</p>` : "")
+    + (u.confirm && u.confirm.id === d.id ? aCf(p, u) : "") + aErr(u, d.id) + `</div>`;
+}
+function aprHtml(p) {
+  const u = aUi(aKey(p)), open = aOpen(u, p), n = open.length;
+  let h = `<button type="button" class="apr-h" data-a="tog" data-f="tog" aria-expanded="${u.open}"><span class="sub">${esc(p.fonte)}</span><b>${esc(p.titulo)}</b>`
+    + `<span class="sub"><span class="${p.idade_dias > 3 ? "s-warn" : ""}">${esc(aIdade(p.idade_dias))}</span> · ${n} ${n === 1 ? "decisão em aberto" : "decisões em aberto"}</span></button>`;
+  if (!u.open) return h;
+  h += `<div class="apr-b">${p.resumo ? `<div class="md">${md(p.resumo)}</div>` : ""}`
+    + (p.datas ? `<h3>Datas e orçamento</h3><div class="md">${md(p.datas)}</div>` : "")
+    + `<div class="btns"><button type="button" data-a="full" data-f="full">Ver o pedido completo</button></div>`
+    + p.decisoes.map((d) => aDecHtml(p, u, d)).join("");
+  if (n >= 2) h += `<div class="dec"><div class="btns"><button type="button" class="ok-b" data-a="todas" data-f="todas"${u.busy ? " disabled" : ""}>Aprovar todas (${n})</button></div>`
+    + (u.confirm?.id === "*todas" ? aCf(p, u) : "") + `</div>`;
+  if (u.busy) h += `<p class="msg sub" role="status">A enviar…</p>`;
+  // erro de uma decisão que já não está em aberto (ex.: 409 depois de recarregar) fica no fim do pedido
+  if (u.err && !open.some((d) => d.id === u.err.id)) h += `<p class="msg s-bad" role="alert">${esc(aName(u.err.id) + ": " + u.err.msg)}</p>`;
+  return h + `</div>`;
+}
+// Recusar/Comentar só com nota escrita; o estado dos botões não entra no HTML (muda a cada tecla)
+function aSync(el) {
+  const u = aUi(el.dataset.k);
+  el.querySelectorAll("textarea[data-id]").forEach((t) => {
+    const empty = !(u.notes[t.dataset.id] || "").trim(), id = CSS.escape(t.dataset.id);
+    el.querySelectorAll(`button[data-nota][data-id="${id}"]`).forEach((b) => (b.disabled = u.busy || empty));
+    const hint = el.querySelector(`[data-hint="${id}"]`);
+    if (hint) hint.hidden = !empty;
+  });
+}
+let aFocus = null; // foco a pôr depois do próximo render (ex.: «Confirmar» ao abrir a confirmação)
+function renderApr() {
+  const list = state.aprovacoes || [], box = $("#apr-list"), keys = list.map(aKey).join("\n");
+  $("#aprovacoes").hidden = !list.length;
+  const m = aTotal(list);
+  setHtml($("#apr-h"), esc(`Aprovações (${list.length})`));
+  setHtml($("#apr-n"), esc(`· ${m} ${m === 1 ? "decisão em aberto" : "decisões em aberto"}`));
+  const ae = document.activeElement, fEl = ae?.closest?.("#apr-list .apr");
+  const f = aFocus || (fEl && ae.dataset.f ? { k: fEl.dataset.k, f: ae.dataset.f, s: ae.selectionStart, e: ae.selectionEnd } : null);
+  aFocus = null;
+  if (box._keys !== keys) { box.innerHTML = list.map((p) => `<div class="apr" data-k="${esc(aKey(p))}"></div>`).join(""); box._keys = keys; }
+  [...box.children].forEach((el, i) => {
+    const h = aprHtml(list[i]), u = aUi(el.dataset.k);
+    if (el._h !== h) {
+      el.innerHTML = h; el._h = h;
+      el.querySelectorAll("textarea[data-id]").forEach((t) => (t.value = u.notes[t.dataset.id] || ""));
+      if (f?.k === el.dataset.k) {
+        const t = el.querySelector(`[data-f="${CSS.escape(f.f)}"]`) || el.querySelector(`[data-f="tog"]`);
+        t?.focus();
+        if (t?.tagName === "TEXTAREA" && f.s != null) t.setSelectionRange(f.s, f.e);
+      }
+    }
+    aSync(el);
+  });
+}
+async function aprSend(k) {
+  const p = aFind(k), u = aUi(k), c = u.confirm;
+  if (!p || !c || u.busy) return;
+  const ids = c.id === "*todas" ? aOpen(u, p).map((d) => d.id) : [c.id];
+  Object.assign(u, { busy: true, confirm: null, err: null });
+  renderApr();
+  let reload = false;
+  for (const id of ids) { // em sequência; pára no 1.º erro
+    const nota = (u.notes[id] || "").trim();
+    if (c.accao !== "aprovar" && !nota) { u.err = { id, msg: "escreve o motivo" }; break; }
+    let r = null, d = {};
+    try {
+      r = await fetch("api/decisao", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fonte: p.fonte, ficheiro: p.ficheiro, id, accao: c.accao, nota, sha256: c.sha, token: state.token }) });
+      d = await r.json().catch(() => ({}));
+    } catch { r = null; }
+    if (r?.status === 409 && d.code === "recebida") { // já estava na fila (ex.: outro separador): conta como enviada
+      u.sent[id] = { accao: c.accao, sha: c.sha };
+      reload = true;
+      continue;
+    }
+    if (r?.status !== 202) {
+      const msg = !r ? "sem ligação, tenta de novo" : r.status === 409 ? d.error || "o pedido mudou, recarrega" : d.error || `erro ${r.status}`;
+      u.err = { id, msg }; // a nota fica escrita
+      reload = r?.status === 409 || r?.status === 403; // pedido mudou ou token novo (reinício): recarrega o estado
+      break;
+    }
+    u.sent[id] = { accao: c.accao, sha: c.sha };
+    delete u.notes[id];
+    reload = true;
+  }
+  u.busy = false;
+  renderApr();
+  if (reload) tick();
+}
+$("#apr-list").addEventListener("input", (e) => {
+  const t = e.target.closest?.("textarea[data-id]"), el = t?.closest(".apr");
+  if (!el) return;
+  aUi(el.dataset.k).notes[t.dataset.id] = t.value;
+  aSync(el);
+});
+$("#apr-list").addEventListener("click", (e) => {
+  const b = e.target.closest?.("button[data-a]"), el = b?.closest(".apr");
+  if (!el || b.disabled) return;
+  const k = el.dataset.k, u = aUi(k), a = b.dataset.a;
+  if (a === "ok") return aprSend(k);
+  if (a === "full") return aprFull(aFind(k));
+  if (a === "tog") { u.open = !u.open; aGravarAbertos(); }
+  else if (a === "no") { aFocus = { k, f: u.confirm.id === "*todas" ? "todas" : `${u.confirm.accao}:${u.confirm.id}` }; u.confirm = null; }
+  else if (a === "todas") { u.confirm = { accao: "aprovar", id: "*todas", sha: aFind(k)?.sha256 }; u.err = null; aFocus = { k, f: "ok" }; }
+  else { u.confirm = { accao: a, id: b.dataset.id, sha: aFind(k)?.sha256 }; u.err = null; aFocus = { k, f: "ok" }; } // sha: a versão vista ao clicar
+  renderApr();
+});
+// pedido completo: só a pedido (fora do polling), no seu próprio <dialog>
+let adSeq = 0;
+async function aprFull(p) {
+  if (!p) return;
+  const n = ++adSeq;
+  $("#ad-h").textContent = p.titulo;
+  $("#ad-s").textContent = "A carregar…";
+  $("#ad-b").innerHTML = "";
+  $("#apr-dlg").showModal();
+  try {
+    const r = await fetch(`api/aprovacao?${new URLSearchParams({ fonte: p.fonte, ficheiro: p.ficheiro })}`, { cache: "no-store" });
+    if (!r.ok) throw new Error(r.status);
+    const d = await r.json();
+    if (n !== adSeq) return;
+    $("#ad-b").innerHTML = md(d.corpo);
+    $("#ad-s").textContent = `${p.fonte} · ${p.ficheiro}` + (d.cortado ? " · pedido longo: só o início" : "");
+  } catch (e) {
+    if (n === adSeq) $("#ad-s").textContent = e.message === "404" ? "Este pedido já não está pendente." : "Não foi possível carregar o pedido.";
+  }
+}
+$("#ad-x").onclick = () => $("#apr-dlg").close();
+// secção recolhida/aberta em localStorage["aprSecao"]; o poll nunca toca no <details>
+try { if (localStorage.getItem("aprSecao") === "0") $("#apr-d").open = false; } catch {}
+$("#apr-d").addEventListener("toggle", (e) => { try { localStorage.setItem("aprSecao", e.target.open ? "1" : "0"); } catch {} });
+// ---- fim aprovações
+
+async function tick() {
+  try {
+    const res = await fetch("api/state", { cache: "no-store" });
+    if (!res.ok) throw new Error(res.status);
+    const next = await res.json();
+    const prev = state;
+    state = next;
+    paint(!firstPaint);
+    // lembra quem estava a trabalhar para animar as passagens seguintes
+    prevWorking = Object.fromEntries(state.tasks.map((t) => [t.id, t.working]));
+    if (prev) for (const t of state.tasks) {
+      const old = prev.tasks.find((x) => x.id === t.id);
+      if (old?.running && !t.running) notifyDone(t);
+      if (newPr(old, t)) prBanner(t);
+    }
+    alertsTick();
+    if (jt?.update(prev, next, musicOn && !document.hidden && !!eng).length) eng.jingle(); // um jingle por poll
+    firstPaint = false;
+    $("#live").className = "";
+    $("#live span").textContent = "ao vivo · " + new Date().toLocaleTimeString("pt-PT", { timeZone: TZ });
+  } catch (e) {
+    $("#live").className = "off";
+    $("#live span").textContent = "sem ligação";
+  }
+}
+// ---- v2: PR aberto/integrado novo face à carga anterior → faixa 8 s + confetti (nunca na 1.ª carga: só corre com prev)
+const newPr = (o, t) => (t.gh?.pr === "aberto" || t.gh?.pr === "integrado") && (o?.gh?.pr !== t.gh.pr || o?.gh?.pr_url !== t.gh.pr_url);
+function prBanner(t) {
+  const m = String(t.gh.pr_url ?? "").match(PR_RE), b = $("#banner");
+  b.textContent = `${t.gh.pr === "integrado" ? "✅ PR integrado" : "🎉 PR aberto"}: ${t.project}${m ? " #" + m[2] : ""}`;
+  b.hidden = false;
+  clearTimeout(b._t);
+  b._t = setTimeout(() => (b.hidden = true), 8000);
+  confetti();
+}
+// ---- v2: alertas (tarefas mortas): «(N) » no título e uma notificação por chave nova (nada na 1.ª carga)
+let alertKeys = null;
+function alertsTick() {
+  const items = state.alerts?.items || [], n = state.alerts?.count || 0;
+  document.title = (n > 0 ? `(${n}) ` : "") + cfg.marca;
+  if (alertKeys && notifyOn()) for (const k of items) if (!alertKeys.has(k)) notifyAlert(k);
+  alertKeys = new Set(items); // uma chave que sai e volta notifica de novo
+}
+async function notifyAlert(k) {
+  if (!k.startsWith("tarefa:")) return; // o servidor só dá alertas de tarefas
+  const id = k.slice(7), t = state.tasks.find((x) => x.id === id);
+  // a mesma tag da notificação de fim (substitui-a em vez de duplicar)
+  const n = await show(`💀 Tarefa morreu: ${t ? t.project : id}`, { body: "O lançador deixou de dar sinal há mais de 5 min. Relança a tarefa.", tag: id,
+    data: { task: id }, requireInteraction: true }).catch(() => null);
+  if (n) n.onclick = () => { window.focus(); selectTask(id); };
+}
+
+// ---- notificações do browser (com a página aberta, mesmo noutro separador ou minimizada)
+const store = {
+  get: () => { try { return localStorage.getItem("notify") === "1"; } catch { return false; } },
+  set: (v) => { try { localStorage.setItem("notify", v ? "1" : "0"); } catch {} },
+};
+const swReady = "serviceWorker" in navigator ? navigator.serviceWorker.register("sw.js").then(() => navigator.serviceWorker.ready).catch(() => null) : Promise.resolve(null);
+const supported = "Notification" in window; // false no Safari do iPhone fora da app instalada
+const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+const notifyOn = () => supported && Notification.permission === "granted" && store.get();
+
+function paintBell() {
+  const b = $("#bell");
+  if (!supported) return; // fica visível: o clique explica como activar
+  const on = notifyOn(), blocked = Notification.permission === "denied";
+  b.setAttribute("aria-pressed", on);
+  b.textContent = blocked ? "🔕 bloqueadas no browser" : on ? "🔔 notificações" : "🔕 notificações";
+}
+$("#bell").onclick = async () => {
+  if (!supported) return alert(isIOS
+    ? "No iPhone, as notificações só funcionam com a página instalada (iOS 16.4 ou mais recente): Partilhar → Adicionar ao ecrã principal, e abre a partir do ícone."
+    : "Este browser não suporta notificações.");
+  if (Notification.permission === "denied") return alert("As notificações estão bloqueadas para este site. Desbloqueia no cadeado ao lado do endereço → Notificações → Permitir, e recarrega a página.");
+  if (Notification.permission === "default") await Notification.requestPermission();
+  const on = Notification.permission === "granted" && !notifyOn();
+  store.set(on);
+  paintBell();
+  // aviso de teste: sem ele, não há forma de saber se o sistema operativo mostra as notificações
+  if (on) show("🔔 Notificações ligadas", { body: "Vais ser avisado quando um goal terminar ou houver um alerta.", tag: "teste" })
+    .catch((e) => alert("O browser deu permissão, mas a notificação falhou: " + e.message));
+};
+
+async function show(title, opts) {
+  const reg = await swReady;
+  if (reg) return reg.showNotification(title, opts);
+  return new Notification(title, opts); // sem service worker; no Android lança erro
+}
+
+async function notifyDone(t) {
+  if (!notifyOn()) return;
+  const ok = t.status === "concluída";
+  const title = `${ok ? "✅" : "⚠️"} ${t.project}: ${t.mode} ${ok ? "concluído" : t.status}`;
+  const detail = t.pr ? "PR " + t.pr : t.issues.join("\n") || t.branch || "";
+  const opts = { body: [label(leadOf(t).lead, leadOf(t)), detail].filter(Boolean).join(": ").slice(0, 180), tag: t.id, data: { task: t.id }, requireInteraction: !ok };
+  const n = await show(title, opts).catch(() => null);
+  if (n) n.onclick = () => { window.focus(); selectTask(t.id); };
+}
+navigator.serviceWorker?.addEventListener("message", (e) => {
+  if (e.data?.select) selectTask(e.data.select);
+});
+paintBell();
+
+// ---- tema: aplicado pelo script do <head> (temaAplicar); aqui só o selector e a gravação
+$("#tema").value = temaEscolha;
+$("#tema").onchange = (e) => { temaAplicar(e.target.value); try { localStorage.setItem("tema", temaEscolha); } catch {} };
+
+// ---- biblioteca: biblioteca.js só carrega ao abrir (como o music.js); um hash «#biblioteca…» é dela, nunca de uma tarefa.
+// O polling continua (Aprovações, alertas) mas nunca toca em #bib.
+function isBib() { return location.hash.startsWith("#biblioteca"); }
+let bibP = null;
+// abre a secção e o pedido nas Aprovações (visível por baixo da Biblioteca; o Quadro fecha-se antes) e leva lá o foco
+function verAprovacao(fonte, ficheiro) {
+  const k = fonte + "/" + ficheiro;
+  if (!state || !aFind(k)) return;
+  $("#apr-d").open = true;
+  aUi(k).open = true; aGravarAbertos();
+  renderApr();
+  const el = [...$("#apr-list").children].find((x) => x.dataset.k === k);
+  el?.scrollIntoView({ block: "start" });
+  el?.querySelector('[data-f="tog"]')?.focus({ preventScroll: true });
+}
+const bibApi = () => ({ root: $("#bib"), md, esc, cfg, getState: () => state, fechar: bibFechar, verAprovacao });
+function bibFechar() { history.pushState(null, "", location.pathname + location.search); bibRoute(); }
+async function bibRoute() {
+  const on = isBib(), was = document.body.dataset.view === "biblioteca";
+  document.body.dataset.view = on ? "biblioteca" : "";
+  $("#bib").hidden = !on;
+  $("#bib-b").setAttribute("aria-pressed", on);
+  if (!on) { if (was) bibP?.then((m) => m.sair()).catch(() => {}); return; }
+  bibP ||= import("./biblioteca.js").then(async (m) => { await m.abrir(bibApi()); return m; });
+  try { (await bibP).rota(location.hash); }
+  catch { bibP = null; $("#bib").textContent = "Não foi possível carregar a biblioteca. Recarrega a página."; }
+}
+$("#bib-b").onclick = () => (isBib() ? bibFechar() : (location.hash = "biblioteca"));
+addEventListener("hashchange", () => { if (isBib() || document.body.dataset.view === "biblioteca") bibRoute(); });
+
+// ---- quadro: quadro.js/.css só carregam ao abrir «#quadro» (como a Biblioteca); flag própria qOn para não pisar o data-view dela
+const isQuadro = () => location.hash.startsWith("#quadro");
+let qP = null, qOn = false;
+const quadroApi = () => ({ root: $("#quadro"), md, esc, cfg, fechar: qFechar, barra: progHtml,
+  verAprovacao: (f, fi) => { qFechar(); verAprovacao(f, fi); }, abrirTarefa: qTarefa });
+// do Quadro para a sala: limpa a pesquisa e alarga o período (sem gravar) até a execução aparecer
+function qTarefa(id) {
+  const t = state?.tasks.find((x) => x.id === id), ps = ["hoje", "7d", "30d"], p0 = period, q0 = $("#q").value;
+  $("#q").value = "";
+  for (let i = ps.indexOf(period); t && !shown(t) && i < 2;) period = ps[++i];
+  if (!t || !shown(t)) { period = p0; $("#q").value = q0; return false; } // já saiu do escritório: o Quadro avisa
+  qFechar(); paintFilt(); selectTask(id); scrollTo(0, 0);
+}
+function qFechar() { if (isQuadro()) history.pushState(null, "", location.pathname + location.search); qRoute(); }
+async function qRoute() {
+  const on = isQuadro();
+  if (!on && !qOn) return;
+  qOn = on;
+  $("#quadro").hidden = !on;
+  $("#quad-b").setAttribute("aria-pressed", on);
+  if (on) document.body.dataset.view = "quadro";
+  if (!on) { if (document.body.dataset.view === "quadro") document.body.dataset.view = ""; qP?.then((m) => m.sair()).catch(() => {}); return; }
+  qP ||= import("./quadro.js").then(async (m) => { await m.abrir(quadroApi()); return m; });
+  try { (await qP).rota(location.hash); }
+  catch { qP = null; $("#quadro").textContent = "Não foi possível carregar o quadro. Recarrega a página."; }
+}
+$("#quad-b").onclick = () => (isQuadro() ? qFechar() : (location.hash = "quadro"));
+addEventListener("hashchange", qRoute);
+
+// ---- «Definições» (lazy)
+let defP = null;
+$("#def-b").onclick = async () => {
+  try { (await (defP ||= import("./definicoes.js"))).abrir({ esc, cfg, swReady, isIOS, getState: () => state,
+    repintar: () => { paint(false); qP?.then((m) => m.repintar(), () => {}); } }); }
+  catch { defP = null; alert("Não foi possível abrir as definições."); }
+};
+
+// ---- música de fundo (music.js só carrega ao ligar; prefs lidas aqui, regra do readPrefs; o AudioContext nasce no gesto: iOS)
+const pref = (() => { try { const v = localStorage.getItem("musicVol"); return [localStorage.getItem("music") === "1", /^\d{1,3}$/.test(v) && v <= 100 ? +v : 30]; } catch { return [false, 30]; } })();
+let musicOn = pref[0], M = null, eng = null, actx = null, jt = null, loadP = null;
+$("#vol").value = pref[1];
+const vol = () => +$("#vol").value;
+const loadMusic = () => (loadP ||= import("./music.js").then((m) => { M = m; jt = m.createJingleTracker(); return m; },
+  () => { loadP = null; musicOn = false; paintMusic(); actx?.suspend(); })); // falhou: desliga, o clique seguinte tenta de novo
+function paintMusic() {
+  const b = $("#music");
+  b.setAttribute("aria-pressed", musicOn);
+  b.textContent = (musicOn ? "🔊" : "🔈") + " música";
+  $("#vol").hidden = !musicOn;
+}
+function unlock() { if (musicOn) { actx ||= new (window.AudioContext || window.webkitAudioContext)(); return actx.resume(); } } // síncrono, dentro do gesto
+function syncMusic() { // depois do load
+  if (!M || !actx) return;
+  if (!eng) { if (!musicOn) return actx.suspend(); eng = M.createEngine({ ctx: actx }); }
+  eng.setVolume(vol());
+  if (musicOn) { musicRoom(); eng.start(); if (document.hidden) eng.suspend(); } else eng.stop();
+}
+function musicRoom() { if (eng && state && musicOn) { eng.setRoom(roomKey); eng.setLayers(M.layersFor(state, roomKey, SQS)); } }
+$("#music").onclick = () => {
+  musicOn = !musicOn; paintMusic(); unlock();
+  loadMusic().then((m) => { m?.writePrefs(localStorage, { on: musicOn, vol: vol() }); syncMusic(); });
+};
+$("#vol").oninput = () => { eng?.setVolume(vol()); loadMusic().then((m) => m?.writePrefs(localStorage, { on: musicOn, vol: vol() })); };
+if (musicOn) { // pref ligada: o botão aparece ligado, mas o som só sai no 1.º gesto (regra de autoplay)
+  const ev = ["click", "touchend", "keydown"], off = () => ev.forEach((n) => removeEventListener(n, g, true));
+  const g = (e) => { if (e.target.id === "music" || !musicOn) return off(); // iOS: pointerdown não activa o áudio; no #music o clique desliga
+    unlock().then(() => actx.state === "running" && off()); loadMusic().then(syncMusic); };
+  ev.forEach((n) => addEventListener(n, g, true));
+}
+document.addEventListener("visibilitychange", () => { if (eng && musicOn) document.hidden ? eng.suspend() : eng.resume(); });
+paintMusic();
+
+// arranque: a config primeiro (ou as omissões, se falhar), depois as rotas e o estado
+lerCfg().then(() => { bibRoute(); qRoute(); tick(); setInterval(tick, 8000); });
+</script>
+</body>
+</html>

@@ -1,0 +1,10 @@
+# Uma passagem do runner por minuto. O lock em <dados>/runner/.lock impede duas passagens ao mesmo tempo.
+[Unit]
+Description=Squad Office Lite: runner de minuto a minuto
+
+[Timer]
+OnCalendar=*-*-* *:*:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

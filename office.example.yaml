@@ -1,0 +1,56 @@
+# Squad Office Lite — configuração. Subconjunto de YAML: ver README, «Referência · office.yaml».
+versao: 1
+marca: Squad Office
+utilizador:
+  nome: Utilizador
+  contacto: ""
+fuso: Europe/Lisbon
+raizes:
+  dados: ~/office-lite/dados
+  projectos: ~/projectos
+  claude_projects: ~/.claude/projects
+squads:
+  - id: dev
+    nome: Dev
+    lead: tech-lead
+    personagem: Maestro
+    tipos: [feat, fix]
+    modos: [goal, task]
+projectos:
+  - id: exemplo
+    nome: Exemplo
+    glifo: "◆"
+    repo: exemplo
+colunas:
+  ideias: Ideias
+  a-fazer: A fazer
+  em-curso: Em curso
+  # sem esta chave: «À espera de <utilizador.nome>» (um valor vazio não valida)
+  # a-espera: À espera de revisão
+  feito: Feito
+biblioteca:
+  - id: material
+    rotulo: Material
+    pasta: material
+    media: true
+runner:
+  tecto_diario: 10
+  paralelo: 1
+  rotacao_dias: 14
+  # dontAsk: o claude recusa sem perguntar o que não estiver em `ferramentas`; não é um muro: ver README, «Runner».
+  # auto, acceptEdits e bypassPermissions também são aceites (mais abertos).
+  permission_mode: dontAsk
+  settings: ""
+  # teto de custo em USD por arranque do claude (--max-budget-usd; cada retoma pode gastar até ao teto)
+  # max_usd: 5
+  # modelo do claude (--model): alias ou nome completo; sem esta chave, o do claude
+  # modelo: sonnet
+  # ferramentas pré-autorizadas (--allowedTools). Sem esta chave vale a lista por omissão (README, «Runner»):
+  # leitura/edição, Agent, git, gh pr create/view/checks/edit/list/ready, gh run e testes/build comuns (sem web).
+  # Para a substituir, descomenta e ajusta (os proibidos do runner ganham sempre):
+  # ferramentas:
+  #   - Read
+  #   - Edit
+  #   - Write
+  #   - Bash(git *)
+  #   - Bash(npm test *)

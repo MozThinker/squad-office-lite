@@ -1,0 +1,26 @@
+/* «Definições» (definicoes.js): só carregado ao abrir o painel. Cores = tokens dos temas do index.html; 16 px e alvos de 44 px */
+#def-dlg { width: min(520px, calc(100vw - 16px)); max-height: calc(100dvh - 16px); padding: 0; background: var(--panel); color: var(--text);
+  border: 1px solid var(--line); }
+#def-dlg[open] { display: flex; flex-direction: column; }
+#def-dlg::backdrop { background: var(--backdrop); }
+#def-dlg button { min-height: 44px; padding: 6px 14px; background: var(--bg); color: var(--text); border: 1px solid var(--ctl);
+  font: inherit; font-size: 16px; cursor: pointer; }
+#def-dlg button:disabled { opacity: .45; cursor: not-allowed; }
+#def-dlg :is(button, input):focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.def-b { flex: 1; min-height: 0; overflow-y: auto; padding: 4px 12px 16px; overscroll-behavior: contain; font-size: 16px; }
+.def-b h3 { font-size: 16px; margin: 14px 0 4px; }
+.def-b section + section { border-top: 1px solid var(--line); margin-top: 12px; }
+.def-b fieldset { border: 1px solid var(--line); margin: 12px 0 0; padding: 4px 10px 8px; min-width: 0; }
+.def-b fieldset:disabled { opacity: .6; }
+.def-b legend { padding: 0 4px; color: var(--muted); font-size: 14px; }
+.def-c { display: flex; align-items: center; gap: 10px; min-height: 44px; cursor: pointer; overflow-wrap: anywhere; }
+.def-c input { flex: none; width: 22px; height: 22px; margin: 0; accent-color: var(--accent); }
+.def-h { display: flex; flex-wrap: wrap; gap: 8px 16px; }
+.def-h label { display: flex; align-items: center; gap: 8px; }
+.def-h input { min-height: 44px; padding: 4px 8px; background: var(--bg); color: var(--text); border: 1px solid var(--ctl); font: inherit; font-size: 16px; }
+.def-b .sub { margin: 2px 0 4px; font-size: 14px; }
+.def-msg { margin: 6px 0; overflow-wrap: anywhere; }
+.def-msg:empty { display: none; }
+.def-bt { margin-top: 8px; }
+.def-fases { margin-left: 32px; }
+.def-fases .def-c:has(> input:disabled) { opacity: .45; cursor: not-allowed; }

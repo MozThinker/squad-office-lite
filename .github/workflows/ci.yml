@@ -1,0 +1,284 @@
+name: CI
+
+# Squad Office Lite: só checks. Sem deploy, sem push de imagens, sem segredos: o instalador só corre no runner
+# descartável do job «fumo» (imagem construída localmente, nunca publicada).
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    name: Checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        id: py310
+        with:
+          python-version: "3.10"
+      - name: Python 3.10 (officecfg e runner no host)
+        run: |
+          "$PY" -m pip install -q pytest
+          "$PY" -m pytest -q tests/test_officecfg.py tests/test_runner_*.py
+        env:
+          PY: ${{ steps.py310.outputs.python-path }}
+      - uses: actions/setup-python@v5
+        id: py314
+        with:
+          python-version: "3.14"
+      - name: Python 3.14 (officecfg e runner no host)
+        run: |
+          "$PY" -m pip install -q pytest
+          "$PY" -m pytest -q tests/test_officecfg.py tests/test_runner_*.py
+        env:
+          PY: ${{ steps.py314.outputs.python-path }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Python compila
+        run: python -m py_compile server.py aprovacoes.py reader.py biblioteca.py quadro.py push.py progresso.py lancar.py officecfg.py runner/*.py tools/gerar_icones.py
+      - name: API responde com dados vazios
+        run: |
+          mkdir -p /tmp/t /tmp/c
+          OFFICE_CONFIG=office.example.yaml TASKS_DIR=/tmp/t CLAUDE_PROJECTS_DIR=/tmp/c PORT=8099 python server.py &
+          for _ in $(seq 20); do curl -fsS -o /dev/null localhost:8099/healthz && break; sleep 0.5; done
+          curl -fsS localhost:8099/healthz
+          curl -fsS localhost:8099/api/state | python -c 'import json,sys; s = json.load(sys.stdin); assert s["tasks"] == [] and "probes" not in s and "crons" not in s and s["waiting"] == [] and s["aprovacoes"] == []'
+          curl -fsS localhost:8099/ | grep -q "Squad Office"
+          # /api/config: a do exemplo, sem caminhos (nada começa por / ou ~)
+          curl -fsS localhost:8099/api/config | python -c '
+          import json, sys
+          c = json.load(sys.stdin)
+          def textos(v):
+              if isinstance(v, dict): v = list(v.values())
+              if isinstance(v, list): return [t for x in v for t in textos(x)]
+              return [v] if isinstance(v, str) else []
+          assert not [t for t in textos(c) if t.startswith(("/", "~"))], c
+          assert c["marca"] == "Squad Office" and [p["id"] for p in c["projectos"]] == ["exemplo"] and c["aviso"] is None, c'
+          curl -fsS localhost:8099/api/biblioteca | python -c 'import json,sys; assert json.load(sys.stdin)["itens"] == []'
+          curl -fsS -o /dev/null localhost:8099/biblioteca.js
+          curl -fsS -D /tmp/q.h localhost:8099/api/quadro | python -c 'import json,sys; q = json.load(sys.stdin); assert q["cartoes"] == [] and q["versao"] == "0" and q["escrita"] is False and len(q["colunas"]) == 5'
+          # lançar (ADR-005): sem a pasta da fila fica desligado, mas os projectos lançáveis vêm sempre da config
+          curl -fsS localhost:8099/api/quadro | python -c 'import json,sys; q = json.load(sys.stdin); assert q["lancar"] is False and q["dev_projectos"] == ["exemplo"]'
+          grep -qi "^cache-control: no-store" /tmp/q.h
+          curl -fsS -o /dev/null localhost:8099/quadro.js
+          curl -fsS -o /dev/null localhost:8099/quadro.css
+          # sem cryptography (CI sem deps): push desligado com 503, o resto igual
+          test "$(curl -s -o /dev/null -w '%{http_code}' localhost:8099/api/push/chave)" = 503
+          curl -s localhost:8099/api/push/chave | python -c 'import json,sys; assert json.load(sys.stdin)["motivo"] == "sem_cryptography"'
+          for f in definicoes.js definicoes.css icon-192.png apple-touch-icon.png; do curl -fsS -o /dev/null "localhost:8099/$f"; done
+          curl -fsS localhost:8099/manifest.json | python -c 'import json,sys; m = json.load(sys.stdin); assert m["display"] == "standalone" and m["id"] and m["scope"] and {"192x192", "512x512"} <= {i["sizes"] for i in m["icons"]}'
+      - name: Testes Python
+        run: |
+          python -m pip install -q pytest
+          python -m pytest -q
+      - name: Testes do push com cryptography
+        run: |
+          python -m pip install -q cryptography
+          python -m pytest -q tests/test_push*.py
+      - name: Testes do frontend (node)
+        run: node --test tests/*.mjs
+      - name: Scripts shell
+        run: shellcheck install.sh
+      - name: Compose de exemplo válido
+        run: OFFICE_UID=1000 OFFICE_GID=1000 OFFICE_SITE=:80 OFFICE_AUTH_USER=x OFFICE_AUTH_HASH=x OFFICE_PROXY_SEGREDO=x docker compose -f docker-compose.example.yml config -q
+      - name: Genérico (AC-a6, AC-b1, AC-b4, AC-e4)
+        run: |
+          falha=0
+          nada() {  # nada <args do git grep>: falha se houver resultados (rc 0) ou erro (rc > 1)
+            local rc=0
+            git grep "$@" || rc=$?
+            if [ "$rc" != 1 ]; then echo "::error::git grep $* deu resultados (ou erro)"; falha=1; fi
+          }
+          nada -nE 'PROBES_DI[R]|CRON_DI[R]|SUPPORT_STAT[E]|PORTFOLIO_FIL[E]|jobs\.jso[n]|incidentes\.jso[n]' -- . ':!.github/workflows/ci.yml'
+          nada -nE 'WORKTREES_PREFIX|-home-' -- '*.py' '*.js'
+          nada -niE '/hom[e]/' -- tests/
+          exit "$falha"
+
+  fumo:
+    name: Fumo (install.sh em ${{ matrix.os }})
+    needs: checks
+    strategy:
+      fail-fast: false
+      matrix:
+        # as versões que o README promete (22.04 traz Python 3.10, o mínimo do runner)
+        os: [ubuntu-22.04, ubuntu-24.04, ubuntu-26.04]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Sem claude no PATH o instalador recusa e não cria nada
+        run: |
+          if command -v claude; then echo "::error::o runner já tem um claude no PATH"; exit 1; fi
+          if ./install.sh --sem-perguntas 2> "$RUNNER_TEMP/err"; then echo "::error::install.sh aceitou sem claude"; exit 1; fi
+          cat "$RUNNER_TEMP/err"
+          grep -q "^falta: claude" "$RUNNER_TEMP/err"
+          test ! -e ~/office-lite
+      - name: claude falso no PATH
+        run: echo "$GITHUB_WORKSPACE/tests/bin" >> "$GITHUB_PATH"
+      - name: Instalar duas vezes (idempotente)
+        run: |
+          openssl rand -hex 16 > "$RUNNER_TEMP/pw"
+          echo "::add-mask::$(cat "$RUNNER_TEMP/pw")"
+          # chave de API falsa (D10): o instalador grava ~/office-lite/claude.env 0600 e não o monta no contentor
+          printf 'sk-ant-fumo-%s\n' "$(openssl rand -hex 16)" > "$RUNNER_TEMP/cred"
+          echo "::add-mask::$(cat "$RUNNER_TEMP/cred")"
+          export OFFICE_UTILIZADOR=ci OFFICE_PASSWORD_FILE="$RUNNER_TEMP/pw" OFFICE_CLAUDE_CRED=api OFFICE_CLAUDE_CRED_FILE="$RUNNER_TEMP/cred"
+          ./install.sh --sem-perguntas
+          sha256sum ~/office-lite/office.yaml ~/office-lite/.env ~/office-lite/claude.env > "$RUNNER_TEMP/sha"
+          ./install.sh --sem-perguntas
+          sha256sum -c "$RUNNER_TEMP/sha"
+          test "$(stat -c %a ~/office-lite/claude.env)" = 600
+          if grep -rqF "$(cat "$RUNNER_TEMP/cred")" ~/office-lite/.env ~/office-lite/office.yaml ~/office-lite/docker-compose.yml; then
+            echo "::error::a credencial do Claude saiu do claude.env"; exit 1
+          fi
+          # permissões abertas: o instalador recusa (exit ≠ 0) e não as corrige em silêncio
+          chmod 644 ~/office-lite/claude.env
+          if ./install.sh --sem-perguntas; then echo "::error::install.sh aceitou claude.env 0644"; exit 1; fi
+          chmod 600 ~/office-lite/claude.env
+      - name: Caddy em http://localhost com basic auth
+        run: |
+          U="ci:$(cat "$RUNNER_TEMP/pw")"
+          for _ in $(seq 60); do curl -fsS -o /dev/null -u "$U" http://localhost/healthz && break; sleep 2; done
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://localhost/)" = 401
+          test "$(curl -s -o /dev/null -w '%{http_code}' -u "ci:errada-$RANDOM" http://localhost/api/state)" = 401
+          curl -fsS -u "$U" http://localhost/healthz
+          curl -fsS -u "$U" http://localhost/ | grep -q "Squad Office"
+          curl -fsS -u "$U" http://localhost/api/config | python3 -c '
+          import json, sys
+          c = json.load(sys.stdin)
+          def textos(v):
+              if isinstance(v, dict): v = list(v.values())
+              if isinstance(v, list): return [t for x in v for t in textos(x)]
+              return [v] if isinstance(v, str) else []
+          assert not [t for t in textos(c) if t.startswith(("/", "~"))], c
+          assert c["aviso"] is None and c["utilizador"]["nome"] == "ci", c'
+      - name: Office sem o segredo do proxy dá 403 (só o /healthz passa)
+        run: |
+          grep -qE "^OFFICE_PROXY_SEGREDO='[0-9a-f]{64}'$" ~/office-lite/.env
+          docker compose -f ~/office-lite/docker-compose.yml exec -T office python -c '
+          import urllib.error, urllib.request
+          def estado(path, h={}):
+              try:
+                  return urllib.request.urlopen(urllib.request.Request("http://127.0.0.1:8080" + path, headers=h), timeout=5).status
+              except urllib.error.HTTPError as e:
+                  return e.code
+          assert estado("/healthz") == 200
+          for p in ("/api/state", "/api/config", "/"):
+              assert estado(p) == 403, p
+              assert estado(p, {"X-Office-Segredo": "errado"}) == 403, p'
+      - name: Quadro cria um cartão e lança-o (POST via Caddy)
+        run: |
+          python3 - <<'EOF'
+          import base64, json, os, urllib.request
+          tmp = os.environ["RUNNER_TEMP"]
+          pw = open(f"{tmp}/pw").read().strip()
+          B = "http://localhost"
+          auth = "Basic " + base64.b64encode(f"ci:{pw}".encode()).decode()
+
+          def pedir(path, corpo=None):
+              h, data = {"Authorization": auth}, None
+              if corpo is not None:
+                  h.update({"Content-Type": "application/json", "Origin": B})
+                  data = json.dumps(corpo).encode()
+              with urllib.request.urlopen(urllib.request.Request(B + path, data=data, headers=h), timeout=15) as r:
+                  return r.status, json.load(r)
+
+          token = pedir("/api/state")[1]["token"]
+          _, q = pedir("/api/quadro")
+          assert q["escrita"] is True and q["lancar"] is True and q["dev_projectos"] == ["exemplo"], q
+          c, q = pedir("/api/quadro", {"op": "criar", "token": token, "versao": q["versao"], "titulo": "Fumo CI",
+                                       "descricao": "", "projecto": "exemplo", "coluna": "a-fazer", "etiquetas": []})
+          assert c == 200, (c, q)
+          cartao = next(x["id"] for x in q["cartoes"] if x["titulo"] == "Fumo CI")
+          c, r = pedir("/api/quadro/lancar", {"token": token, "versao": q["versao"], "cartao_id": cartao, "posicao": 0,
+                                              "squad": "dev", "projecto": "exemplo", "kind": "feat", "mode": "task",
+                                              "slug": "fumo-ci", "titulo": "Fumo CI", "brief": "Teste de fumo da CI."})
+          assert c == 202, (c, r)
+          open(f"{tmp}/pedido", "w").write(r["id"])
+          print("pedido", r["id"])
+          EOF
+      - name: Runner lança a tarefa e a API mostra-a
+        run: |
+          fila=~/office-lite/dados/quadro-lancar
+          pedido=$(cat "$RUNNER_TEMP/pedido")
+          # o timer systemd pode ter apanhado o pedido primeiro (lock partilhado): basta o .feito.json aparecer
+          # o claude falso falha se não receber ANTHROPIC_API_KEY/CLAUDE_CODE_OAUTH_TOKEN no ambiente
+          export FAKE_CLAUDE_EXIGE_CRED=1
+          for _ in $(seq 30); do
+            python3 runner/office_runner.py --uma-vez --config ~/office-lite/office.yaml
+            [ -f "$fila/$pedido.feito.json" ] && break
+            sleep 2
+          done
+          tid=$(python3 -c 'import json,sys; d = json.load(open(sys.argv[1])); assert d.get("task_id"), d; print(d["task_id"])' "$fila/$pedido.feito.json")
+          echo "tarefa $tid"
+          U="ci:$(cat "$RUNNER_TEMP/pw")"
+          ok=0
+          for _ in $(seq 30); do
+            curl -fsS -u "$U" http://localhost/api/state | python3 -c 'import json,sys; sys.exit(0 if any(t["id"] == sys.argv[1] for t in json.load(sys.stdin)["tasks"]) else 1)' "$tid" && ok=1 && break
+            sleep 2
+          done
+          test "$ok" = 1
+          # o contentor nunca vê as credenciais do Claude
+          if docker compose -f ~/office-lite/docker-compose.yml exec -T office sh -c 'grep -rlF sk-ant- /config /data 2>/dev/null'; then
+            echo "::error::o contentor vê a credencial do Claude"; exit 1
+          fi
+      - name: Ficheiros escritos pelo contentor são do utilizador
+        run: |
+          eu=$(id -u)
+          for f in ~/office-lite/dados/quadro/cartoes.json ~/office-lite/dados/quadro-lancar/"$(cat "$RUNNER_TEMP/pedido")".json; do
+            echo "$(stat -c %u "$f") $f"
+            test "$(stat -c %u "$f")" = "$eu"
+          done
+      - name: Units systemd do runner válidas
+        run: |
+          u="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
+          ls -l "$u"
+          [ -d "${XDG_RUNTIME_DIR:-/nonexistent}" ] || XDG_RUNTIME_DIR=$(mktemp -d) && export XDG_RUNTIME_DIR
+          systemd-analyze --user verify "$u/office-runner.service" "$u/office-runner.timer"
+      - name: Modo Traefik (compose gerado válido)
+        run: |
+          docker network create t
+          python3 runner/gerar_compose.py --config ~/office-lite/office.yaml --proxy traefik --rede t --dominio x.example.org \
+            > "$RUNNER_TEMP/traefik.yml"
+          docker compose -f "$RUNNER_TEMP/traefik.yml" --env-file ~/office-lite/.env config -q
+      - name: Logs em falha
+        if: failure()
+        run: |
+          docker compose -f ~/office-lite/docker-compose.yml logs --no-color --tail 200 || true
+          ls -la ~/office-lite/dados/quadro-lancar ~/office-lite/dados/tasks || true
+          tail -n 50 ~/office-lite/dados/runner/logs/*.log || true
+      - name: Parar e limpar
+        if: always()
+        run: |
+          if [ -f ~/office-lite/docker-compose.yml ]; then docker compose -f ~/office-lite/docker-compose.yml down -v; fi
+          docker network rm t || true
+
+  gitleaks:
+    name: Secret scan (gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: gitleaks
+        run: |
+          range="${{ github.event.pull_request.base.sha || github.event.before }}..${{ github.event.pull_request.head.sha || github.sha }}"
+          case "$range" in 0000000*|..*) range="${{ github.sha }}";; esac
+          docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:v8.24.3 \
+            git /repo --redact --no-banner --verbose --log-opts="$range"

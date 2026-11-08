@@ -1,0 +1,70 @@
+{
+  "v": 1,
+  "marca": "Squad Office",
+  "utilizador": {
+    "nome": "Utilizador"
+  },
+  "fuso": "Europe/Lisbon",
+  "squads": [
+    {
+      "id": "dev",
+      "nome": "Dev",
+      "lead": "tech-lead",
+      "personagem": "Maestro",
+      "formato": "worktree",
+      "tipos": [
+        "feat",
+        "fix"
+      ],
+      "modos": [
+        "goal",
+        "task"
+      ]
+    }
+  ],
+  "projectos": [
+    {
+      "id": "exemplo",
+      "nome": "Exemplo",
+      "glifo": "◆",
+      "cor": "c0"
+    }
+  ],
+  "colunas": [
+    {
+      "chave": "ideias",
+      "rotulo": "Ideias"
+    },
+    {
+      "chave": "a-fazer",
+      "rotulo": "A fazer"
+    },
+    {
+      "chave": "em-curso",
+      "rotulo": "Em curso"
+    },
+    {
+      "chave": "a-espera",
+      "rotulo": "À espera de Utilizador"
+    },
+    {
+      "chave": "feito",
+      "rotulo": "Feito"
+    }
+  ],
+  "biblioteca": [
+    {
+      "id": "material",
+      "rotulo": "Material"
+    }
+  ],
+  "lancar": {
+    "squads": [
+      "dev"
+    ],
+    "projectos": [
+      "exemplo"
+    ]
+  },
+  "aviso": null
+}

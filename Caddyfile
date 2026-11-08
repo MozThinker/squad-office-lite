@@ -1,0 +1,11 @@
+# Squad Office Lite: proxy à frente do Office (único serviço com portas publicadas).
+# OFFICE_SITE = domínio (TLS automático, portas 80/443) ou :80 (só HTTP, sem TLS). Valores no .env (install.sh).
+# X-Office-Segredo: só depois do basic auth, substitui o que vier do cliente; o Office exige-o (ADR-006).
+{$OFFICE_SITE} {
+	basic_auth {
+		{$OFFICE_AUTH_USER} {$OFFICE_AUTH_HASH}
+	}
+	reverse_proxy office:8080 {
+		header_up X-Office-Segredo {$OFFICE_PROXY_SEGREDO}
+	}
+}

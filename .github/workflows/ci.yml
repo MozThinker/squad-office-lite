@@ -295,3 +295,314 @@ jobs:
           case "$range" in 0000000*|..*) range="${{ github.sha }}";; esac
           docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:v8.24.3@sha256:e1b35e12a8c6fa8901f060459cfb6b2fc4c484d3afbe3b029733a3bbfab07055 \
             git /repo --redact --no-banner --verbose --log-opts="$range"
+
+  fumo-docker:
+    name: Fumo (modo Docker, imagens construídas aqui)
+    # Imagens construídas localmente com as refs por omissão e usadas com --pull never: nada é publicado nem
+    # descarregado do GHCR. O claude real só corre o --version; as tarefas usam o claude falso (tests/bin/claude).
+    needs: checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: Compose de exemplo válido sem .env (só omissões)
+        run: |
+          test ! -e .env
+          docker compose version
+          docker compose -f compose.example.yaml config -q
+          docker compose -f compose.example.yaml config --format json > "$RUNNER_TEMP/exemplo.json"
+          python3 - "$RUNNER_TEMP/exemplo.json" >> "$GITHUB_ENV" <<'EOF'
+          import json, sys
+          sys.path.insert(0, ".")
+          import officecfg
+          s = json.load(open(sys.argv[1]))["services"]
+          o, r = s["office"]["image"], s["runner"]["image"]
+          assert o.endswith(f"/squad-office-lite:{officecfg.VERSAO}"), o
+          assert r.endswith(f"/squad-office-lite-runner:{officecfg.VERSAO}"), r
+          print(f"IMG_OFFICE={o}\nIMG_RUNNER={r}")
+          EOF
+      - name: Construir as duas imagens com as refs por omissão
+        run: |
+          docker build -t "$IMG_OFFICE" .
+          docker build -f Dockerfile.runner -t "$IMG_RUNNER" .
+      - name: Pasta do leitor (compose.yaml, claude falso por override, projecto exemplo)
+        run: |
+          pc="$RUNNER_TEMP/pc"
+          mkdir -p "$pc/projectos"
+          cp compose.example.yaml "$pc/compose.yaml"
+          cat > "$pc/fumo.yaml" <<EOF
+          services:
+            runner:
+              volumes:
+                - type: bind
+                  source: $GITHUB_WORKSPACE/tests/bin/claude
+                  target: /usr/local/bin/claude
+                  read_only: true
+          EOF
+          git init -q -b main "$pc/projectos/exemplo"
+          printf '# Exemplo\n' > "$pc/projectos/exemplo/README.md"
+          git -C "$pc/projectos/exemplo" add README.md
+          git -C "$pc/projectos/exemplo" -c user.name=CI -c user.email=ci@example.org commit -qm "primeiro commit"
+          # o leitor em Linux sem Docker Desktop: os ficheiros dos projectos ficam dele
+          { echo "OFFICE_UID=$(id -u)"; echo "OFFICE_GID=$(id -g)"; echo "COMPOSE_FILE=compose.yaml:fumo.yaml"; } >> "$GITHUB_ENV"
+      - name: configurar --sem-perguntas (segredos só em ficheiros montados)
+        run: |
+          cd "$RUNNER_TEMP/pc"
+          e="$RUNNER_TEMP/entrada"
+          mkdir -m 700 "$e"
+          openssl rand -hex 16 > "$e/pw"
+          echo "::add-mask::$(cat "$e/pw")"
+          printf 'sk-ant-fumo-%s\n' "$(openssl rand -hex 16)" > "$e/cred"
+          echo "::add-mask::$(cat "$e/cred")"
+          chmod 600 "$e/pw" "$e/cred"
+          docker compose run --rm -T -v "$e:/entrada:ro" \
+            -e OFFICE_AUTH_USER=ci -e OFFICE_AUTH_PASS_FILE=/entrada/pw -e OFFICE_PROJECTOS_IDS=exemplo \
+            -e OFFICE_GIT_NOME=CI -e OFFICE_GIT_EMAIL=ci@example.org \
+            -e OFFICE_CLAUDE_CRED=api -e OFFICE_CLAUDE_CRED_FILE=/entrada/cred \
+            configurar --sem-perguntas | tee "$RUNNER_TEMP/configurar.out"
+          grep -q "docker compose up -d" "$RUNNER_TEMP/configurar.out"
+          if grep -qF -f "$e/pw" -f "$e/cred" "$RUNNER_TEMP/configurar.out"; then
+            echo "::error::o configurar escreveu um segredo na saída"; exit 1
+          fi
+      - name: claude, gh e git reais na imagem do runner (versão fixada)
+        run: |
+          cd "$RUNNER_TEMP/pc"
+          quer=$(sed -nE 's/^ARG CLAUDE_VERSAO="?([0-9][0-9.]*)"?$/\1/p' "$GITHUB_WORKSPACE/Dockerfile.runner")
+          test -n "$quer"
+          # só o compose.yaml: sem o override, é o binário da imagem
+          docker compose -f compose.yaml run --rm -T --no-deps runner sh -c 'claude --version && gh --version && git --version' \
+            | tee "$RUNNER_TEMP/versoes"
+          grep -qF "$quer" "$RUNNER_TEMP/versoes"
+      - name: up -d e Caddy em http://localhost:8080 com basic auth
+        run: |
+          cd "$RUNNER_TEMP/pc"
+          # o Caddy vem do Docker Hub (por digest); office e runner só existem localmente
+          docker compose pull caddy
+          docker compose up -d --pull never
+          U="ci:$(cat "$RUNNER_TEMP/entrada/pw")"
+          for _ in $(seq 60); do curl -fsS -o /dev/null -u "$U" http://localhost:8080/healthz && break; sleep 2; done
+          docker compose ps
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/)" = 401
+          test "$(curl -s -o /dev/null -w '%{http_code}' -u "ci:errada-$RANDOM" http://localhost:8080/api/state)" = 401
+          test "$(curl -s -o /dev/null -w '%{http_code}' -u "$U" http://localhost:8080/)" = 200
+          curl -fsS -u "$U" http://localhost:8080/ | grep -q "Squad Office"
+          curl -fsS -u "$U" http://localhost:8080/api/config | python3 -c '
+          import json, sys
+          c = json.load(sys.stdin)
+          def textos(v):
+              if isinstance(v, dict): v = list(v.values())
+              if isinstance(v, list): return [t for x in v for t in textos(x)]
+              return [v] if isinstance(v, str) else []
+          assert not [t for t in textos(c) if t.startswith(("/", "~"))], c
+          assert c["modo"] == "docker" and [p["id"] for p in c["projectos"]] == ["exemplo"], c'
+      - name: Cabeçalhos em localhost:8080 (também no 401; sem HSTS)
+        run: |
+          curl -sI http://localhost:8080/ | tr -d '\r' > "$RUNNER_TEMP/cab401"
+          curl -s -o /dev/null -D - -u "ci:$(cat "$RUNNER_TEMP/entrada/pw")" http://localhost:8080/ | tr -d '\r' > "$RUNNER_TEMP/cab200"
+          for f in "$RUNNER_TEMP/cab401" "$RUNNER_TEMP/cab200"; do
+            cat "$f"
+            grep -qi "^content-security-policy: frame-ancestors 'none'$" "$f"
+            grep -qi '^x-frame-options: DENY$' "$f"
+            grep -qi '^referrer-policy: same-origin$' "$f"
+            if grep -qi '^strict-transport-security:' "$f"; then echo "::error::HSTS sem HTTPS"; exit 1; fi
+          done
+          head -n 1 "$RUNNER_TEMP/cab401" | grep -q ' 401'
+          head -n 1 "$RUNNER_TEMP/cab200" | grep -q ' 200'
+      - name: Cartão lançado por POST via Caddy; o ciclo do runner leva a tarefa até ao fim
+        run: |
+          cd "$RUNNER_TEMP/pc"
+          cat > "$RUNNER_TEMP/fumo.py" <<'EOF'
+          """fumo.py lancar SLUG TITULO → task_id (espera o .feito.json) · fumo.py esperar TID a-correr|final → estado"""
+          import base64, json, os, subprocess, sys, time, urllib.request
+          pw = open(os.environ["RUNNER_TEMP"] + "/entrada/pw").read().strip()
+          B = "http://localhost:8080"
+          auth = "Basic " + base64.b64encode(f"ci:{pw}".encode()).decode()
+
+          def pedir(path, corpo=None):
+              h, data = {"Authorization": auth}, None
+              if corpo is not None:
+                  h.update({"Content-Type": "application/json", "Origin": B})
+                  data = json.dumps(corpo).encode()
+              with urllib.request.urlopen(urllib.request.Request(B + path, data=data, headers=h), timeout=15) as r:
+                  return r.status, json.load(r)
+
+          def lancar(slug, titulo):
+              token = pedir("/api/state")[1]["token"]
+              _, q = pedir("/api/quadro")
+              assert q["escrita"] is True and q["lancar"] is True and q["dev_projectos"] == ["exemplo"], q
+              c, q = pedir("/api/quadro", {"op": "criar", "token": token, "versao": q["versao"], "titulo": titulo,
+                                           "descricao": "", "projecto": "exemplo", "coluna": "a-fazer", "etiquetas": []})
+              assert c == 200, (c, q)
+              cartao = next(x["id"] for x in q["cartoes"] if x["titulo"] == titulo)
+              c, r = pedir("/api/quadro/lancar", {"token": token, "versao": q["versao"], "cartao_id": cartao, "posicao": 0,
+                                                  "squad": "dev", "projecto": "exemplo", "kind": "feat", "mode": "task",
+                                                  "slug": slug, "titulo": titulo, "brief": "Teste de fumo da CI."})
+              assert c == 202, (c, r)
+              feito = f"/dados/quadro-lancar/{r['id']}.feito.json"
+              for _ in range(48):   # o ciclo passa de 60 em 60 s
+                  p = subprocess.run(["docker", "compose", "exec", "-T", "runner", "cat", feito], capture_output=True,
+                                     text=True, check=False)
+                  if p.returncode == 0:
+                      d = json.loads(p.stdout)
+                      assert d.get("task_id"), d
+                      return d["task_id"]
+                  time.sleep(5)
+              sys.exit(f"o runner não pegou no pedido {r['id']}")
+
+          def esperar(tid, quer):
+              t = None
+              for _ in range(60):
+                  t = next((x for x in pedir("/api/state")[1]["tasks"] if x["id"] == tid), None)
+                  if t and (t["status"] == "a correr" if quer == "a-correr" else
+                            not t["running"] and t["status"] not in ("a correr", "parada?", "morreu")):
+                      return t["status"]
+                  time.sleep(3)
+              sys.exit(f"a tarefa {tid} não chegou a {quer}: {t}")
+
+          print(lancar(*sys.argv[2:4]) if sys.argv[1] == "lancar" else esperar(*sys.argv[2:4]))
+          EOF
+          tid=$(python3 "$RUNNER_TEMP/fumo.py" lancar fumo-ci "Fumo CI")
+          echo "tarefa $tid"
+          estado=$(python3 "$RUNNER_TEMP/fumo.py" esperar "$tid" final)
+          echo "estado final: $estado"
+          test "$estado" != erro
+          # o office nunca vê a credencial do Claude
+          if docker compose exec -T office sh -c 'grep -rlF sk-ant- /config /data /proxy 2>/dev/null'; then
+            echo "::error::o contentor office vê a credencial do Claude"; exit 1
+          fi
+      - name: restart e recreate não desfazem o dono dos volumes (nocopy; OFFICE_UID do runner do GitHub, não 10001)
+        run: |
+          cd "$RUNNER_TEMP/pc"
+          test "$OFFICE_UID" != 10001
+          docker compose restart
+          docker compose up -d --force-recreate --pull never
+          U="ci:$(cat "$RUNNER_TEMP/entrada/pw")"
+          for _ in $(seq 60); do curl -fsS -o /dev/null -u "$U" http://localhost:8080/healthz && break; sleep 2; done
+          docker compose exec -T runner stat -c '%u:%g %a %n' /dados/runner /dados/quadro /dados/push /home/office
+          for p in /dados/runner /dados/quadro; do
+            test "$(docker compose exec -T runner stat -c %u "$p")" = "$OFFICE_UID"
+          done
+          test "$(docker compose exec -T office stat -c %u /data/quadro)" = "$OFFICE_UID"
+          tid=$(python3 "$RUNNER_TEMP/fumo.py" lancar fumo-recreate "Fumo recreate")
+          echo "tarefa $tid"
+          estado=$(python3 "$RUNNER_TEMP/fumo.py" esperar "$tid" final)
+          echo "estado final: $estado"
+          test "$estado" != erro
+      - name: exec runner doctor (linhas do modo Docker; sem gh o código de saída é 1)
+        run: |
+          cd "$RUNNER_TEMP/pc"
+          f="$RUNNER_TEMP/doctor"
+          docker compose exec -T runner doctor > "$f" || true
+          cat "$f"
+          grep -q '^✓ office\.yaml válido' "$f"
+          grep -qi '^✓ credencial' "$f"
+          grep -q '^✓ .*exemplo' "$f"
+          grep -q '^ℹ ' "$f"
+          if grep -nE 'systemctl|loginctl|linger|install\.sh|docker info' "$f"; then
+            echo "::error::o doctor do modo Docker fala do modo VPS"; exit 1
+          fi
+          if grep '^✗' "$f" | grep -vF 'docker compose run --rm configurar --gh'; then
+            echo "::error::✗ inesperado (só a sessão do gh pode faltar)"; exit 1
+          fi
+          if grep -qF -f "$RUNNER_TEMP/entrada/cred" "$f"; then echo "::error::o doctor mostrou a credencial"; exit 1; fi
+      - name: exec runner parar numa 2.ª tarefa (claude falso que não acaba)
+        run: |
+          cd "$RUNNER_TEMP/pc"
+          printf '#!/bin/sh\nexec sleep 600\n' > "$RUNNER_TEMP/claude-lento"
+          chmod 755 "$RUNNER_TEMP/claude-lento"
+          cat > fumo-lento.yaml <<EOF
+          services:
+            runner:
+              volumes:
+                - type: bind
+                  source: $RUNNER_TEMP/claude-lento
+                  target: /usr/local/bin/claude
+                  read_only: true
+          EOF
+          export COMPOSE_FILE=compose.yaml:fumo.yaml:fumo-lento.yaml
+          echo "COMPOSE_FILE=$COMPOSE_FILE" >> "$GITHUB_ENV"
+          docker compose up -d --pull never runner
+          tid=$(python3 "$RUNNER_TEMP/fumo.py" lancar fumo-parar "Fumo parar")
+          echo "tarefa $tid"
+          python3 "$RUNNER_TEMP/fumo.py" esperar "$tid" a-correr
+          docker compose exec -T runner parar "$tid" | tee "$RUNNER_TEMP/parar.out"
+          grep -q "parada" "$RUNNER_TEMP/parar.out"
+          test "$(python3 "$RUNNER_TEMP/fumo.py" esperar "$tid" final)" = erro
+          docker compose exec -T runner python3 -c '
+          import json, sys
+          m = json.load(open(sys.argv[1]))
+          assert m["status"] == "erro" and m["result"] == "parada pelo utilizador", m' "/dados/tasks/$tid/meta.json"
+          # o claude morreu e o ciclo recolheu o correr (sem zombies; recolhe a cada passagem de 60 s)
+          ok=0
+          for _ in $(seq 24); do
+            docker compose exec -T runner python3 -c '
+          import os, sys
+          maus = []
+          for p in filter(str.isdigit, os.listdir("/proc")):
+              try:
+                  st = open(f"/proc/{p}/stat").read()
+                  cmd = open(f"/proc/{p}/cmdline", "rb").read()
+              except OSError:
+                  continue
+              if st.rsplit(")", 1)[1].split()[0] == "Z" or cmd.startswith(b"sleep\0"):
+                  maus.append((p, st[:60]))
+          print(maus)
+          sys.exit(1 if maus else 0)' && ok=1 && break
+            sleep 5
+          done
+          test "$ok" = 1
+      - name: docker inspect (sem socket, sem privilégios; runner sem proxy; office e caddy sem segredos)
+        run: |
+          cd "$RUNNER_TEMP/pc"
+          # shellcheck disable=SC2046
+          docker inspect $(docker compose ps -q office caddy runner) > "$RUNNER_TEMP/inspect.json"
+          python3 - "$RUNNER_TEMP/inspect.json" <<'EOF'
+          import json, sys
+          vistos = set()
+          for c in json.load(open(sys.argv[1])):
+              svc = c["Config"]["Labels"]["com.docker.compose.service"]
+              vistos.add(svc)
+              hc, m = c["HostConfig"], c["Mounts"]
+              assert not hc.get("Privileged") and hc.get("NetworkMode") != "host", (svc, hc)
+              # no-new-privileges e cap_drop ALL em todos; cap_add só no Caddy (o configurar não fica a correr)
+              caps = {"caddy": {"NET_BIND_SERVICE", "DAC_OVERRIDE"}}.get(svc, set())
+              assert {x.removeprefix("CAP_") for x in hc.get("CapAdd") or []} == caps, (svc, hc.get("CapAdd"))
+              assert [x.removeprefix("CAP_") for x in hc.get("CapDrop") or []] == ["ALL"], (svc, hc.get("CapDrop"))
+              assert "no-new-privileges:true" in (hc.get("SecurityOpt") or []), (svc, hc.get("SecurityOpt"))
+              assert not [x for x in m if "docker.sock" in x.get("Source", "") + x.get("Destination", "")], (svc, m)
+              nomes = [x["Name"] for x in m if x["Type"] == "volume"]
+              assert all(n.startswith("office-lite-pc_") for n in nomes), (svc, nomes)
+              vol = {n.removeprefix("office-lite-pc_") for n in nomes}
+              dest = {x["Destination"] for x in m}
+              env = [e.split("=", 1)[0] for e in c["Config"]["Env"] or []]
+              portas = {k: v for k, v in (hc.get("PortBindings") or {}).items() if v}
+              assert (svc == "caddy") == bool(portas), (svc, portas)
+              if svc == "runner":
+                  assert "proxy" not in vol and "/proxy" not in dest, (svc, vol)
+                  assert not [e for e in env if e.startswith(("OFFICE_PROXY_SEGREDO", "OFFICE_AUTH_"))], env
+                  assert hc.get("Init") is True and hc.get("ReadonlyRootfs") is True, svc
+              else:
+                  assert not vol & {"segredos", "runner-home", "runner"}, (svc, vol)
+                  assert not dest & {"/segredos", "/home/office", "/projectos"}, (svc, dest)
+              if svc == "office":
+                  assert hc.get("ReadonlyRootfs") is True, svc
+          assert vistos == {"office", "caddy", "runner"}, vistos
+          EOF
+          # nem a palavra-passe nem a credencial no ambiente ou no argv de algum contentor
+          if grep -qF -f "$RUNNER_TEMP/entrada/pw" -f "$RUNNER_TEMP/entrada/cred" "$RUNNER_TEMP/inspect.json"; then
+            echo "::error::segredo no docker inspect"; exit 1
+          fi
+      - name: Logs em falha
+        if: failure()
+        run: |
+          cd "$RUNNER_TEMP/pc" || exit 0
+          docker compose ps -a || true
+          docker compose logs --no-color --tail 200 || true
+          docker compose exec -T runner sh -c 'stat -c "%u:%g %a %n" /dados/* /home/office; ls -la /dados/quadro-lancar /dados/tasks; tail -n 50 /dados/runner/logs/*.log' || true
+      - name: Parar e limpar
+        if: always()
+        run: |
+          if [ -f "$RUNNER_TEMP/pc/compose.yaml" ]; then cd "$RUNNER_TEMP/pc" && docker compose down -v; fi

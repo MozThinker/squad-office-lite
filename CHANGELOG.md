@@ -1,5 +1,30 @@
 # Changelog
 
+## Por publicar
+
+Só documentação e modelos para os testers da comunidade; o código do Office e do runner não muda.
+
+### Added
+
+- **`CONTRIBUTING.md`:** reportar um bug, propor ideias (Discussions), preparar o ambiente e correr os testes, estilo
+  dos commits e o que se aceita num PR (o modo VPS é o caminho principal). A preparação de uma versão (mantenedores)
+  passa do README para aqui.
+- **`CODE_OF_CONDUCT.md`:** Contributor Covenant 2.1, tradução oficial «Português» (consultada a 9/11/2026); as
+  queixas fazem-se em privado pelo reporte do GitHub (*Report content*, aos mantenedores).
+- **Modelos de issue** (`.github/ISSUE_TEMPLATE/`): `bug.yml` (modo, versão, sistema e Docker, saída do `doctor`, com
+  aviso para não colar segredos), `teste-instalacao.yml` (relatório de um tester) e `config.yml` (sem issues em
+  branco; ideias e perguntas nas Discussions, falhas de segurança pelo `SECURITY.md`).
+- **README, «Comunidade»:** onde pedir ajuda e reportar, código de conduta e «Testaste? Conta-nos». A secção
+  «Contribuir» passa a apontar para o `CONTRIBUTING.md`.
+- **`CONTRIBUTING.md`, «Como entra o teu PR»** e **`.github/pull_request_template.md`:** o repositório público é
+  gerado a cada versão, por isso um PR aceite é aplicado pelos mantenedores (com `Co-authored-by` e, com acordo,
+  menção aqui) e fechado com ligação à versão que o inclui.
+- **README, Windows Home:** a página do Docker Desktop para Windows (consultada a 9/11/2026) só lista Pro, Enterprise
+  e Education nos requisitos, mas diz que o Home corre contentores Linux, os únicos que o Lite usa; os modelos de
+  issue pedem a edição do Windows.
+- **Testes:** a árvore pública (`scripts/preparar-publico.sh`) leva os ficheiros novos e eles passam no filtro de
+  nomes internos e caminhos pessoais.
+
 ## Lite 0.1.4 (2026-11-09)
 
 Modo Docker para Windows, macOS e Linux (Docker Desktop). O modo VPS, os contratos v1 e o `office.yaml`

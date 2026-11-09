@@ -1,0 +1,75 @@
+name: Relatório de teste da instalação
+description: Testaste o Lite com o README? Conta-nos como correu (mesmo que tenha corrido bem).
+title: "[Teste] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Obrigado por testares. Segue só o README público e conta-nos onde te perdeste: é isso que queremos corrigir.
+
+        > [!WARNING]
+        > **Não coles tokens, chaves de API, palavras-passe nem o conteúdo do `.env`.** Esta issue é pública.
+        > Se encontraste uma falha de segurança, não a descrevas aqui: ver o
+        > [`SECURITY.md`](https://github.com/MozThinker/squad-office-lite/blob/main/SECURITY.md).
+  - type: dropdown
+    id: modo
+    attributes:
+      label: Modo
+      options:
+        - Docker no PC (Windows)
+        - Docker no PC (macOS)
+        - Docker no PC (Linux)
+        - VPS (Ubuntu)
+    validations:
+      required: true
+  - type: input
+    id: sistema
+    attributes:
+      label: Sistema
+      description: "O sistema, a edição e a versão (no Windows: Home, Pro…), o processador (Intel/AMD ou Apple Silicon/ARM), a memória e a saída de `docker compose version`."
+      placeholder: "Windows 11 Home 24H2, Intel i5, 16 GB, Docker Compose version v2.40.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: tempo
+    attributes:
+      label: Tempo até aos «Primeiros passos» com os 4 ✓
+      description: Desde que começaste o passo 1 do README até veres os quatro ✓ (runner, claude, credencial do Claude, gh).
+      options:
+        - Menos de 15 minutos
+        - 15 a 30 minutos
+        - 30 a 60 minutos
+        - Mais de 1 hora
+        - Não cheguei aos 4 ✓
+    validations:
+      required: true
+  - type: dropdown
+    id: tarefa
+    attributes:
+      label: Chegaste à 1.ª tarefa?
+      options:
+        - Sim, e terminou (no projecto exemplo, «Terminou sem PR»)
+        - Sim, e abriu um PR num projecto meu
+        - Lancei, mas acabou em erro
+        - Não cheguei a lançar
+    validations:
+      required: true
+  - type: textarea
+    id: readme
+    attributes:
+      label: O que não percebeste no README
+      description: A secção (por exemplo «No teu PC…», passo 4) e o que te fez parar, voltar atrás ou procurar fora.
+    validations:
+      required: true
+  - type: input
+    id: custo
+    attributes:
+      label: Custo aproximado do Claude
+      description: Com chave de API, o que a consola da Anthropic mostra para o teste; com a subscrição (Pro/Max), diz qual e se chegaste ao limite.
+      placeholder: "≈ 0,40 USD com chave de API"
+  - type: textarea
+    id: notas
+    attributes:
+      label: Mais alguma coisa (opcional)
+      description: Erros que viste, a saída do `docker compose exec runner doctor` se algo ficou ✗ (sem segredos), ideias.
+      render: text

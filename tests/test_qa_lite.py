@@ -230,7 +230,8 @@ class InstaladorIdentidadeGit(unittest.TestCase):
                       'ou corre: git config --global user.email \\"…\\")"', INSTALL)
         self.assertIn('erro "OFFICE_GIT_EMAIL inválido (um @, sem espaços, até 254 caracteres)"', INSTALL)
         self.assertIn("for t in 1 2 3; do", INSTALL)
-        self.assertNotIn("OFFICE_GIT_", CI)   # a CI de fumo não as define: só aviso, a instalação continua
+        fumo_vps = CI.split("\n\n  fumo-docker:\n")[0]   # o fumo do modo Docker (configurar) define-as; o do install.sh não
+        self.assertNotIn("OFFICE_GIT_", fumo_vps)   # a CI de fumo não as define: só aviso, a instalação continua
 
     def test_pedir_git_desiste_a_terceira(self):
         i = INSTALL.index("pedir_git() {")

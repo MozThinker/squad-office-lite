@@ -1,7 +1,10 @@
 """Distribuição (0.1.3, bloco A): imagens fixadas por digest, dependências pip em requirements.txt e as propostas
 de CI em docs/propostas-ci/ (só texto; nada aqui corre Docker nem o GitHub Actions)."""
 import re
+import shutil
+import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -72,6 +75,32 @@ class CIActiva(unittest.TestCase):   # CA-A3.1, CA-A3.2, CA-A2.4: as propostas d
         self.assertEqual(blocos, [("github-actions", "/", "weekly"), ("docker", "/", "weekly"),
                                   ("pip", "/", "weekly")])
 
+    def test_ci_com_fumo_docker(self):   # AC-p2: o job fumo-docker, activado a 9/11/2026, é o último do ci.yml
+        p = CI.read_text(encoding="utf-8")
+        self.assertIn("\n\n  fumo-docker:\n", p)
+        job = p[p.index("\n\n  fumo-docker:\n") + 1:]
+        self.assertEqual(re.findall(r"(?m)^  ([\w-]+):$", job), ["fumo-docker"])
+        self.assertIn("    needs: checks\n    runs-on: ubuntu-latest\n", job)
+        usos = re.findall(r"^\s*- uses: .*$", job, re.M)
+        self.assertTrue(usos)
+        for u in usos:
+            self.assertRegex(u.strip(), rf"^- {USES_FIXO}$")
+        for c in ('docker build -t "$IMG_OFFICE" .', 'docker build -f Dockerfile.runner -t "$IMG_RUNNER" .',
+                  "target: /usr/local/bin/claude", "tests/bin/claude", 'echo "OFFICE_UID=$(id -u)"',
+                  "configurar --sem-perguntas", "OFFICE_AUTH_PASS_FILE=/entrada/pw", "OFFICE_CLAUDE_CRED_FILE=",
+                  'git init -q -b main "$pc/projectos/exemplo"', "claude --version",
+                  "docker compose up -d --pull never",
+                  "http://localhost:8080/", "/api/quadro/lancar", "docker compose exec -T runner doctor",
+                  'docker compose exec -T runner parar "$tid"', "docker inspect", "docker.sock",
+                  "OFFICE_PROXY_SEGREDO", "docker compose -f compose.example.yaml config -q", "if: failure()",
+                  "docker compose down -v"):
+            self.assertIn(c, job)
+        self.assertLess(job.index("test ! -e .env"), job.index("compose.example.yaml config -q"))
+        # nada é publicado nem descarregado do GHCR; sem segredos (o mesmo que o test_ci_matriz exige ao activo)
+        for proibido in ("secrets.", "docker push", "docker login", "docker/login-action", "push: true",
+                         "packages: write", "docker pull", "    build:"):
+            self.assertNotIn(proibido, job)
+
 
 @unittest.skipUnless(PROPOSTAS.is_dir(), "sem docs/propostas-ci (árvore pública)")
 class PropostasCI(unittest.TestCase):
@@ -102,34 +131,6 @@ class PropostasCI(unittest.TestCase):
         # entradas do utilizador nunca interpoladas num run: (só via env)
         for bloco in re.findall(r"run: \|\n((?:          .*\n)+)", r):
             self.assertNotIn("${{", bloco)
-
-    def test_ci_com_fumo_docker(self):   # AC-p2: o ci.yml activo byte a byte + o job fumo-docker no fim
-        activo = CI.read_text(encoding="utf-8")
-        p = self.ler("ci.yml")
-        self.assertTrue(p.startswith(activo), "a proposta não começa pelo ci.yml activo (ou já foi activada)")
-        job = p[len(activo):]
-        self.assertTrue(job.startswith("\n  fumo-docker:\n"), job[:60])
-        self.assertEqual(re.findall(r"(?m)^  ([\w-]+):$", job), ["fumo-docker"])
-        self.assertIn("    needs: checks\n    runs-on: ubuntu-latest\n", job)
-        usos = re.findall(r"^\s*- uses: .*$", job, re.M)
-        self.assertTrue(usos)
-        for u in usos:
-            self.assertRegex(u.strip(), rf"^- {USES_FIXO}$")
-        for c in ('docker build -t "$IMG_OFFICE" .', 'docker build -f Dockerfile.runner -t "$IMG_RUNNER" .',
-                  "target: /usr/local/bin/claude", "tests/bin/claude", 'echo "OFFICE_UID=$(id -u)"',
-                  "configurar --sem-perguntas", "OFFICE_AUTH_PASS_FILE=/entrada/pw", "OFFICE_CLAUDE_CRED_FILE=",
-                  'git init -q -b main "$pc/projectos/exemplo"', "claude --version",
-                  "docker compose up -d --pull never",
-                  "http://localhost:8080/", "/api/quadro/lancar", "docker compose exec -T runner doctor",
-                  'docker compose exec -T runner parar "$tid"', "docker inspect", "docker.sock",
-                  "OFFICE_PROXY_SEGREDO", "docker compose -f compose.example.yaml config -q", "if: failure()",
-                  "docker compose down -v"):
-            self.assertIn(c, job)
-        self.assertLess(job.index("test ! -e .env"), job.index("compose.example.yaml config -q"))
-        # nada é publicado nem descarregado do GHCR; sem segredos (o mesmo que o test_ci_matriz exige ao activo)
-        for proibido in ("secrets.", "docker push", "docker login", "docker/login-action", "push: true",
-                         "packages: write", "docker pull", "    build:"):
-            self.assertNotIn(proibido, job)
 
     def test_imagens(self):   # AC-p1 (ADR-008)
         r = self.ler("imagens.yml")
@@ -185,6 +186,129 @@ class PropostasCI(unittest.TestCase):
             self.skipTest("sem a lista de nomes no ci.yml (árvore pública)")
         for f in sorted(PROPOSTAS.iterdir()):
             self.assertIsNone(re.search(m.group(1), f.read_text(encoding="utf-8"), re.I), f.name)
+
+
+COMUNIDADE = ("CONTRIBUTING.md", "CODE_OF_CONDUCT.md", "SECURITY.md", ".github/ISSUE_TEMPLATE/bug.yml",
+              ".github/ISSUE_TEMPLATE/teste-instalacao.yml", ".github/ISSUE_TEMPLATE/config.yml",
+              ".github/pull_request_template.md")
+
+
+def _git(*args):
+    return subprocess.run(["git", "-C", str(ROOT), *args], capture_output=True, text=True)
+
+
+class Comunidade(unittest.TestCase):   # documentação e modelos para os testers (9/11/2026)
+    def ler(self, nome):
+        return (ROOT / nome).read_text(encoding="utf-8")
+
+    def test_modelo_bug(self):
+        b = self.ler(".github/ISSUE_TEMPLATE/bug.yml")
+        for x in ("VPS (Ubuntu)", "Docker no PC (Windows)", "Docker no PC (macOS)", "Docker no PC (Linux)",
+                  "Versão do Lite", "docker compose version", "docker compose exec runner doctor",
+                  "office_runner.py doctor", "O que aconteceu", "O que esperavas", "[!WARNING]",
+                  "**Não coles tokens, chaves de API, palavras-passe nem o conteúdo do `.env`"):
+            self.assertIn(x, b)
+        self.assertLess(b.index("[!WARNING]"), b.index("id: modo"))   # o aviso vem antes de qualquer campo
+        self.assertIn("docker compose exec runner doctor", self.ler("README.md"))   # o comando é o do README
+
+    def test_modelo_teste(self):
+        t = self.ler(".github/ISSUE_TEMPLATE/teste-instalacao.yml")
+        for x in ("label: Sistema", "«Primeiros passos» com os 4 ✓", "Chegaste à 1.ª tarefa?",
+                  "O que não percebeste no README", "Custo aproximado do Claude", "[!WARNING]"):
+            self.assertIn(x, t)
+
+    def test_config_sem_issues_em_branco(self):
+        c = self.ler(".github/ISSUE_TEMPLATE/config.yml")
+        self.assertRegex(c, r"(?m)^blank_issues_enabled: false$")
+        self.assertIn("/discussions\n", c)
+        self.assertIn("/security/advisories/new\n", c)
+        self.assertIn("SECURITY.md", c)
+
+    def test_codigo_de_conduta(self):
+        c = self.ler("CODE_OF_CONDUCT.md")
+        for x in ("Contributor Covenant", "versão 2.1", "contributor-covenant.org/pt/version/2/1/",
+                  "consultada a 9/11/2026", "Report content"):
+            self.assertIn(x, c)
+        self.assertNotRegex(c, r"[\w.+-]+@[\w-]+\.[\w.]+")   # sem e-mails inventados
+        self.assertNotIn("[INSIRA", c)
+        self.assertNotIn("[CONTACTO A INDICAR", c)
+
+    def test_contributing_e_readme(self):
+        c = self.ler("CONTRIBUTING.md")
+        for x in ("SECURITY.md", "CODE_OF_CONDUCT.md", "Discussions", "python -m pytest tests -q",
+                  "node --test tests/*.mjs", "shellcheck install.sh get.sh scripts/*.sh", "modo VPS é o caminho principal",
+                  "`feat:`", "Relatório de teste da instalação"):
+            self.assertIn(x, c)
+        r = self.ler("README.md")
+        com = r[r.index("## Comunidade\n"):r.index("## Contribuir\n")]
+        for x in ("Discussions", "issues/new/choose", "Testaste? Conta-nos", "template=teste-instalacao.yml",
+                  "CODE_OF_CONDUCT.md", "CONTRIBUTING.md", "SECURITY.md"):
+            self.assertIn(x, com)
+        contrib = r[r.index("## Contribuir\n"):r.index("## Licença\n")]
+        self.assertIn("CONTRIBUTING.md", contrib)
+        self.assertNotIn("preparar-publico.sh", contrib)   # sem duplicar o CONTRIBUTING
+
+    def test_contributing_explica_como_entra_um_pr(self):   # a árvore pública é gerada: PRs aplicados pelos mantenedores
+        c = self.ler("CONTRIBUTING.md")
+        self.assertIn("## Como entra o teu PR\n", c)
+        sec = c[c.index("## Como entra o teu PR\n"):]
+        sec = sec[:sec.index("\n## ", 1)]
+        for x in ("**gerado** a cada versão", "Abre o PR (ou a issue) aqui", "revêem-no aqui",
+                  "são os mantenedores que aplicam a alteração", "`Co-authored-by`", "nome e o e-mail que usaste no PR",
+                  "se concordares", "`CHANGELOG.md`", "**fechado** com uma ligação à versão", "«Closed»", "«Merged»",
+                  "alterações grandes", "issue ou uma Discussion"):
+            self.assertIn(x, sec)
+        self.assertNotIn("-dev", sec)   # sem o nome do repositório de desenvolvimento
+        self.assertNotRegex(sec, r"github\.com/")
+
+    def test_modelo_de_pr(self):
+        t = self.ler(".github/pull_request_template.md")
+        for x in ("Como entra o teu PR", "«Closed»", "Uma só alteração", "python -m pytest tests -q",
+                  "node --test tests/*.mjs", "Sem segredos", "- [ ]"):
+            self.assertIn(x, t)
+
+    def test_readme_windows_home(self):
+        r = self.ler("README.md")
+        req = r[r.index("  - **Windows** ([página]"):r.index("  - **macOS** ([página]")]
+        for x in ("**Windows Home:**", "consultada a 9/11/2026", "Home e Education correm\n    contentores Linux",
+                  "só usa contentores Linux"):
+            self.assertIn(x, req)
+        self.assertNotIn("nas edições que a página lista", req)
+        for f in ("bug.yml", "teste-instalacao.yml"):
+            self.assertIn("edição", self.ler(f".github/ISSUE_TEMPLATE/{f}"))
+
+    def test_sem_nomes_internos(self):
+        m = re.search(r"^\s*nada -niE '([^']+)' -- \. ':!CHANGELOG\.md'", CI.read_text(encoding="utf-8"), re.M) \
+            if CI.is_file() else None
+        for nome in COMUNIDADE:
+            texto = self.ler(nome)
+            if m:
+                self.assertIsNone(re.search(m.group(1), texto, re.I), nome)
+            for x in re.findall(r"/(?:hom[e]|Users)/[A-Za-z0-9._-]+", texto):
+                self.assertRegex(x, r"^/hom[e]/(u|utilizador|office)$", nome)
+
+    @unittest.skipUnless(shutil.which("git") and shutil.which("bash") and _git("rev-parse", "HEAD").returncode == 0,
+                         "sem git (árvore pública num tarball)")
+    def test_arvore_publica_leva_os_ficheiros(self):
+        em_head = [n for n in COMUNIDADE if _git("cat-file", "-e", f"HEAD:{n}").returncode == 0]
+        if em_head != list(COMUNIDADE):
+            self.skipTest("ficheiros da comunidade ainda não estão no HEAD")
+        publica = ["--publica"] if not re.search(r"(?m)^\s*nada -niE '[^']+' -- \. ':!CHANGELOG\.md'",
+                                                  CI.read_text(encoding="utf-8")) else []
+        with tempfile.TemporaryDirectory() as d:
+            destino = Path(d) / "pub"
+            r = subprocess.run(["bash", str(ROOT / "scripts" / "preparar-publico.sh"), *publica, str(destino)],
+                               cwd=ROOT, capture_output=True, text=True)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            for nome in COMUNIDADE:
+                self.assertEqual((destino / nome).read_bytes(), _git_show(nome), nome)
+            self.assertTrue((destino / ".github" / "pull_request_template.md").is_file())
+            self.assertEqual(sorted(x.name for x in (destino / ".github" / "ISSUE_TEMPLATE").iterdir()),
+                             ["bug.yml", "config.yml", "teste-instalacao.yml"])
+
+
+def _git_show(nome):
+    return subprocess.run(["git", "-C", str(ROOT), "show", f"HEAD:{nome}"], capture_output=True, check=True).stdout
 
 
 if __name__ == "__main__":

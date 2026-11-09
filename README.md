@@ -293,8 +293,12 @@ só neste PC. A squad só trabalha enquanto o PC está ligado e o Docker Desktop
 - o **Docker Desktop** instalado e aberto, com o Docker Compose **2.23.1 ou mais recente** (vem com o Docker Desktop;
   confirmas no passo 1). Requisitos segundo as páginas oficiais (consultadas a 8/11/2026):
   - **Windows** ([página](https://docs.docker.com/desktop/setup/install/windows-install/)): Windows 11 23H2 (build
-    22631) ou Windows 10 22H2 (build 19045) ou mais recentes, nas edições que a página lista (Pro, Enterprise,
-    Education); WSL 2 (versão 2.1.5 ou mais recente); 8 GB de memória; virtualização ligada na BIOS/UEFI;
+    22631) ou Windows 10 22H2 (build 19045) ou mais recentes; WSL 2 (versão 2.1.5 ou mais recente); 8 GB de memória;
+    virtualização ligada na BIOS/UEFI. **Windows Home:** a lista de requisitos da página (consultada a 9/11/2026) só
+    nomeia as edições Pro, Enterprise e Education, mas a mesma página diz que as edições Home e Education correm
+    contentores Linux (só os contentores Windows pedem Pro ou Enterprise). O Lite só usa contentores Linux, por isso
+    deve funcionar no Home com o WSL 2; ainda não o confirmámos: se o experimentares, conta-nos (ver
+    [Comunidade](#comunidade));
   - **macOS** ([página](https://docs.docker.com/desktop/setup/install/mac-install/)): a versão actual do macOS ou
     uma das duas anteriores, Apple Silicon ou Intel; 4 GB de memória no mínimo;
   - **Linux** ([página](https://docs.docker.com/desktop/setup/install/linux/)): a da tua distribuição;
@@ -1016,35 +1020,24 @@ node --test tests/*.mjs
 Sem Pillow/`cryptography` os testes de miniaturas e de cifra são saltados. O runner é testado com um `claude` falso
 (`tests/bin/claude`). A CI corre os testes, o `shellcheck` do instalador e uma instalação completa de fumo; não faz
 deploy e a dos pull requests nunca publica nada. As imagens do modo Docker só são publicadas (no GHCR) por um workflow
-manual do repositório público, na preparação de uma versão (ver [Contribuir](#contribuir) e o ADR-008).
+manual do repositório público, na preparação de uma versão (ver o [`CONTRIBUTING.md`](CONTRIBUTING.md),
+«Preparar uma versão», e o ADR-008).
+
+## Comunidade
+
+- **Ajuda, perguntas e ideias:** nas [Discussions](../../discussions).
+- **Bugs:** numa [issue](../../issues/new/choose), com o modelo **Bug** (sem tokens, chaves nem `.env`). Falhas de
+  segurança nunca numa issue: ver [`SECURITY.md`](SECURITY.md).
+- **Testaste? Conta-nos:** abre uma issue com o modelo
+  [**Relatório de teste da instalação**](../../issues/new?template=teste-instalacao.yml): o sistema, quanto tempo
+  levaste até aos «Primeiros passos» com os 4 ✓, se chegaste à 1.ª tarefa e o que não percebeste aqui.
+- Ao participar, aceitas o [código de conduta](CODE_OF_CONDUCT.md). Para contribuir com código, lê o
+  [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 ## Contribuir
 
-Issues e pull requests são bem-vindos (falhas de segurança não: ver [`SECURITY.md`](SECURITY.md)). Antes de abrir um
-PR, corre os testes:
-```bash
-python -m pytest tests -q
-node --test tests/*.mjs
-shellcheck install.sh get.sh scripts/*.sh
-```
-Regras do projecto: PT-PT no código, na interface e nos textos; nada de constantes de uma instalação concreta (tudo
-vem do `office.yaml`); os contratos v1 e o formato do `office.yaml` só mudam com versão nova; uma chave nova no
-`office.yaml` vai para a tabela da [Referência](#officeyaml), para o `office.example.yaml` e para os testes de limites;
-entrada no `CHANGELOG.md`. As decisões de arquitectura estão em `DECISIONS.md`.
-
-Para preparar uma versão (mantenedores): `scripts/preparar-publico.sh DESTINO` gera uma árvore sem histórico nem
-`docs/` e falha se encontrar nomes internos ou caminhos pessoais (a lista de nomes vem do passo «Genérico» do
-`ci.yml` de quem prepara a versão e não vai para a cópia pública; sem ela, o script recusa-se a correr);
-`scripts/release.sh X.Y.Z` (exige `## Lite X.Y.Z` no `CHANGELOG.md`) cria `dist/squad-office-lite-X.Y.Z.tar.gz` e
-`dist/SHA256SUMS`, os dois ficheiros que o `get.sh` descarrega. Nenhum dos dois publica nada: a release no GitHub (tag `vX.Y.Z` com os dois ficheiros anexados) é manual.
-Na árvore pública (que já não tem a lista de nomes) usa-se `--publica` (`scripts/release.sh --publica X.Y.Z`): salta a
-verificação de nomes e mantém a de caminhos pessoais. É assim que o workflow de release do repositório público
-constrói e atesta os dois ficheiros, que só anexa a uma release em rascunho; publicar continua manual.
-Depois desse, o workflow manual de imagens (só no repositório público) constrói as imagens do Office e do runner
-(`Dockerfile`, `Dockerfile.runner`; amd64 e arm64), publica-as em `ghcr.io/mozthinker/squad-office-lite` e
-`…-runner` com a tag da versão, atesta-as e anexa à mesma release em rascunho o `compose.yaml` (gerado por
-`runner/gerar_compose.py --modo docker` com as imagens fixadas por digest) e o `env.example`, também atestados. O
-`compose.example.yaml` do repositório é a saída do gerador com as tags sem digest.
+Como reportar, propor, preparar o ambiente, correr os testes e o que se aceita num PR:
+[`CONTRIBUTING.md`](CONTRIBUTING.md) (falhas de segurança: [`SECURITY.md`](SECURITY.md)). As decisões de arquitectura estão em `DECISIONS.md`.
 
 ## Licença
 

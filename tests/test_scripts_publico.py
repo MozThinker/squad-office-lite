@@ -87,6 +87,17 @@ class PrepararPublico(unittest.TestCase):
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertEqual(sorted(os.listdir(destino / ".github")), ["outro.yml", "workflows"])
 
+    def test_dependabot_fica_de_fora(self):   # AC-g1: o Dependabot abria PRs no repositório público
+        (self.repo / ".github" / "dependabot.yml").write_text("version: 2\n", encoding="utf-8")
+        (self.repo / ".github" / "outro.yml").write_text("x: 1\n", encoding="utf-8")
+        commit(self.repo, self.env)
+        destino = self.raiz / "pub"
+        r = correr(self.repo, self.env, "preparar-publico.sh", str(destino))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertFalse((destino / ".github" / "dependabot.yml").exists())
+        self.assertEqual(sorted(os.listdir(destino / ".github")), ["outro.yml", "workflows"])
+        self.assertTrue((self.repo / ".github" / "dependabot.yml").is_file())   # no repositório fica
+
     def test_destino_vazio_aceite_nao_vazio_recusado(self):   # CA-13.1
         vazio = self.raiz / "vazio"
         vazio.mkdir()
@@ -134,7 +145,8 @@ class PrepararPublico(unittest.TestCase):
     def test_casas_sem_barra_entre_aspas_e_users(self):
         casa = "/ho" + "me/"
         for texto in (casa + "x", f'"{casa}x"', f"'{casa}ubuntu'", f"{casa}x.y", f"{casa}u/a {casa}x",
-                      "/Use" + "rs/x/", "/Use" + "rs/u", f"{casa}uu", f"{casa}utilizadora"):
+                      "/Use" + "rs/x/", "/Use" + "rs/u", f"{casa}uu", f"{casa}utilizadora", f"{casa}officex",
+                      "/Use" + "rs/office"):
             self.falha(texto)
 
     def test_binarios_tambem(self):
@@ -157,7 +169,7 @@ class PrepararPublico(unittest.TestCase):
     def test_casa_de_exemplo_passa(self):   # CA-13.2
         casa = "/ho" + "me/"
         r = self.isco(f"{CASA_EXEMPLO}office-lite e {casa}utilizador/x, {casa}u, \"{casa}utilizador\" e {casa} $HOME "
-                      f"{casa}$USER {casa}<utilizador>")
+                      f"{casa}$USER {casa}<utilizador> e {casa}office/.claude")   # office: o das imagens
         self.assertEqual(r.returncode, 0, r.stderr)
 
 

@@ -1,5 +1,105 @@
 # Changelog
 
+## Lite 0.1.4 (2026-11-09)
+
+Modo Docker para Windows, macOS e Linux (Docker Desktop). O modo VPS, os contratos v1 e o `office.yaml`
+(`versao: 1`) não mudam. Endereços fixados passam a `MozThinker/squad-office-lite/v0.1.4`. As propostas de CI ficam em
+`docs/propostas-ci/` (fora da árvore pública) e são activadas em `.github/` por quem tem permissão (ADR-008).
+
+### Added
+
+- **Modo Docker (no PC):** o Office, o Caddy e o runner em contentores no Docker Desktop, com um ficheiro
+  (`compose.yaml` da release) e três comandos: `docker compose run --rm configurar`, `docker compose up -d` e
+  `http://localhost:8080`. README, «No teu PC (Windows, macOS, Linux) com Docker Desktop»: requisitos do Docker
+  Desktop (páginas oficiais consultadas a 8/11/2026), Compose ≥ 2.23.1, `.env` opcional a partir do `env.example`
+  (`OFFICE_ENDERECO`, `OFFICE_PORTA`, `OFFICE_PROJECTOS`, `OFFICE_UID`/`OFFICE_GID`), editar o `office.yaml` e pôr
+  ficheiros na Biblioteca com `docker compose cp`, actualizar, desinstalar e limitações.
+- **`Dockerfile.runner`:** imagem do runner sobre `python:3.13-slim-trixie` fixada por digest, com `git`, `gh`
+  2.103.3 e `claude` 2.1.311 (canal stable) por download directo com sha256 por arquitectura (amd64, arm64);
+  utilizador `office` 10001:10001, sem `sudo`; comandos `ciclo` (omissão), `doctor`, `parar` e `configurar`.
+- **`office_runner.py ciclo [--intervalo S] [--passagens N]`:** passagens a cada 60 s sem systemd; relê o
+  `office.yaml` em cada volta, uma excepção não pára o ciclo, recolhe os filhos terminados (sem *zombies*) e
+  `SIGTERM`/`SIGINT` acabam-no no fim da passagem em curso.
+- **`runner/configurar.py`** (serviço `configurar`): pergunta, só o que falta, utilizador e palavra-passe do Office
+  (hash bcrypt), projectos (repositórios git da pasta de projectos, ou o `exemplo`), nome e e-mail dos commits,
+  credencial do Claude (1 chave de API, 2 token da subscrição colado pelo leitor, 3 agora não) e token do `gh` (por
+  stdin ao `gh auth login --with-token`). `--palavra-passe`, `--projectos`, `--credenciais` e `--gh` refazem só essa
+  parte; `--sem-perguntas` lê o ambiente (CI).
+- **`gerar_compose.py --modo docker`** e **`compose.example.yaml`** (= saída do gerador): volumes nomeados, redes
+  `office` e `runner`, só o Caddy com porta, Caddyfile em `configs` (`Caddyfile.docker`) com os segredos lidos por
+  `{file./proxy/…}`. O `--modo vps` (omissão) dá os mesmos bytes de antes.
+- **`doctor` no modo Docker** (`docker compose exec runner doctor`): `office.yaml`, `claude`, credencial, `gh`, cada
+  projecto em `/projectos` (git e gravável), ciclo vivo (`estado.json` < 3 min); cada ✗ com o comando
+  `docker compose …`.
+- **Office:** `GET /api/config` ganha `"modo": "vps"|"docker"`; os «Primeiros passos» e a faixa «O runner não dá
+  sinal» mostram os comandos `docker compose …` no modo Docker.
+- **Propostas de CI:** job `fumo-docker` em `docs/propostas-ci/ci.yml` (constrói as duas imagens localmente, nada
+  publicado) e `docs/propostas-ci/imagens.yml` (só no repositório público, à mão: imagens amd64+arm64 no GHCR,
+  atestadas, e `compose.yaml` fixado por digest e `env.example` atestados e anexados à release em rascunho).
+
+### Security
+
+- **A pasta dos projectos só muda de dono se for de root e estiver vazia** (criada pelo Docker): uma pasta do host
+  com conteúdo (ex.: `/srv`) apontada por `OFFICE_PROJECTOS` nunca leva `chown`.
+- **Nada com privilégios executa o que a squad escreve no `runner-home`:** os comandos da imagem correm com
+  `python3 -I` e `PYTHONNOUSERSITE=1`; os `git`/`gh` do `configurar` correm sem a config global do utilizador
+  (`GIT_CONFIG_GLOBAL=/dev/null`, `core.hooksPath=/dev/null`, `init --template=`) e recusam symlinks em `~/.gitconfig`
+  e `~/.config/gh`. Editar o `office.yaml` no PC passa por `configurar --office-yaml`, que larga os privilégios antes
+  de ler e validar o ficheiro.
+- **Segredo do proxy por ficheiro:** com `OFFICE_PROXY_SEGREDO_FILE` (modo Docker), o Office lê o segredo do volume
+  `proxy` e, enquanto falta, responde 503 «Falta configurar: corre `docker compose run --rm configurar`» a tudo
+  excepto `/healthz`: nunca fica aberto.
+- **Isolamento do modo Docker:** o runner e o agente não vêem a casa do utilizador, o `~/.ssh` nem as credenciais do
+  Office (volume `proxy` só no Caddy e no Office); `office.yaml` e `claude.env` só de leitura no runner; sem socket do
+  Docker, `privileged` nem `network_mode: host`; o runner fora da rede do Office. O `configurar` corre como
+  root só para o `chown` das raízes dos volumes e larga os privilégios. Segredos nunca em argv, ambiente de filhos nem
+  saída.
+- **Capacidades mínimas no modo Docker:** `no-new-privileges` e `cap_drop: [ALL]` nos quatro serviços; o Office e
+  o runner sem nenhuma; `cap_add` só no `configurar` (`CHOWN`, `DAC_OVERRIDE`, `SETGID`, `SETUID`: dono das raízes
+  dos volumes e largar o root) e no Caddy (`NET_BIND_SERVICE`, file capability do binário da imagem oficial, e
+  `DAC_OVERRIDE`, para ler o volume `proxy` sendo root), cada uma justificada num comentário do compose.
+- **`DISABLE_AUTOUPDATER=1`** no ambiente do `claude` no modo Docker (versão fixada na imagem); no modo VPS a lista
+  branca não muda. `claude.env`/`runner.env` lêem-se de `OFFICE_SEGREDOS_DIR` quando definido, com as mesmas regras e
+  as negações por omissão nesse caminho.
+- **Sandbox do Claude Code não suportado no contentor:** o isolamento é o contentor, como no contentor de referência
+  da Anthropic ([Development containers](https://code.claude.com/docs/en/devcontainer) e
+  [Sandboxing](https://code.claude.com/docs/en/sandboxing), consultadas a 8/11/2026). README, «Segurança», com o
+  parágrafo do modo Docker.
+
+### Fixed
+
+- **Modo Docker com `OFFICE_UID`/`OFFICE_GID` diferentes de 10001** (teste numa VPS Linux): o runner falhava
+  (`Permission denied` em `/dados/tasks`, `PermissionError` em `/dados/runner/.lock`) e o Office respondia 503 «sem
+  pasta do quadro». As pastas da imagem do runner eram `0750` de 10001 e o Docker voltava a copiar para cada volume
+  vazio o dono do ponto de montagem da imagem a cada arranque, desfazendo o `chown` do `configurar` (observado;
+  mecanismo em [Populate a volume using a container](https://docs.docker.com/engine/storage/volumes/#populate-a-volume-using-a-container),
+  consultada a 8/11/2026). Agora todos os volumes, salvo `caddy-data`/`caddy-config`, montam-se com `nocopy`
+  ([`nocopy`](https://docs.docker.com/reference/compose-file/services/#volumes), consultada a 8/11/2026), a imagem
+  do runner tem as pastas-pai e os pontos de montagem de root `0755`, e o `configurar` dá o dono (como root) e o modo
+  (já sem root: `0700` em `proxy`, `segredos`, `push` e na casa, `0750` nas outras) às raízes. O `doctor` mostra
+  `✗ pastas de dados graváveis…` e o ciclo sugere `docker compose run --rm configurar` quando falta escrita.
+- **Nome do projecto do compose do PC:** `office-lite-pc` (o VPS continua `office-lite`); os dois modos podem
+  coexistir no mesmo Linux.
+
+### Changed
+
+- **Publicação de imagens (ADR-008):** a CI dos PRs continua sem publicar; a única excepção é o workflow manual
+  `imagens.yml` do repositório público (desvio ao ADR-006/007, registado no `CLAUDE.md`).
+- **`scripts/preparar-publico.sh`:** a árvore pública deixa de levar o `.github/dependabot.yml` e aceita
+  `/home/office` (casa do utilizador da imagem) nos exemplos.
+- **README:** o Lite instala-se numa VPS ou no PC (a frase «No Windows ou no macOS não se instala» sai);
+  «Referência · Runner» descreve o `ciclo`; endereços da 0.1.4 (também no `get.sh` e no `SECURITY.md`).
+- **Licença do Docker Desktop** (README, «Limitações do modo Docker»): grátis para uso pessoal, educação, open source
+  não comercial e empresas com menos de 250 pessoas **e** menos de 10 milhões de USD de receita anual
+  ([Docker Desktop license agreement](https://docs.docker.com/subscription/desktop-license/), consultada a
+  8/11/2026).
+- `DECISIONS.md`: ADR-008.
+
+### Não verificado nesta versão
+
+- Nada de Docker correu nos testes locais: o fumo do modo Docker (Linux amd64) fica proposto. Windows 11, macOS
+  arm64 e as imagens arm64 verificam-se à mão antes da release pública.
+
 ## Lite 0.1.3 (2026-11-08)
 
 Segurança barata, erros com saída e primeira tarefa sem jargão. Os contratos v1 (decisões, `cartoes.json`, pedidos

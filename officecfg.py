@@ -15,7 +15,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo, available_timezones
 
 EXEMPLO = Path(__file__).resolve().parent / "office.example.yaml"
-VERSAO = "0.1.3"   # versão do produto: única fonte (runner: estado.json e doctor); = 1.ª «## Lite X.Y.Z» do CHANGELOG
+VERSAO = "0.1.4"   # versão do produto: única fonte (runner: estado.json e doctor); = 1.ª «## Lite X.Y.Z» do CHANGELOG
 
 SUB = {"tasks": "tasks", "inbox": "tasks/inbox", "quadro": "quadro", "quadro_lancar": "quadro-lancar",
        "decisoes": "decisoes", "decisoes_fila": "decisoes-fila", "push": "push", "biblioteca": "biblioteca",
@@ -506,7 +506,12 @@ def pastas(cfg):
 
 
 def credenciais_claude(cfg_path):
-    """Ficheiro das credenciais do claude (ANTHROPIC_API_KEY ou CLAUDE_CODE_OAUTH_TOKEN): ao lado do office.yaml."""
+    """Ficheiro das credenciais do claude (ANTHROPIC_API_KEY ou CLAUDE_CODE_OAUTH_TOKEN): ao lado do office.yaml, ou
+    em $OFFICE_SEGREDOS_DIR (modo Docker) se for um caminho absoluto; vazia ou relativa, ignora-se. Única fonte da
+    pasta dos segredos do runner: o runner.env vive ao lado deste ficheiro."""
+    pasta = os.environ.get("OFFICE_SEGREDOS_DIR", "")
+    if os.path.isabs(pasta):
+        return Path(pasta) / CLAUDE_ENV
     return Path(os.path.abspath(os.path.expanduser(str(cfg_path)))).parent / CLAUDE_ENV
 
 

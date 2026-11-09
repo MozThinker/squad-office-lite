@@ -15,6 +15,7 @@ import socket
 import stat
 import subprocess
 import time
+from datetime import datetime
 from pathlib import Path
 
 import lancador
@@ -27,6 +28,7 @@ GH_S = 10                         # timeout do `gh auth status`
 GH_CADA_S = 10 * 60               # no máximo uma verificação do gh a cada 10 min
 CMD_S = 10                        # timeout dos comandos do doctor
 TIMER = "office-runner.timer"
+ESTADO_VIVO_S = 3 * 60            # doctor no modo Docker: o ciclo grava o estado.json a cada passagem (60 s)
 _DOMINIO = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9.-]{0,251}[A-Za-z0-9])?")
 
 
@@ -229,10 +231,12 @@ def doctor(cfg_path: str) -> tuple[int, list[str]]:
     def linha(ok: bool, oque: str, corrige: str = "") -> None:
         linhas.append(f"✓ {oque}" if ok else f"✗ {oque} → {corrige}")
 
+    # o runner corre com o runner.env (unit ou ciclo), não com o ambiente desta sessão
+    lancador.SEGREDOS.update(runner_env(officecfg.credenciais_claude(cfg_path).parent))
+    if os.environ.get("OFFICE_MODO") == "docker":
+        return doctor_docker(cfg_path)
     repo, eu = lancador.RUNNER_REPO, _eu()
     casa = Path(os.path.abspath(os.path.expanduser(cfg_path))).parent
-    # o runner corre com o runner.env da unit, não com o ambiente desta sessão SSH
-    lancador.SEGREDOS.update(runner_env(casa))
     try:
         officecfg.carregar(cfg_path, estrito=True)
         linha(True, "office.yaml válido")
@@ -271,4 +275,85 @@ def doctor(cfg_path: str) -> tuple[int, list[str]]:
     for p in (80, 443) if d else (80,):
         linha(porta_aberta(p), f"porta {p} à escuta", f"docker compose -f {casa / 'docker-compose.yml'} up -d")
     linha(True, f"versão instalada {officecfg.VERSAO}")
+    return (1 if any(x.startswith("✗") for x in linhas) else 0), linhas
+
+
+# ---------------------------------------------------------------- doctor no modo Docker (OFFICE_MODO=docker)
+
+CONFIGURAR = "docker compose run --rm configurar"
+ACTUALIZAR = "docker compose pull; docker compose up -d"
+
+
+def _versao_claude() -> str | None:
+    """Primeira linha de `claude --version` (só caracteres visíveis, até 60), ou None se não correr."""
+    if shutil.which("claude") is None:
+        return None
+    r = _corre(["claude", "--version"])
+    if r is None or r.returncode != 0:
+        return None
+    linha = (r.stdout.strip().splitlines() or [""])[0]
+    return "".join(ch for ch in linha if ch.isprintable())[:60] or "?"
+
+
+def _estado_idade(cfg_path: str, now: float) -> float | None:
+    """Segundos desde o `em` do estado.json (None se não houver ou não se ler)."""
+    try:
+        pasta = Path(os.path.expanduser(officecfg.raiz_dados(cfg_path))) / officecfg.SUB["runner_estado"]
+        d = json.loads((pasta / ESTADO).read_text(encoding="utf-8"))
+        return now - datetime.fromisoformat(d["em"]).timestamp()
+    except (OSError, ValueError, KeyError, TypeError, officecfg.ConfigErro):
+        return None
+
+
+def doctor_docker(cfg_path: str, now: float | None = None) -> tuple[int, list[str]]:
+    """Doctor do contentor runner: sem linger, timer, docker, DNS nem portas (não há socket do Docker nem systemd).
+    Cada ✗ traz o comando `docker compose …` que corrige; as linhas ℹ não contam para o código de saída."""
+    now = time.time() if now is None else now
+    linhas: list[str] = []
+
+    def linha(ok: bool, oque: str, corrige: str = "") -> None:
+        linhas.append(f"✓ {oque}" if ok else f"✗ {oque} → {corrige}")
+
+    cfg = None
+    try:
+        cfg, _ = officecfg.carregar(cfg_path, estrito=True)
+        linha(True, "office.yaml válido")
+    except officecfg.ConfigErro as e:
+        if os.path.lexists(os.path.expanduser(cfg_path)):
+            linha(False, f"office.yaml inválido ({e})", "corrige-o (README, «No teu PC»: editar o office.yaml)")
+        else:
+            linha(False, "office.yaml ainda não existe", CONFIGURAR)
+    versao = _versao_claude()
+    linha(versao is not None, f"claude no PATH ({versao})" if versao else "claude no PATH", ACTUALIZAR)
+    valor, ficheiro, motivo = credencial(cfg_path)
+    if valor == "ok":
+        linha(True, f"credencial do Claude ({ficheiro.name if ficheiro else 'login do claude'})")
+    elif valor == "modo":
+        linha(False, f"credencial do Claude com permissões abertas ({ficheiro.name})", f"{CONFIGURAR} --credenciais")
+    else:
+        linha(False, f"credencial do Claude: {motivo or 'nenhuma'}", f"{CONFIGURAR} --credenciais")
+    if shutil.which("gh") is None:
+        linha(False, "gh não está instalado", ACTUALIZAR)
+    else:
+        linha(gh_sessao() == "ok", "sessão do gh (gh auth status)", f"{CONFIGURAR} --gh")
+    if cfg is not None:
+        raiz = officecfg.raiz(cfg, "projectos")
+        for p in cfg["projectos"]:
+            pasta = raiz / p["repo"]
+            if not pasta.is_dir() or not (pasta / ".git").exists():
+                linha(False, f"projecto {p['id']}: {pasta} não é um repositório git",
+                      f"põe o repositório na pasta de projectos (OFFICE_PROJECTOS) e corre {CONFIGURAR} --projectos")
+            else:
+                linha(os.access(pasta, os.W_OK), f"projecto {p['id']} em {pasta} (git, gravável)",
+                      "põe o teu uid e gid em OFFICE_UID/OFFICE_GID no .env e corre docker compose up -d")
+        # volumes montados com nocopy: as raízes nascem de root até o configurar lhes dar o dono
+        sem = [p for p in (officecfg.caminho(cfg, k) for k in officecfg.SUB)
+               if p.is_dir() and not os.access(p, os.W_OK)]
+        linha(not sem, f"pastas de dados graváveis pelo uid {os.getuid()}" + (f" ({sem[0]} não)" if sem else ""),
+              f"{CONFIGURAR} (com o mesmo OFFICE_UID/OFFICE_GID do .env)")
+    idade = _estado_idade(cfg_path, now)
+    linha(idade is not None and idade < ESTADO_VIVO_S, "ciclo do runner vivo (estado.json com menos de 3 min)",
+          "docker compose up -d (e vê docker compose logs runner)")
+    linha(True, f"versão instalada {officecfg.VERSAO}")
+    linhas.append("ℹ as tarefas só correm com o PC ligado e o Docker Desktop aberto")
     return (1 if any(x.startswith("✗") for x in linhas) else 0), linhas

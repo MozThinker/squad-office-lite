@@ -212,13 +212,17 @@ test("B7.2/B7.4: o detalhe de um cartão dev em erro mostra o resultado escapado
   assert.match(blocosH({ estado: "incompleta", resultado: null }, esc, md), /confirma <code>gh auth status<\/code>/);
   assert.equal(blocosH({ estado: "erro", resultado: "outra coisa" }, esc, md), `<h3>Resultado</h3><p class="q-blk">outra coisa</p>`);
   assert.equal(blocosH({ estado: "concluída" }, esc, md), "");
+  // AC-o1: modo docker (o quadro passa A.cfg?.modo)
+  assert.match(blocosH({ estado: "erro", resultado: "credenciais do Claude em falta" }, esc, md, "docker"), /Corre <code>docker compose run --rm configurar --credenciais<\/code> no PC/);
+  assert.match(Q, /\+ blocosH\(dt, esc, A\.md, A\.cfg\?\.modo\)/);
 });
 
 test("C12.2: «Tentar de novo» só relê o quadro e aponta para o doctor (nunca POST)", () => {
   const i = Q.indexOf("retentar: async () =>"), linha = Q.slice(i, Q.indexOf("\n", i));
   assert.match(linha, /await carregar\(\)/);
   assert.doesNotMatch(linha, /post\(|fetch\(|method/);
-  assert.match(Q, /No servidor: \$\{COMANDOS\.doctor\}/);
+  assert.match(Q, /anuncia\(doctorTxt\(\)\)/);
+  assert.match(Q, /const doctorTxt = \(\) => \{ const o = ondeCorre\(A\.cfg\?\.modo\); return `\$\{o\[0\]\.toUpperCase\(\) \+ o\.slice\(1\)\}: \$\{comandos\(A\.cfg\?\.modo\)\.doctor\}`; \};/);
 });
 
 test("C12.1: «parado» e idades no quadro pela hora do servidor (o «agora» do GET), não pelo relógio do telemóvel", () => {

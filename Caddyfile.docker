@@ -1,0 +1,20 @@
+# Squad Office Lite, modo Docker: proxy à frente do Office (único serviço com portas publicadas, só HTTP no PC).
+# O runner/gerar_compose.py --modo docker põe este ficheiro em linha no compose (configs: caddyfile: content:).
+# Utilizador, hash bcrypt e segredo vêm de ficheiros do volume proxy, escritos pelo configurar ({file.*}: o
+# conteúdo nunca é interpretado como Caddyfile). Ficheiro em falta: utilizador/hash vazios e o Caddy não arranca.
+# X-Office-Segredo: só depois do basic auth, substitui o que vier do cliente; o Office exige-o (ADR-006).
+# Cabeçalhos: o Caddy ordena header antes de basic_auth, por isso o 401 também os leva. Sem HSTS (nunca há HTTPS).
+# A CSP completa fica de fora (o JS inline obrigaria a hashes).
+:80 {
+	header {
+		Content-Security-Policy "frame-ancestors 'none'"
+		X-Frame-Options DENY
+		Referrer-Policy same-origin
+	}
+	basic_auth {
+		{file./proxy/utilizador} {file./proxy/hash}
+	}
+	reverse_proxy office:8080 {
+		header_up X-Office-Segredo {file./proxy/segredo}
+	}
+}

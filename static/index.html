@@ -778,14 +778,14 @@ import("./ajuda.js").then((m) => { AJ = m; paint(false); }, () => {}); // sem aj
 const rot = (s) => (AJ ? AJ.rotuloEstado(s) : s);
 // resultado (já mascarado no servidor, sempre escapado) e dica com o comando que resolve; não em tarefas concluídas
 function erroHtml(t) {
-  const dica = AJ?.dicaErro(t.status, t.resultado), res = typeof t.resultado === "string" && t.status !== "concluída" ? t.resultado : "";
+  const dica = AJ?.dicaErro(t.status, t.resultado, cfg.modo), res = typeof t.resultado === "string" && t.status !== "concluída" ? t.resultado : "";
   return (res ? `<div class="issues">${esc(res)}</div>` : "") + (dica ? `<div class="md">${md(dica)}</div>` : "");
 }
 function renderAjuda() {
   if (!AJ || !state) return;
   const agoraS = Date.now() + AJ.desvioRelogio(state.now, stateEm); // hora do servidor: telemóvel adiantado não dispara avisos
-  const f = AJ.faixaRunner(state.runner, agoraS, TZ), ps = AJ.primeirosPassos(state, agoraS);
-  $("#runner-f").textContent = f ? f + ". Corre o diagnóstico no servidor: " + AJ.COMANDOS.doctor : "";
+  const f = AJ.faixaRunner(state.runner, agoraS, TZ), ps = AJ.primeirosPassos(state, agoraS, cfg.modo); // modo do api/config; ausente: vps
+  $("#runner-f").textContent = f ? f + ". Corre o diagnóstico " + AJ.ondeCorre(cfg.modo) + ": " + AJ.comandos(cfg.modo).doctor : "";
   $("#runner-f").hidden = !f;
   $("#passos").hidden = !ps;
   setHtml($("#passos"), !ps ? "" : `<h2 id="passos-h">Primeiros passos</h2><ul>${ps.map((p) => `<li><span role="img" aria-label="${p.ok ? "feito" : "por fazer"}">${p.ok ? "✓" : "✗"}</span> `

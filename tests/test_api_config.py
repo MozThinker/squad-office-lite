@@ -84,7 +84,7 @@ class ApiConfigTest(unittest.TestCase):
         s = self.arranca(ROOT / "office.example.yaml")
         code, corpo, h = s.get("/api/config")
         self.assertEqual(code, 200)
-        self.assertEqual(json.loads(corpo), json.loads(FIXTURE.read_text()))
+        self.assertEqual(json.loads(corpo), json.loads(FIXTURE.read_text()) | {"modo": "vps"})
         self.assertEqual(h["Cache-Control"], "no-store")
         self.assertTrue(h["Content-Type"].startswith("application/json"))
         self.assertIn("À espera de Utilizador".encode(), corpo)   # ensure_ascii=False
@@ -114,7 +114,7 @@ class ApiConfigTest(unittest.TestCase):
                 cfg = json.loads(s.get("/api/config")[1])
                 self.assertIsInstance(cfg["aviso"], str)
                 self.assertNotIn(str(self.raiz), cfg["aviso"])
-                self.assertEqual({**cfg, "aviso": None}, json.loads(FIXTURE.read_text()))
+                self.assertEqual({**cfg, "aviso": None}, json.loads(FIXTURE.read_text()) | {"modo": "vps"})
                 self.assertEqual(s.get("/api/state")[0], 200)
                 s.parar()
                 self.srv = None

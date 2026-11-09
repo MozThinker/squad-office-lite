@@ -4,11 +4,16 @@
 
 Um escritório em pixel art para acompanhares, no browser ou no telemóvel, uma squad de agentes do Claude Code a
 trabalhar nos teus projectos. Escreves um cartão no Quadro, arrastas para «Em curso» e a squad pega no trabalho:
-cria um branch, programa, testa e abre um pull request no GitHub para tu reveres. Tudo corre numa VPS tua.
+cria um branch, programa, testa e abre um pull request no GitHub para tu reveres. Tudo corre numa VPS tua ou no
+teu PC, com o Docker Desktop.
 
 ## Instalação
 
-O Lite instala-se só numa VPS Linux (Ubuntu). No Windows ou no macOS não se instala: acedes ao Office pelo browser.
+O Lite instala-se de duas formas:
+- **numa VPS Linux (Ubuntu)**, com os passos desta secção: a squad trabalha mesmo com o teu PC desligado e o Office
+  pode ter domínio, HTTPS e notificações no telemóvel;
+- **no teu PC (Windows, macOS ou Linux) com o Docker Desktop**, sem VPS: ver
+  [No teu PC](#no-teu-pc-windows-macos-linux-com-docker-desktop). A squad só trabalha com o PC ligado.
 
 **Precisas de:**
 - uma VPS com **Ubuntu 22.04 ou mais recente** (a CI testa a instalação em 22.04, 24.04 e 26.04) e acesso por SSH
@@ -40,17 +45,17 @@ O Lite instala-se só numa VPS Linux (Ubuntu). No Windows ou no macOS não se in
    depois de instalar (o instalador não o pede nem o guarda; ver [Credenciais do Claude](#credenciais-do-claude)).
    O `gh` instala-se pelas [instruções oficiais para Ubuntu](https://github.com/cli/cli/blob/trunk/docs/install_linux.md);
    no `gh auth login` usa de preferência um [token só para os repositórios do Office](#token-do-github).
-3. **Descarrega e instala o Office.** O endereço fica fixado à versão (`v0.1.3`), para leres sempre o mesmo script
+3. **Descarrega e instala o Office.** O endereço fica fixado à versão (`v0.1.4`), para leres sempre o mesmo script
    que o livro e este README descrevem.
    **Forma prudente** (recomendada: lês o script antes de o correr):
    ```bash
-   curl -fsSLO https://raw.githubusercontent.com/MozThinker/squad-office-lite/v0.1.3/get.sh
+   curl -fsSLO https://raw.githubusercontent.com/MozThinker/squad-office-lite/v0.1.4/get.sh
    less get.sh
-   bash get.sh --versao 0.1.3
+   bash get.sh --versao 0.1.4
    ```
    **Com um comando:**
    ```bash
-   curl -fsSL https://raw.githubusercontent.com/MozThinker/squad-office-lite/v0.1.3/get.sh | bash -s -- --versao 0.1.3
+   curl -fsSL https://raw.githubusercontent.com/MozThinker/squad-office-lite/v0.1.4/get.sh | bash -s -- --versao 0.1.4
    ```
    > Este comando descarrega um script da internet e corre-o no teu servidor, com o teu utilizador. Só o faças com
    > endereços em que confias, e de preferência lê-o primeiro. O `get.sh` confere o sha256 do pacote: isso apanha uma
@@ -63,14 +68,14 @@ O Lite instala-se só numa VPS Linux (Ubuntu). No Windows ou no macOS não se in
    prudente. Opções (depois de `bash -s --` no comando de uma linha, ou de `bash get.sh`):
    - `--sem-perguntas`: as respostas vêm do ambiente (ver o cabeçalho do `install.sh`; `OFFICE_GIT_NOME` e
      `OFFICE_GIT_EMAIL` para a identidade do git; sem elas, e sem identidade no git, só avisa). Ex.:
-     `curl -fsSL …/get.sh | bash -s -- --versao 0.1.3 --sem-perguntas`;
-   - `--versao X.Y.Z`: instala essa versão em vez da última (`… | bash -s -- --versao 0.1.3`);
+     `curl -fsSL …/get.sh | bash -s -- --versao 0.1.4 --sem-perguntas`;
+   - `--versao X.Y.Z`: instala essa versão em vez da última (`… | bash -s -- --versao 0.1.4`);
    - as outras opções passam ao `install.sh` (ex.: `--proxy traefik --rede <rede>`).
 
    **Verificação opcional da origem.** O sha256 só confirma que o pacote não se estragou. Para confirmar que foi
    construído pelo repositório público (atestação do GitHub; precisa do `gh` com sessão), descarrega o pacote à mão e:
    ```bash
-   gh attestation verify squad-office-lite-0.1.3.tar.gz --repo MozThinker/squad-office-lite
+   gh attestation verify squad-office-lite-0.1.4.tar.gz --repo MozThinker/squad-office-lite
    ```
    Só as versões publicadas com atestação passam. Uma falha aqui é motivo para não instalar e reportar (ver
    [`SECURITY.md`](SECURITY.md)).
@@ -110,7 +115,7 @@ de reinício. Se mudaste as `raizes`, corre outra vez `./install.sh` (não volta
 
 O mesmo `get.sh`, sem `--versao` (instala a última versão publicada; lê o aviso em «Instalação»):
 ```bash
-curl -fsSL https://raw.githubusercontent.com/MozThinker/squad-office-lite/v0.1.3/get.sh | bash
+curl -fsSL https://raw.githubusercontent.com/MozThinker/squad-office-lite/v0.1.4/get.sh | bash
 ```
 A versão instalada passa para `~/squad-office-lite.anterior-<data>` e a nova fica em `~/squad-office-lite`.
 `~/office-lite` (config, `.env`, credenciais e dados) não é tocada pelo `get.sh`; o `install.sh` só volta a
@@ -277,6 +282,254 @@ os worktrees das tarefas em `.worktrees/`), o `claude`, o `gh` e o Docker. Se n�
 `sudo loginctl disable-linger $USER`. Revoga também o token do GitHub e a chave de API do Claude que criaste só para o
 Office.
 
+## No teu PC (Windows, macOS, Linux) com Docker Desktop
+
+Sem VPS: o Office, o Caddy (que pede a palavra-passe) e o runner correm em contentores no Docker Desktop do teu PC. Não
+instalas o `claude`, o `gh`, o `git` nem o Python: vêm na imagem do runner. O Office abre em `http://localhost:8080`,
+só neste PC. A squad só trabalha enquanto o PC está ligado e o Docker Desktop aberto (ver
+[Limitações do modo Docker](#limitações-do-modo-docker)).
+
+**Precisas de:**
+- o **Docker Desktop** instalado e aberto, com o Docker Compose **2.23.1 ou mais recente** (vem com o Docker Desktop;
+  confirmas no passo 1). Requisitos segundo as páginas oficiais (consultadas a 8/11/2026):
+  - **Windows** ([página](https://docs.docker.com/desktop/setup/install/windows-install/)): Windows 11 23H2 (build
+    22631) ou Windows 10 22H2 (build 19045) ou mais recentes, nas edições que a página lista (Pro, Enterprise,
+    Education); WSL 2 (versão 2.1.5 ou mais recente); 8 GB de memória; virtualização ligada na BIOS/UEFI;
+  - **macOS** ([página](https://docs.docker.com/desktop/setup/install/mac-install/)): a versão actual do macOS ou
+    uma das duas anteriores, Apple Silicon ou Intel; 4 GB de memória no mínimo;
+  - **Linux** ([página](https://docs.docker.com/desktop/setup/install/linux/)): a da tua distribuição;
+  - o Claude Code pede **4 GB ou mais** de memória;
+- que a [licença do Docker Desktop](#limitações-do-modo-docker) cubra o teu uso (é grátis para uso pessoal,
+  educação, open source não comercial e empresas pequenas);
+- uma credencial do Claude: uma **chave de API** (recomendada) ou o **token da subscrição** (Pro/Max; ver
+  [Token da subscrição no PC](#token-da-subscrição-no-pc));
+- um **token do GitHub** *fine-grained* só para os repositórios do Office (ver [Token do GitHub](#token-do-github));
+  sem ele a squad trabalha, mas não abre PRs;
+- um **nome e e-mail para os commits** da squad (o `configurar` pergunta-os).
+
+**Passos:** abre o **PowerShell** (Windows) ou o **Terminal** (macOS, Linux) e corre os comandos por esta ordem.
+
+1. **Instala o Docker Desktop** pela página oficial do teu sistema (acima) e abre-o. No Windows, o instalador liga o
+   WSL 2 e pode pedir para reiniciar. Confirma a versão do Compose (2.23.1 ou mais recente):
+   ```
+   docker compose version
+   ```
+2. **Cria uma pasta para o Office e entra nela.** Aqui ficam o `compose.yaml` e, por omissão, a pasta `projectos`
+   com os repositórios que a squad pode alterar. Corre todos os comandos seguintes dentro desta pasta.
+   No PowerShell (fica em `C:\Users\<nome>\office`):
+   ```powershell
+   mkdir $HOME\office
+   cd $HOME\office
+   ```
+   No Terminal (no macOS fica em `/Users/<nome>/office`):
+   ```bash
+   mkdir -p ~/office && cd ~/office
+   ```
+3. **Descarrega o `compose.yaml`** da versão 0.1.4. As imagens do Office e do runner vêm fixadas por digest: o que
+   corre é sempre o que foi publicado com esta versão.
+   No PowerShell (é `curl.exe`, não `curl`):
+   ```powershell
+   curl.exe -fsSLO https://github.com/MozThinker/squad-office-lite/releases/download/v0.1.4/compose.yaml
+   ```
+   No Terminal:
+   ```bash
+   curl -fsSLO https://github.com/MozThinker/squad-office-lite/releases/download/v0.1.4/compose.yaml
+   ```
+   Também o podes descarregar pelo browser, na página da release `v0.1.4`, e guardá-lo nesta pasta com o nome
+   `compose.yaml`. Para mudar a porta ou a pasta dos projectos, ver
+   [Mudar a porta, o endereço ou a pasta dos projectos](#mudar-a-porta-o-endereço-ou-a-pasta-dos-projectos) (opcional).
+   **No Linux**, cria já o `.env` com o teu utilizador e grupo, antes do passo 4, para os ficheiros dos projectos
+   ficarem teus:
+   ```bash
+   printf 'OFFICE_UID=%s\nOFFICE_GID=%s\n' "$(id -u)" "$(id -g)" >> .env
+   ```
+4. **Configura:**
+   ```
+   docker compose run --rm configurar
+   ```
+   Da primeira vez descarrega as imagens (umas centenas de MB). Pergunta, por esta ordem e só o que ainda falta:
+   - o utilizador e a palavra-passe do Office (12 ou mais caracteres; não aparece no ecrã; repetes-a, até 3 vezes);
+   - os projectos: lista os repositórios git da pasta `projectos` e escolhes por número (Enter = todos); se não houver
+     nenhum, oferece criar o projecto `exemplo`;
+   - o nome e o e-mail para os commits da squad;
+   - a credencial do Claude (ver [Token da subscrição no PC](#token-da-subscrição-no-pc)):
+     ```
+       1) chave de API (recomendada; paga por uso)
+       2) token da subscrição (geras tu com o claude setup-token e colas aqui)
+       3) agora não
+     ```
+   - o token do GitHub (não aparece no ecrã; Enter = agora não).
+
+   Guarda tudo em volumes do Docker, não em ficheiros soltos no teu PC: a palavra-passe só como hash bcrypt (volume
+   `proxy`, que o runner não vê), a credencial do Claude no volume `segredos` (só o runner a lê) e a sessão do `gh` na
+   casa do runner (volume `runner-home`). Os segredos nunca aparecem no ecrã. No fim mostra os próximos passos.
+   Correr outra vez não pergunta o que já existe.
+5. **Arranca:**
+   ```
+   docker compose up -d
+   ```
+6. **Abre <http://localhost:8080>** e entra com o utilizador e a palavra-passe que escolheste. Até à primeira tarefa
+   entregue, o escritório mostra «Primeiros passos», como na VPS, com os comandos `docker compose …` que corrigem
+   cada ✗. Se o browser não conseguir ligar, provavelmente correste o `up -d` antes do `configurar`: o Caddy só
+   arranca depois de haver palavra-passe. Corre o `configurar` e depois `docker compose restart office caddy`.
+7. **Lança a primeira tarefa**, como no passo 5 da [Instalação](#instalação): no `▦ Quadro`, um cartão no projecto
+   `exemplo`, arrastado para «Em curso», e «Lançar». O `exemplo` não tem remoto no GitHub: a squad trabalha num
+   branch e acaba sem PR («Terminou sem PR»). Os PRs aparecem nos teus projectos.
+
+**Para os teus projectos:** a pasta `projectos` (ou a de `OFFICE_PROJECTOS`) é a única pasta do PC que a squad vê.
+Põe lá cada repositório. Sem `git` no PC, clona com o `gh` do runner (depois de configurares o token do GitHub) e
+escolhe de novo os projectos:
+```
+docker compose run --rm runner gh repo clone <conta>/<repositório> /projectos/<repositório>
+docker compose run --rm configurar --projectos
+docker compose restart office
+```
+O `--projectos` só troca a lista `projectos` do `office.yaml`. O runner lê a config a cada minuto; o Office só no
+arranque (daí o `restart office`).
+
+### Token da subscrição no PC
+
+Com a opção 2 do `configurar`, és tu que geras o token e o colas; o programa nunca o vai buscar por ti, nunca corre o
+`claude setup-token` e nunca lê o login do `claude`. Antes de o pedir, o `configurar` explica o que é, onde fica e o
+risco:
+1. deixa o `configurar` à espera e abre **outra** janela do PowerShell ou do Terminal, na mesma pasta;
+2. corre o `claude` da imagem do runner:
+   ```
+   docker compose run --rm runner claude setup-token
+   ```
+   Abre o link que ele mostra no browser, confirma com a tua conta e copia a linha que começa por `sk-ant-oat01-`
+   (não o código que o browser mostra);
+3. volta à primeira janela e cola-a (não aparece no ecrã).
+
+Fica numa linha do `claude.env` do volume `segredos` (modo 0600), que só o runner lê; o Office nunca o vê. Como na
+VPS, o token vai no ambiente do `claude` enquanto corre uma tarefa: um programa que a squad corra pode lê-lo. Se
+suspeitares, revoga-o em claude.ai e cola outro com `docker compose run --rm configurar --credenciais`. Usa os
+limites da tua subscrição.
+
+### Mudar a porta, o endereço ou a pasta dos projectos
+
+Sem `.env` valem as omissões. Para mudar, descarrega o `env.example` da release para um `.env` na pasta do
+`compose.yaml`, tira o `#` das linhas que queres mudar e corre `docker compose up -d` (no Linux já tens um `.env` do
+passo 3: não o substituas, acrescenta-lhe as linhas):
+```powershell
+curl.exe -fsSLo .env https://github.com/MozThinker/squad-office-lite/releases/download/v0.1.4/env.example
+```
+(no Terminal, `curl` em vez de `curl.exe`). O anexo chama-se `env.example` porque o GitHub muda o nome dos anexos que
+começam por ponto.
+
+| variável | o quê (omissão) |
+|---|---|
+| `OFFICE_PORTA` | porta do Office no PC (`8080`); muda-a se a 8080 estiver ocupada: `OFFICE_PORTA=8081` ⇒ `http://localhost:8081` |
+| `OFFICE_ENDERECO` | onde o Office escuta (`127.0.0.1`, só este PC). `0.0.0.0` abre-o aos outros aparelhos da rede local (ex.: o telemóvel), **em HTTP**: a palavra-passe passa sem cifra; só numa rede em que confias |
+| `OFFICE_PROJECTOS` | pasta dos projectos (`./projectos`, relativa à pasta do `compose.yaml`, ou absoluta). No Windows com barras para a frente: `OFFICE_PROJECTOS=C:/Users/<nome>/projectos`. No macOS, só pastas dentro de `/Users`, `/Volumes`, `/private`, `/tmp` ou `/var/folders` (as que o Docker Desktop partilha por omissão) |
+| `OFFICE_UID` / `OFFICE_GID` | utilizador e grupo dos contentores `office` e `runner` (`10001`). No Windows e no macOS deixa a omissão; no Linux, os teus (`id -u`, `id -g`) |
+
+Se mudares a pasta dos projectos, põe lá os repositórios e corre `docker compose run --rm configurar --projectos`.
+Escolhe `OFFICE_UID`/`OFFICE_GID` antes do primeiro `configurar`: mudá-los depois deixa os ficheiros já criados nos
+volumes com o dono antigo. Os volumes são montados com `nocopy` (o Docker não lhes copia nada da imagem): as pastas
+de cada volume nascem do root e é o `configurar` que lhes dá o teu `OFFICE_UID`/`OFFICE_GID`. Por isso o runner só
+trabalha depois do `configurar`; se o `doctor` mostrar `✗ pastas de dados graváveis…`, corre-o de novo com o mesmo
+`.env`.
+
+### Editar o `office.yaml` e pôr ficheiros na Biblioteca
+
+O `office.yaml` vive no volume `config`, que o Office e o runner só lêem (a squad não o consegue alterar). A
+palavra-passe, as credenciais e os projectos mudam-se com o `configurar` (`--palavra-passe`, `--credenciais`, `--gh`,
+`--projectos`). Para o resto (marca, fuso, `runner.ferramentas`, ver [Referência](#officeyaml)), copia-o para o PC,
+edita-o num editor de texto simples (Bloco de Notas, TextEdit em texto simples) e devolve-o validado:
+```
+docker compose cp office:/config/office.yaml office.yaml
+docker compose run --rm -v ./office.yaml:/novo/office.yaml:ro configurar --office-yaml /novo/office.yaml
+docker compose restart office
+```
+O primeiro comando copia-o para a pasta do `compose.yaml`; edita-o antes do segundo. O segundo lê-o directamente da
+tua pasta (nunca de um volume onde a squad escreve), já sem privilégios de root, e só o põe no lugar se for válido
+(senão mostra o erro e o antigo fica). No Linux, o ficheiro tem de ser legível pelo uid do contentor
+(`chmod 644 office.yaml`, ou `OFFICE_UID` igual ao teu). Não mudes as `raizes`: no modo Docker são caminhos do contentor
+(`/dados`, `/projectos`, `/home/office/.claude/projects`).
+
+**Biblioteca:** copia ficheiros (ou uma pasta, que é um lote) para a pasta da fonte, dentro do runner (com o
+`office.example.yaml`, a fonte «Material» é a pasta `material`):
+```
+docker compose cp relatorio.pdf runner:/dados/biblioteca/material/
+```
+Aparecem no `▤` sem reiniciar nada.
+
+### Diagnóstico, parar tarefas e reiniciar
+
+```
+docker compose exec runner doctor
+```
+Uma linha por verificação (`office.yaml`, `claude` e a versão, credencial do Claude só pelo formato e o modo, sessão
+do `gh`, cada projecto na pasta de projectos como repositório git gravável, as pastas de dados graváveis pelo uid do
+runner, o ciclo do runner a dar sinal há menos de 3 min, a versão): `✓` ou `✗ … → <comando que corrige>`, sempre um `docker compose …`. A última linha lembra que as
+tarefas só correm com o PC ligado e o Docker Desktop aberto. Os registos do runner: `docker compose logs runner`.
+
+- **parar uma tarefa:** `docker compose exec runner parar <id da tarefa>` (os ids:
+  `docker compose exec runner ls /dados/tasks`). Igual ao `parar` da VPS: fecha-a em «erro» e nunca é retomada.
+- **trocar a palavra-passe:** `docker compose run --rm configurar --palavra-passe` e `docker compose restart office
+  caddy` (o Caddy só lê a palavra-passe ao arrancar).
+- **trocar a credencial do Claude ou o token do GitHub:** `docker compose run --rm configurar --credenciais` ou
+  `… --gh`. As tarefas seguintes já os usam.
+- **desligar o PC, fechar o Docker Desktop ou `docker compose restart runner`** mata as tarefas em curso. Quando o
+  runner volta, retoma-as (até 2 vezes por tarefa) uns 5 minutos depois. Para parar tudo: `docker compose stop`; para
+  voltar: `docker compose up -d`.
+
+### Actualizar no PC
+
+Descarrega o `compose.yaml` da versão nova (o comando do passo 3, com a versão nova no endereço) por cima do antigo
+e corre:
+```
+docker compose pull
+docker compose up -d
+```
+(ou numa só linha, também no PowerShell do Windows: `docker compose pull; docker compose up -d`). O `.env` e os volumes (config, credenciais, dados) ficam como estão. Vê o que mudou no
+`CHANGELOG.md`.
+
+### Desinstalar do PC
+
+Na pasta do `compose.yaml`:
+```
+docker compose down
+```
+pára e apaga os contentores; os dados ficam nos volumes (voltas com `docker compose up -d`). **Só se os quiseres
+perder de vez** (config, palavra-passe, credencial do Claude, sessão do `gh`, tarefas, cartões e Biblioteca):
+```
+docker compose down -v --rmi all
+```
+apaga também os volumes e as imagens. Sem volta. Ficam a pasta `projectos` (com os worktrees das tarefas em
+`.worktrees/`) e o Docker Desktop. Revoga também o token do GitHub e a credencial do Claude que criaste só para o
+Office.
+
+### Limitações do modo Docker
+
+- **PC ligado e Docker Desktop aberto:** com o PC desligado ou em suspensão, nada corre (as tarefas a meio são
+  retomadas depois, até 2 vezes). Quando o Docker Desktop abre, os contentores voltam sozinhos, salvo se os paraste
+  com `docker compose stop`.
+- **Sem domínio, HTTPS, notificações no telemóvel nem Telegram:** só na VPS. O Office fica em HTTP no próprio PC
+  (com `OFFICE_ENDERECO=0.0.0.0`, também na rede local, sem cifra).
+- **Licença do Docker Desktop:** é grátis para uso pessoal, educação, projectos open source não comerciais e
+  empresas com menos de 250 pessoas **e** menos de 10 milhões de USD de receita anual (as duas condições); fora
+  disso precisa de uma subscrição paga da Docker
+  ([Docker Desktop license agreement](https://docs.docker.com/subscription/desktop-license/), consultada a
+  8/11/2026). Confirma-o antes de o usares no trabalho.
+- **Sem o sandbox do Claude Code:** num contentor sem privilégios, os comandos do sandbox do Claude Code falham (erro
+  do `bwrap`), salvo num modo mais fraco (`enableWeakerNestedSandbox`) ([Sandboxing](https://code.claude.com/docs/en/sandboxing),
+  consultada a 8/11/2026); a imagem do runner não o instala. O isolamento é o próprio contentor, como no contentor de
+  referência da Anthropic, cuja página avisa que, com as verificações desligadas, o contentor não impede um projecto
+  malicioso de levar o que estiver acessível lá dentro, incluindo as credenciais do Claude Code, e recomenda não
+  montar o `~/.ssh` nem credenciais de cloud
+  ([Development containers](https://code.claude.com/docs/en/devcontainer), consultada a 8/11/2026). Ver
+  [Segurança](#segurança).
+- **Windows:** os projectos numa pasta do `C:` funcionam, mas são mais lentos do que no sistema de ficheiros do WSL
+  ([boas práticas do WSL](https://docs.docker.com/desktop/features/wsl/best-practices/), consultada a 8/11/2026).
+- **Junto do modo VPS:** o projecto do compose do PC chama-se `office-lite-pc` (contentores e volumes
+  `office-lite-pc-…`/`office-lite-pc_…`) e o da VPS `office-lite`; podem coexistir no mesmo Linux (a VPS usa as
+  portas 80/443, o PC `127.0.0.1:8080`).
+- **Testes:** os testes automáticos do modo Docker correm só em Linux (amd64); Windows, macOS e arm64 são
+  verificados à mão.
+- Ainda sem backups nem passagem de dados entre o PC e uma VPS.
+
 ---
 
 ## Referência
@@ -339,19 +592,37 @@ leitura; o Office só
 escreve em `decisoes-fila`, `quadro`, `quadro-lancar`, `push` e nas miniaturas (num `tmpfs`). O contentor corre com o
 uid/gid de quem instalou (`OFFICE_UID`/`OFFICE_GID` no `.env`), `read_only`, sem portas publicadas.
 
+**No modo Docker** não há `~/office-lite` nem `~/squad-office-lite`: cada pasta de `dados/` é um volume do Docker com
+o mesmo nome (`tasks`, `quadro`, `runner-estado`, …), o `office.yaml` fica no volume `config` (`/config`), o
+`claude.env` no `segredos` (`/segredos`), o hash da palavra-passe e o segredo do proxy no `proxy` (`/proxy`) e a casa
+do runner (sessão do `gh`, `~/.claude`) no `runner-home` (`/home/office`). No runner, os dados estão em `/dados/…` e os
+projectos em `/projectos` (a pasta do PC). O `compose.yaml` diz o que cada contentor monta e se só lê.
+
 ### Runner
 
 `runner/office_runner.py` corre no host (Python ≥ 3.10, só stdlib), uma passagem por minuto pelo timer systemd de
 utilizador `office-runner.timer` (`systemctl --user …`, logs em `journalctl --user -u office-runner`). Precisa de
-*linger* para correr sem sessão aberta.
+*linger* para correr sem sessão aberta. No modo Docker corre no contentor `runner` pelo `ciclo` (abaixo), com o mesmo
+código; os comandos `ciclo`, `doctor`, `parar` e `configurar` existem na imagem (`docker compose exec runner doctor`).
 
 ```
 office_runner.py --uma-vez [--config FICH]     uma passagem (omissão: $OFFICE_CONFIG ou ~/office-lite/office.yaml)
 office_runner.py correr TASK_ID [--retomar]    interno: corre o claude numa tarefa já preparada
 office_runner.py parar TASK_ID                 pára uma tarefa «a correr» (fecha em erro; nunca é retomada)
 office_runner.py doctor                        diagnóstico: uma linha ✓/✗ por verificação, com o comando que corrige
+office_runner.py ciclo [--intervalo S] [--passagens N]
+                                               modo Docker: uma passagem a cada S segundos (60), sem fim ou N vezes
 ```
-`correr`, `parar` e `doctor` aceitam também `--config FICH`.
+`correr`, `parar`, `doctor` e `ciclo` aceitam também `--config FICH`.
+**`ciclo`** (o processo principal do contentor `runner`, com `init: true`): faz o mesmo que o timer, sem systemd. Em
+cada volta relê e valida o `office.yaml` (inválido: escreve o erro e tenta na volta seguinte), corre uma passagem e
+recolhe os `correr` que já acabaram (sem processos *zombie*). Uma excepção numa passagem vai para o registo
+(`docker compose logs runner`) e o ciclo continua. Lê o `runner.env` da pasta dos segredos (`OFFICE_SEGREDOS_DIR`)
+no arranque, como o `EnvironmentFile` da unit. `SIGTERM`/`SIGINT` (`docker compose stop`) acabam-no no fim da
+passagem em curso; as tarefas a correr morrem com o contentor e são retomadas (até 2 vezes) uns 5 min depois do
+arranque seguinte. No modo Docker o `doctor` não verifica *linger*, timer, Docker, DNS nem portas: verifica o
+`office.yaml`, o `claude`, a credencial, o `gh`, cada projecto em `/projectos` (git e gravável) e se o `estado.json` tem
+menos de 3 min.
 Cada passagem (com lock, nunca duas ao mesmo tempo): grava o `estado.json` → confirma se o `office.yaml` mudou →
 aplica decisões → retoma tarefas interrompidas (até 2 vezes) → trata a fila do Quadro → arquiva pedidos antigos.
 
@@ -359,7 +630,7 @@ aplica decisões → retoma tarefas interrompidas (até 2 vezes) → trata a fil
 leitura e com ele desenha os «Primeiros passos» e a faixa «O runner não dá sinal desde HH:MM» (mais de 3 min sem
 passagem). Só valores de uma lista conhecida, nunca segredos, caminhos nem a saída dos comandos:
 ```json
-{"v": 1, "em": "2026-11-08T19:30:00+00:00", "versao": "0.1.3",
+{"v": 1, "em": "2026-11-08T19:30:00+00:00", "versao": "0.1.4",
  "claude": "ok|falta", "credencial": "ok|falta|modo", "gh": "ok|sem sessão"}
 ```
 `credencial` diz se há uma credencial válida (`claude.env`, `runner.env` ou o login do `claude`), sem a ler para fora
@@ -494,7 +765,10 @@ Sem perguntas: `OFFICE_CLAUDE_CRED=api|oauth|nenhuma` e, com `api`, `OFFICE_CLAU
 uma credencial: a do `claude.env`; sem ele, `ANTHROPIC_API_KEY` ou, se não houver, `CLAUDE_CODE_OAUTH_TOKEN` do
 `runner.env`. Nunca as duas. O runner não passa `OFFICE_*` (o token do Telegram) nem `GH_TOKEN`/`GITHUB_TOKEN` ao
 `claude` (nem proxies ou `NODE_OPTIONS`) e não deixa ler o seu próprio ambiente em `/proc`. Para o `gh`, usa
-`gh auth login` (ver [Token do GitHub](#token-do-github)).
+`gh auth login` (ver [Token do GitHub](#token-do-github)). No modo Docker o `claude` recebe ainda
+`DISABLE_AUTOUPDATER=1` (a versão vem fixada na imagem) e o `claude.env`/`runner.env` lêem-se de
+`OFFICE_SEGREDOS_DIR` (`/segredos`, o volume `segredos`), com as mesmas regras; as negações por omissão seguem esse
+caminho.
 
 **Segredos do `runner.env`:** o Telegram, a credencial do Claude e `GH_TOKEN`/`GITHUB_TOKEN` saem do ambiente do
 runner logo no arranque. Os filhos `git`, `gh` e `claude` recebem só a lista branca acima (o `git` também
@@ -648,7 +922,11 @@ Para reportar uma falha, ver [`SECURITY.md`](SECURITY.md) (reporte privado no Gi
 - **Imagens fixadas por digest:** `python:3.13-alpine` (`Dockerfile`), `caddy:2.11.9-alpine` (compose gerado) e
   `httpd:2.4-alpine` (só para o hash da palavra-passe, no `install.sh`) levam o `@sha256:` do índice
   multi-arquitectura; as dependências opcionais da imagem estão em `requirements.txt` com versões fixas. Um `docker
-  pull` não muda o que corre sem uma versão nova do Lite.
+  pull` não muda o que corre sem uma versão nova do Lite. No modo Docker, o `compose.yaml` da release fixa por digest
+  as imagens do Office e do runner (`ghcr.io/mozthinker/squad-office-lite` e `…-runner`), construídas e atestadas
+  pelo repositório público; a imagem do runner fixa a base Python por digest e o `gh` e o `claude` por versão e
+  sha256. Verificação opcional da origem (com o `gh` no PC):
+  `gh attestation verify compose.yaml --repo MozThinker/squad-office-lite`.
 - As credenciais do Claude (`claude.env`, 0600) ficam só no host, para o runner: o Office não as monta, não as
   guarda nem as mostra. O instalador não pede o token da subscrição. Os segredos do `runner.env` saem do ambiente do
   runner no arranque; o `git`, o `gh` e o `claude` recebem só a lista branca do ambiente (o `claude` mais a
@@ -671,6 +949,37 @@ Para reportar uma falha, ver [`SECURITY.md`](SECURITY.md) (reporte privado no Gi
   lê todas as sessões do Claude Code desse utilizador, não só as das tarefas do Office (conta os tokens de todas;
   mostra as conversas só das tarefas e squads da config). Uma falha de segurança no Office podia expô-las todas. Se usas o `claude` na VPS para outras coisas, usa um utilizador só para o Office (a
   recomendação acima) ou aceita o risco.
+- **Modo Docker (no PC):** o agente e o runner correm no contentor `runner` com o mesmo uid (10001, ou o teu
+  `OFFICE_UID`), por isso o limite acima mantém-se para as filas (`quadro-lancar/`, `decisoes-fila/`), que o runner
+  monta com escrita. Em troca, deixam de ver a casa do teu utilizador, o `~/.ssh` e o resto do PC (só a pasta de
+  projectos), não vêem as credenciais do Office (o volume `proxy` só está no Caddy e no Office) e têm o `office.yaml`
+  e o `claude.env` só de leitura (volumes `config` e `segredos`): um programa da squad já não os consegue alterar. O
+  Office só lê as sessões do `claude` do runner (volume `claude-projects`), não as do teu PC. O runner não tem o
+  socket do Docker, não está na rede do Office (falam só pelas filas) e corre com a raiz do contentor só de leitura.
+  O sandbox do Claude Code não é suportado no contentor: o isolamento é o próprio contentor (ver
+  [Limitações do modo Docker](#limitações-do-modo-docker)). **A pasta de projectos montada é escrita pelo agente:**
+  põe lá só os repositórios do Office, nunca a tua pasta pessoal. A credencial do Claude continua no ambiente do
+  `claude` e a sessão do `gh` na casa do runner, que um interpretador autorizado consegue ler. O `configurar` corre
+  como root só para acertar o dono das pastas dos volumes e larga logo os privilégios. **Sem capacidades a mais:**
+  os quatro contentores correm com `no-new-privileges` e `cap_drop: [ALL]`. O Office e o runner não têm nenhuma (o
+  `tini` do `init: true`, o `parar`, que só mata processos do mesmo uid, o `git`, o `gh` e o `claude` não precisam,
+  sem o sandbox). O `configurar` tem só `CHOWN` (dono das raízes dos volumes), `DAC_OVERRIDE` (abrir as raízes 0700
+  já dadas ao `OFFICE_UID` quando corre de novo), `SETGID` e `SETUID` (largar o root; o `no-new-privileges` não
+  impede descer); o modo das raízes é dado já sem root. O Caddy tem só `NET_BIND_SERVICE` (o binário da imagem
+  oficial traz-a como *file capability*; sem ela no conjunto limite o arranque falha) e `DAC_OVERRIDE` (corre como
+  root e lê o volume `proxy`, 0700 do `OFFICE_UID`). Os volumes de dados, config, segredos, proxy e da casa do runner
+  montam-se com `nocopy`: nada da imagem é copiado para eles, nem o dono, que desfazia o do `configurar` a cada
+  arranque (observado com `OFFICE_UID` diferente de 10001; mecanismo em
+  [Populate a volume using a container](https://docs.docker.com/engine/storage/volumes/#populate-a-volume-using-a-container)
+  e na opção [`nocopy`](https://docs.docker.com/reference/compose-file/services/#volumes), consultadas a
+  8/11/2026). **A casa do runner (volume
+  `runner-home`) é escrita pelo agente, e nada com privilégios a executa:** os comandos da imagem correm o Python com
+  `-I` (sem `~/.local`, `.pth` nem `usercustomize`; `PYTHONNOUSERSITE=1` na imagem) e o `git` e o `gh` do
+  `configurar` correm sem a config do utilizador (sem `~/.gitconfig` global, hooks nem templates; o `~/.gitconfig` e
+  `~/.config/gh` só são escritos se não forem symlinks). **Corre o `configurar` com o runner parado**
+  (`docker compose stop runner` antes, `docker compose up -d` depois): um programa da squad que ficasse a correr
+  podia trocar esses ficheiros, ou a pasta `projectos/exemplo` acabada de criar, durante o `configurar`. Sem domínio nem HTTPS, o
+  Office escuta por omissão só em `127.0.0.1`.
 - `GET /api/config` não leva caminhos, contacto nem segredos. Briefs, cartões e pedidos são dados do utilizador,
   nunca instruções para os agentes.
 - **Riscos que ficam** (as negações não os fecham):
@@ -691,7 +1000,11 @@ Para reportar uma falha, ver [`SECURITY.md`](SECURITY.md) (reporte privado no Gi
 Postas pelo compose gerado: `OFFICE_CONFIG` (omissão `/config/office.yaml`), `TASKS_DIR`, `CLAUDE_PROJECTS_DIR`,
 `SQUADS_DIR`, `APROVACOES_DIR`, `BIBLIOTECA_DIR`, `DECISOES_FILA_DIR`, `QUADRO_DIR`, `QUADRO_LANCAR_DIR`, `PUSH_DIR`,
 `RUNNER_ESTADO_DIR` (omissão `/data/runner-estado`), `PUSH_CONTACTO` (opcional) e
-`BIBLIOTECA_MINI_DIR` (omissão `/tmp/miniaturas`); `PORT` (8080).
+`BIBLIOTECA_MINI_DIR` (omissão `/tmp/miniaturas`); `PORT` (8080). No modo Docker também `OFFICE_MODO=docker`
+(`GET /api/config` ganha `"modo": "docker"`, senão `"vps"`; os «Primeiros passos» mostram os comandos
+`docker compose …`) e `OFFICE_PROXY_SEGREDO_FILE=/proxy/segredo` em vez de `OFFICE_PROXY_SEGREDO`: o segredo vem desse
+ficheiro (escrito pelo `configurar`) e, enquanto faltar, o Office responde 503
+«Falta configurar: corre `docker compose run --rm configurar`» a tudo excepto `/healthz` (nunca fica aberto).
 Correr localmente: `OFFICE_CONFIG=office.example.yaml TASKS_DIR=/tmp/t … PORT=18080 python3 server.py`.
 
 ### Testes
@@ -702,7 +1015,8 @@ node --test tests/*.mjs
 ```
 Sem Pillow/`cryptography` os testes de miniaturas e de cifra são saltados. O runner é testado com um `claude` falso
 (`tests/bin/claude`). A CI corre os testes, o `shellcheck` do instalador e uma instalação completa de fumo; não faz
-deploy nem publica imagens.
+deploy e a dos pull requests nunca publica nada. As imagens do modo Docker só são publicadas (no GHCR) por um workflow
+manual do repositório público, na preparação de uma versão (ver [Contribuir](#contribuir) e o ADR-008).
 
 ## Contribuir
 
@@ -726,6 +1040,11 @@ Para preparar uma versão (mantenedores): `scripts/preparar-publico.sh DESTINO` 
 Na árvore pública (que já não tem a lista de nomes) usa-se `--publica` (`scripts/release.sh --publica X.Y.Z`): salta a
 verificação de nomes e mantém a de caminhos pessoais. É assim que o workflow de release do repositório público
 constrói e atesta os dois ficheiros, que só anexa a uma release em rascunho; publicar continua manual.
+Depois desse, o workflow manual de imagens (só no repositório público) constrói as imagens do Office e do runner
+(`Dockerfile`, `Dockerfile.runner`; amd64 e arm64), publica-as em `ghcr.io/mozthinker/squad-office-lite` e
+`…-runner` com a tag da versão, atesta-as e anexa à mesma release em rascunho o `compose.yaml` (gerado por
+`runner/gerar_compose.py --modo docker` com as imagens fixadas por digest) e o `env.example`, também atestados. O
+`compose.example.yaml` do repositório é a saída do gerador com as tags sem digest.
 
 ## Licença
 

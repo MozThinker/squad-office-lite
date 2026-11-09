@@ -1,0 +1,68 @@
+# Squad Office Lite, modo Docker: imagem do runner (ciclo, doctor, parar) e do configurar (ADR-008).
+# Versões fixadas à mão (o Dependabot não lê os ARG); valores copiados das fontes oficiais a 2026-11-08:
+# - base: índice multi-arquitectura de python:3.13-slim-trixie (Python 3.13.18, Debian 13), lido no Docker Hub
+#   (registry-1.docker.io/v2/library/python/manifests/3.13-slim-trixie, cabeçalho docker-content-digest)
+# - gh: https://github.com/cli/cli/releases/download/v2.103.3/gh_2.103.3_checksums.txt
+# - claude: canal stable (https://downloads.claude.ai/claude-code-releases/stable = 2.1.311) e sha256 de
+#   https://downloads.claude.ai/claude-code-releases/2.1.311/manifest.json (linux-x64, linux-arm64)
+
+FROM python:3.13-slim-trixie@sha256:e48f59cdba69a3cbd9ed2cf0f348d90d45a8d350d98134cf1070bc106ee9ed90 AS descarregar
+ARG TARGETARCH
+ARG GH_VERSAO=2.103.3
+ARG GH_SHA256_AMD64=4c806978ffce1cec70853302a56d70ac6da4f19bae7adca4e1a8ab00633dd91d
+ARG GH_SHA256_ARM64=ee32df2323c8847f5fac6cb6b4b69ca75828e9329a8f22f677021f7b3306ce63
+ARG CLAUDE_VERSAO=2.1.311
+ARG CLAUDE_SHA256_AMD64=86dc1fcc69498159eaf15f446613e847010f9036bfbbdffd4c49350be8489ada
+ARG CLAUDE_SHA256_ARM64=2e2496c9a8065df93acb0fca2d341f59a6b8777649b2e025ab8c9bcd5eef61f3
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends ca-certificates curl \
+ && rm -rf /var/lib/apt/lists/*
+WORKDIR /descarga
+RUN set -eu; \
+    arq="${TARGETARCH:-$(dpkg --print-architecture)}"; \
+    case "$arq" in \
+      amd64) gh_sha="$GH_SHA256_AMD64"; claude_arq=x64; claude_sha="$CLAUDE_SHA256_AMD64" ;; \
+      arm64) gh_sha="$GH_SHA256_ARM64"; claude_arq=arm64; claude_sha="$CLAUDE_SHA256_ARM64" ;; \
+      *) echo "arquitectura não suportada: $arq" >&2; exit 1 ;; \
+    esac; \
+    gh_tar="gh_${GH_VERSAO}_linux_${arq}.tar.gz"; \
+    curl -fsSLo "$gh_tar" "https://github.com/cli/cli/releases/download/v${GH_VERSAO}/${gh_tar}"; \
+    curl -fsSLo claude "https://downloads.claude.ai/claude-code-releases/${CLAUDE_VERSAO}/linux-${claude_arq}/claude"; \
+    printf '%s  %s\n%s  %s\n' "$gh_sha" "$gh_tar" "$claude_sha" claude | sha256sum -c -; \
+    tar -xzf "$gh_tar" --strip-components=2 "gh_${GH_VERSAO}_linux_${arq}/bin/gh"; \
+    chmod 0755 gh claude
+
+FROM python:3.13-slim-trixie@sha256:e48f59cdba69a3cbd9ed2cf0f348d90d45a8d350d98134cf1070bc106ee9ed90
+# git (tarefas), tzdata (fuso do office.yaml), apache2-utils (htpasswd do configurar: bcrypt $2y$12$)
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends ca-certificates git tzdata apache2-utils \
+ && rm -rf /var/lib/apt/lists/*
+COPY --from=descarregar /descarga/gh /descarga/claude /usr/local/bin/
+# utilizador do Office 10001:10001 (omissão de OFFICE_UID). Pastas-pai e pontos de montagem de root, 0755: qualquer
+# OFFICE_UID as atravessa. Os volumes montam-se com nocopy (nada da imagem é copiado para eles); o dono e o modo das
+# raízes dos volumes dá-os o configurar
+RUN groupadd -g 10001 office \
+ && useradd -u 10001 -g 10001 -d /home/office -M -s /bin/bash office \
+ && install -d -o root -g root -m 0755 /dados /dados/tasks /dados/squads /dados/decisoes /dados/biblioteca \
+      /dados/runner-estado /dados/decisoes-fila /dados/quadro /dados/quadro-lancar /dados/runner /dados/push \
+      /home/office /home/office/.claude /home/office/.claude/projects /config /projectos /segredos /proxy
+WORKDIR /app
+COPY officecfg.py office.example.yaml ./
+COPY runner/*.py ./runner/
+# comandos sem ENTRYPOINT (o docker compose exec não passa por ele): ciclo, doctor, parar, configurar.
+# python3 -I: a casa (/home/office) é escrita pelo agente; nada de .pth/usercustomize/PYTHON* de lá, nem como root
+# (o configurar). Os scripts põem /app e /app/runner no sys.path. -u: o -I ignora o PYTHONUNBUFFERED.
+RUN for c in ciclo doctor parar; do \
+      printf '#!/bin/sh\nexec python3 -I -u /app/runner/office_runner.py %s "$@"\n' "$c" > "/usr/local/bin/$c"; \
+    done \
+ && printf '#!/bin/sh\nexec python3 -I -u /app/runner/configurar.py "$@"\n' > /usr/local/bin/configurar \
+ && chmod 0755 /usr/local/bin/ciclo /usr/local/bin/doctor /usr/local/bin/parar /usr/local/bin/configurar
+ENV OFFICE_MODO=docker \
+    OFFICE_CONFIG=/config/office.yaml \
+    OFFICE_SEGREDOS_DIR=/segredos \
+    DISABLE_AUTOUPDATER=1 \
+    HOME=/home/office \
+    PYTHONUNBUFFERED=1 \
+    PYTHONNOUSERSITE=1
+USER 10001:10001
+CMD ["ciclo"]

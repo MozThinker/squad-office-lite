@@ -1,0 +1,389 @@
+# Squad Office Lite 0.1.4, modo Docker. Gerado por runner/gerar_compose.py --modo docker.
+# Primeiro: docker compose run --rm configurar
+# Depois: docker compose up -d e abre http://localhost:8080
+# Opcional: .env ao lado (ver env.example) com OFFICE_ENDERECO, OFFICE_PORTA, OFFICE_PROJECTOS,
+# OFFICE_UID e OFFICE_GID. Sem .env valem as omissões abaixo (${VAR:-omissão}).
+# Nome próprio (o modo VPS é office-lite): os dois modos podem coexistir no mesmo Linux.
+name: office-lite-pc
+services:
+  office:
+    image: ghcr.io/mozthinker/squad-office-lite:0.1.4
+    restart: unless-stopped
+    read_only: true
+    # Pillow descodifica uma miniatura de cada vez (até ~330 MB) + tmpfs das miniaturas + servidor
+    mem_limit: 768m
+    user: "${OFFICE_UID:-10001}:${OFFICE_GID:-10001}"
+    environment:
+      OFFICE_MODO: docker
+      OFFICE_CONFIG: /config/office.yaml
+      # escrito pelo configurar; em falta o Office responde 503 a tudo excepto /healthz
+      OFFICE_PROXY_SEGREDO_FILE: /proxy/segredo
+      TASKS_DIR: /data/tasks
+      CLAUDE_PROJECTS_DIR: /data/claude
+      SQUADS_DIR: /data/squads
+      APROVACOES_DIR: /data/aprovacoes
+      BIBLIOTECA_DIR: /data/biblioteca
+      DECISOES_FILA_DIR: /data/decisoes-fila
+      QUADRO_DIR: /data/quadro
+      QUADRO_LANCAR_DIR: /data/quadro-lancar
+      PUSH_DIR: /data/push
+      RUNNER_ESTADO_DIR: /data/runner-estado
+    # sem capacidades: um servidor HTTP do Python na porta 8080, sem root
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    volumes:
+      - type: volume
+        source: tasks
+        target: /data/tasks
+        read_only: true
+        volume:
+          nocopy: true
+      - type: volume
+        source: claude-projects
+        target: /data/claude
+        read_only: true
+        volume:
+          nocopy: true
+      - type: volume
+        source: squads
+        target: /data/squads
+        read_only: true
+        volume:
+          nocopy: true
+      - type: volume
+        source: decisoes
+        target: /data/aprovacoes
+        read_only: true
+        volume:
+          nocopy: true
+      - type: volume
+        source: biblioteca
+        target: /data/biblioteca
+        read_only: true
+        volume:
+          nocopy: true
+      - type: volume
+        source: decisoes-fila
+        target: /data/decisoes-fila
+        volume:
+          nocopy: true
+      - type: volume
+        source: quadro
+        target: /data/quadro
+        volume:
+          nocopy: true
+      - type: volume
+        source: quadro-lancar
+        target: /data/quadro-lancar
+        volume:
+          nocopy: true
+      - type: volume
+        source: push
+        target: /data/push
+        volume:
+          nocopy: true
+      - type: volume
+        source: runner-estado
+        target: /data/runner-estado
+        read_only: true
+        volume:
+          nocopy: true
+      - type: volume
+        source: config
+        target: /config
+        read_only: true
+        volume:
+          nocopy: true
+      - type: volume
+        source: proxy
+        target: /proxy
+        read_only: true
+        volume:
+          nocopy: true
+    tmpfs:
+      - /tmp/miniaturas:size=128m,uid=${OFFICE_UID:-10001},gid=${OFFICE_GID:-10001},mode=0700
+    networks:
+      - office
+  caddy:
+    image: caddy:2.11.9-alpine@sha256:0bbb055bda6793c999bde78b1b5ce3e89f829fb031af2cf50056ea1246559fee
+    restart: unless-stopped
+    depends_on:
+      - office
+    mem_limit: 256m
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      # o /usr/bin/caddy da imagem tem esta file capability; sem ela o execve falha
+      - NET_BIND_SERVICE
+      # ler /proxy (0700, ficheiros 0600 de OFFICE_UID) sendo root
+      - DAC_OVERRIDE
+    # único serviço com portas publicadas; OFFICE_ENDERECO=0.0.0.0 abre-o à rede local
+    ports:
+      - "${OFFICE_ENDERECO:-127.0.0.1}:${OFFICE_PORTA:-8080}:80"
+    configs:
+      - source: caddyfile
+        target: /etc/caddy/Caddyfile
+    volumes:
+      - type: volume
+        source: proxy
+        target: /proxy
+        read_only: true
+        volume:
+          nocopy: true
+      - caddy-data:/data
+      - caddy-config:/config
+    networks:
+      - office
+  runner:
+    image: ghcr.io/mozthinker/squad-office-lite-runner:0.1.4
+    restart: unless-stopped
+    init: true
+    read_only: true
+    user: "${OFFICE_UID:-10001}:${OFFICE_GID:-10001}"
+    # sem capacidades: o tini (init), o parar (kill ao mesmo uid), o git, o gh e o claude não precisam de
+    # nenhuma (o sandbox bubblewrap do Claude Code não é usado no contentor)
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    tmpfs:
+      - /tmp:exec,mode=1777
+    volumes:
+      - type: volume
+        source: tasks
+        target: /dados/tasks
+        volume:
+          nocopy: true
+      - type: volume
+        source: claude-projects
+        target: /home/office/.claude/projects
+        volume:
+          nocopy: true
+      - type: volume
+        source: squads
+        target: /dados/squads
+        volume:
+          nocopy: true
+      - type: volume
+        source: decisoes
+        target: /dados/decisoes
+        volume:
+          nocopy: true
+      - type: volume
+        source: biblioteca
+        target: /dados/biblioteca
+        volume:
+          nocopy: true
+      - type: volume
+        source: decisoes-fila
+        target: /dados/decisoes-fila
+        volume:
+          nocopy: true
+      - type: volume
+        source: quadro
+        target: /dados/quadro
+        volume:
+          nocopy: true
+      - type: volume
+        source: quadro-lancar
+        target: /dados/quadro-lancar
+        volume:
+          nocopy: true
+      - type: volume
+        source: push
+        target: /dados/push
+        volume:
+          nocopy: true
+      - type: volume
+        source: runner-estado
+        target: /dados/runner-estado
+        volume:
+          nocopy: true
+      - type: volume
+        source: runner
+        target: /dados/runner
+        volume:
+          nocopy: true
+      - type: volume
+        source: runner-home
+        target: /home/office
+        volume:
+          nocopy: true
+      - type: volume
+        source: config
+        target: /config
+        read_only: true
+        volume:
+          nocopy: true
+      - type: volume
+        source: segredos
+        target: /segredos
+        read_only: true
+        volume:
+          nocopy: true
+      - type: bind
+        source: "${OFFICE_PROJECTOS:-./projectos}"
+        target: /projectos
+        bind:
+          create_host_path: true
+    networks:
+      - runner
+  configurar:
+    image: ghcr.io/mozthinker/squad-office-lite-runner:0.1.4
+    profiles:
+      - configurar
+    entrypoint: ["configurar"]
+    user: "0:0"
+    read_only: true
+    stdin_open: true
+    tty: true
+    # o no-new-privileges não impede o setuid() para baixo; o chmod das raízes é feito já sem root (sem FOWNER)
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      # fchown das raízes dos volumes para OFFICE_UID:OFFICE_GID
+      - CHOWN
+      # abrir raízes 0700 de OFFICE_UID (proxy, segredos, casa) ao correr de novo
+      - DAC_OVERRIDE
+      # setgroups([]) e setgid(OFFICE_GID) ao largar o root
+      - SETGID
+      # setuid(OFFICE_UID) ao largar o root
+      - SETUID
+    environment:
+      OFFICE_UID: "${OFFICE_UID:-10001}"
+      OFFICE_GID: "${OFFICE_GID:-10001}"
+    tmpfs:
+      - /tmp:mode=1777
+    volumes:
+      - type: volume
+        source: tasks
+        target: /dados/tasks
+        volume:
+          nocopy: true
+      - type: volume
+        source: claude-projects
+        target: /home/office/.claude/projects
+        volume:
+          nocopy: true
+      - type: volume
+        source: squads
+        target: /dados/squads
+        volume:
+          nocopy: true
+      - type: volume
+        source: decisoes
+        target: /dados/decisoes
+        volume:
+          nocopy: true
+      - type: volume
+        source: biblioteca
+        target: /dados/biblioteca
+        volume:
+          nocopy: true
+      - type: volume
+        source: decisoes-fila
+        target: /dados/decisoes-fila
+        volume:
+          nocopy: true
+      - type: volume
+        source: quadro
+        target: /dados/quadro
+        volume:
+          nocopy: true
+      - type: volume
+        source: quadro-lancar
+        target: /dados/quadro-lancar
+        volume:
+          nocopy: true
+      - type: volume
+        source: push
+        target: /dados/push
+        volume:
+          nocopy: true
+      - type: volume
+        source: runner-estado
+        target: /dados/runner-estado
+        volume:
+          nocopy: true
+      - type: volume
+        source: runner
+        target: /dados/runner
+        volume:
+          nocopy: true
+      - type: volume
+        source: runner-home
+        target: /home/office
+        volume:
+          nocopy: true
+      - type: volume
+        source: config
+        target: /config
+        volume:
+          nocopy: true
+      - type: volume
+        source: segredos
+        target: /segredos
+        volume:
+          nocopy: true
+      - type: volume
+        source: proxy
+        target: /proxy
+        volume:
+          nocopy: true
+      - type: bind
+        source: "${OFFICE_PROJECTOS:-./projectos}"
+        target: /projectos
+        bind:
+          create_host_path: true
+    networks:
+      - runner
+configs:
+  caddyfile:
+    content: |
+      # Squad Office Lite, modo Docker: proxy à frente do Office (único serviço com portas publicadas, só HTTP no PC).
+      # O runner/gerar_compose.py --modo docker põe este ficheiro em linha no compose (configs: caddyfile: content:).
+      # Utilizador, hash bcrypt e segredo vêm de ficheiros do volume proxy, escritos pelo configurar ({file.*}: o
+      # conteúdo nunca é interpretado como Caddyfile). Ficheiro em falta: utilizador/hash vazios e o Caddy não arranca.
+      # X-Office-Segredo: só depois do basic auth, substitui o que vier do cliente; o Office exige-o (ADR-006).
+      # Cabeçalhos: o Caddy ordena header antes de basic_auth, por isso o 401 também os leva. Sem HSTS (nunca há HTTPS).
+      # A CSP completa fica de fora (o JS inline obrigaria a hashes).
+      :80 {
+      	header {
+      		Content-Security-Policy "frame-ancestors 'none'"
+      		X-Frame-Options DENY
+      		Referrer-Policy same-origin
+      	}
+      	basic_auth {
+      		{file./proxy/utilizador} {file./proxy/hash}
+      	}
+      	reverse_proxy office:8080 {
+      		header_up X-Office-Segredo {file./proxy/segredo}
+      	}
+      }
+networks:
+  office:
+  runner:
+volumes:
+  tasks:
+  claude-projects:
+  squads:
+  decisoes:
+  biblioteca:
+  decisoes-fila:
+  quadro:
+  quadro-lancar:
+  push:
+  runner-estado:
+  runner:
+  runner-home:
+  config:
+  segredos:
+  proxy:
+  caddy-data:
+  caddy-config:

@@ -1,6 +1,8 @@
 """QA da 0.1.3 (docs): endereços fixados em MozThinker/squad-office-lite/v0.1.3 (D6), só VPS Linux (D4), «Backups»,
 «Desinstalar», `doctor`, `estado.json`, menu das credenciais igual ao do instalador, Task* na omissão, cabeçalhos e
-digests; CHANGELOG com a entrada completa e notas aos ADR-006/007. Só lê ficheiros do repositório."""
+digests; CHANGELOG com a entrada completa e notas aos ADR-006/007. Só lê ficheiros do repositório. Os endereços
+fixados (D6) passaram para o tests/test_qa_0_1_4.py, com o endereço da 0.1.4; o «só VPS Linux» (D4) deixou de valer
+com o modo Docker da 0.1.4 (AC-g2), também testado lá."""
 import re
 import unittest
 from pathlib import Path
@@ -9,12 +11,9 @@ import officecfg
 
 ROOT = Path(__file__).resolve().parent.parent
 README = (ROOT / "README.md").read_text(encoding="utf-8")
-SECURITY = (ROOT / "SECURITY.md").read_text(encoding="utf-8")
 CHANGELOG = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
 DECISIONS = (ROOT / "DECISIONS.md").read_text(encoding="utf-8")
 INSTALL = (ROOT / "install.sh").read_text(encoding="utf-8")
-GET = (ROOT / "get.sh").read_text(encoding="utf-8")
-BASE = "https://raw.githubusercontent.com/MozThinker/squad-office-lite/v0.1.3/get.sh"
 
 
 def seccao(texto: str, titulo: str) -> str:
@@ -25,38 +24,7 @@ def seccao(texto: str, titulo: str) -> str:
     return texto[i:m.start() if m else len(texto)]
 
 
-class Enderecos(unittest.TestCase):
-    def test_um_comando_e_forma_prudente(self):   # CA-12.9 da 0.1.2, com o endereço da 0.1.3
-        inst = seccao(README, "## Instalação")
-        um = f"curl -fsSL {BASE} | bash -s -- --versao 0.1.3"
-        self.assertIn(um, inst)
-        for x in (f"curl -fsSLO {BASE}", "less get.sh", "bash get.sh --versao 0.1.3",
-                  "gh repo clone MozThinker/squad-office-lite", "nunca como `root`",
-                  "não te protege se o próprio repositório for alterado"):
-            self.assertIn(x, inst)
-        self.assertLess(inst.index("**Forma prudente**"), inst.index(um))
-        self.assertIn(f"curl -fsSL {BASE} | bash", seccao(README, "### Actualizar"))
-        self.assertIn(f"curl -fsSL {BASE} | bash", SECURITY)
-        self.assertNotIn("/main/get.sh", README)
-
-    def test_sem_marcadores_nem_versao_antiga(self):   # D6
-        for nome, texto in (("README.md", README), ("SECURITY.md", SECURITY), ("get.sh", GET)):
-            self.assertNotIn("<dono>/<repo>", texto, nome)
-            self.assertNotIn("v0.1.2/get.sh", texto, nome)
-            self.assertNotIn("--versao 0.1.2", texto, nome)
-
-    def test_atestacao_igual_ao_get_sh(self):   # CA-E17
-        cmd = "gh attestation verify squad-office-lite-0.1.3.tar.gz --repo MozThinker/squad-office-lite"
-        self.assertIn(cmd, GET)
-        self.assertIn(cmd, seccao(README, "## Instalação"))
-
-
 class Readme(unittest.TestCase):
-    def test_so_vps_linux(self):   # D4
-        inst = seccao(README, "## Instalação")
-        self.assertIn("só numa VPS Linux", inst)
-        self.assertIn("Windows ou no macOS", inst)
-
     def test_backups_e_desinstalar(self):
         b = seccao(README, "### Backups")
         for x in ("~/office-lite/", "push/", "office-lite_caddy_data", "tar -czf", "umask 077"):

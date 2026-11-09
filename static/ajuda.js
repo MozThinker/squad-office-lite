@@ -14,10 +14,12 @@ export const TAMANHOS = { task: "tarefa curta (até 3 h)", goal: "objectivo com 
 export const rotuloDe = (m, k) => (tem(m, k) ? m[k] : k);
 
 // CA-B7.3: dica pelo prefixo do resultado (o texto gravado pelo runner não muda); null = só o resultado
-export function dicaErro(estado, resultado) {
-  const r = typeof resultado === "string" ? resultado : "";
-  if (r.startsWith("credenciais do Claude")) return "Corre `./install.sh --credenciais` (na pasta `~/squad-office-lite`).";
-  if (estado === "incompleta") return "Terminou sem PR: confirma `gh auth status`.";
+// modo "docker" (0.1.4, AC-o1): os comandos correm no PC, na pasta do compose.yaml
+export function dicaErro(estado, resultado, modo = "vps") {
+  const r = typeof resultado === "string" ? resultado : "", dk = modo === "docker";
+  if (r.startsWith("credenciais do Claude")) return dk ? `Corre \`${COMANDOS_DOCKER.credencial}\` no PC (na pasta do \`compose.yaml\`).`
+    : "Corre `./install.sh --credenciais` (na pasta `~/squad-office-lite`).";
+  if (estado === "incompleta") return dk ? "Terminou sem PR: confirma `docker compose exec runner gh auth status`." : "Terminou sem PR: confirma `gh auth status`.";
   if (r.startsWith("runner.settings inválido")) return "Corrige o ficheiro de `runner.settings` (README, «Runner»).";
   return null;
 }
@@ -56,17 +58,29 @@ export const COMANDOS = {
   gh: "gh auth login",
   doctor: "python3 ~/squad-office-lite/runner/office_runner.py doctor",
 };
+// modo Docker (0.1.4, AC-o1): no PC, na pasta do compose.yaml
+export const COMANDOS_DOCKER = {
+  runner: "docker compose up -d",
+  claude: "docker compose pull; docker compose up -d",
+  credencial: "docker compose run --rm configurar --credenciais",
+  gh: "docker compose run --rm configurar --gh",
+  doctor: "docker compose exec runner doctor",
+};
+// modo do GET api/config; ausente ou outro: vps
+export const comandos = (modo) => (modo === "docker" ? COMANDOS_DOCKER : COMANDOS);
+// onde se correm os comandos (para frases «Corre … no servidor»)
+export const ondeCorre = (modo) => (modo === "docker" ? "no PC" : "no servidor");
 const PASSOS = { runner: "Runner a dar sinal", claude: "claude instalado", credencial: "Credencial do Claude", gh: "Sessão do gh" };
 
 // CA-D15.7: null depois da 1.ª tarefa entregue; senão os 4 passos (runner sem sinal: os outros três ficam ✗ «desconhecido»)
-export function primeirosPassos(state, agoraMs) {
+export function primeirosPassos(state, agoraMs, modo = "vps") {
   if (!state || state.tarefa_entregue === true) return null;
-  const r = state.runner, vivo = !semSinal(r, agoraMs);
+  const r = state.runner, vivo = !semSinal(r, agoraMs), C = comandos(modo);
   const ok = { runner: vivo, claude: vivo && r.claude === "ok", credencial: vivo && r.credencial === "ok", gh: vivo && r.gh === "ok" };
   return Object.keys(PASSOS).map((chave) => ({
     chave, ok: ok[chave],
     rotulo: PASSOS[chave] + (chave !== "runner" && !vivo ? " (desconhecido)" : ""),
-    comando: ok[chave] ? null : chave === "credencial" && vivo && r.credencial === "modo" ? COMANDOS.doctor : COMANDOS[chave], // modo: o doctor diz o ficheiro real
+    comando: ok[chave] ? null : chave === "credencial" && vivo && r.credencial === "modo" ? C.doctor : C[chave], // modo: o doctor diz o ficheiro real
   }));
 }
 

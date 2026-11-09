@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Árvore pública do Squad Office Lite: exporta o HEAD (sem .git, sem docs/) para DESTINO e falha se lá encontrar
-# nomes internos, a lista deles (mesmo na forma nom[e]) ou caminhos de pastas pessoais (/home/<x>, /Users/<x>) que não
-# sejam os exemplos (u, utilizador). Procura também nos ficheiros binários. Não publica nada.
+# Árvore pública do Squad Office Lite: exporta o HEAD (sem .git, sem docs/, sem o .github/dependabot.yml, que só
+# serve o repositório de desenvolvimento) para DESTINO e falha se lá encontrar nomes internos, a lista deles (mesmo na
+# forma nom[e]) ou caminhos de pastas pessoais (/home/<x>, /Users/<x>) que não sejam os exemplos (u, utilizador) nem
+# a casa do utilizador office das imagens do modo Docker. Procura também nos ficheiros binários. Não publica nada.
 #
 #   scripts/preparar-publico.sh [--publica] DESTINO      (DESTINO não pode existir ou tem de estar vazio)
 #
@@ -15,7 +16,7 @@ set -euo pipefail
 CI=.github/workflows/ci.yml
 RX_LINHA_NOMES="^[[:space:]]*nada -niE '([^']+)' -- \\. ':!CHANGELOG\\.md'"
 CASAS='/(hom[e]|User[s])/[[:alnum:]._-]+'
-CASAS_EXEMPLO=':/hom[e]/(u|utilizador)$'
+CASAS_EXEMPLO=':/hom[e]/(u|utilizador|office)$'
 
 erro() { printf 'erro: %s\n' "$*" >&2; exit 1; }
 
@@ -49,6 +50,7 @@ main() {
     mkdir -p "$destino"
   fi
   git -C "$raiz" archive --format=tar HEAD -- . ':(exclude)docs' ':(exclude).github/ci.proposto.yml' \
+    ':(exclude).github/dependabot.yml' \
     | tar -x -C "$destino"
 
   [ -f "$destino/$CI" ] || erro "falta o $CI (é dele que vem a lista de nomes internos)"

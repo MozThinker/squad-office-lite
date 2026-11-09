@@ -164,6 +164,15 @@ FILA = Path(os.environ.get("DECISOES_FILA_DIR", "/data/decisoes-fila"))
 TOKEN = secrets.token_urlsafe(32)   # muda a cada arranque; só sai no /api/state (atrás do basic auth)
 # posto pelo proxy (X-Office-Segredo) depois do basic auth; vazio = sem verificação (dev local, testes). Nunca sai.
 PROXY_SEGREDO = os.environ.get("OFFICE_PROXY_SEGREDO", "")
+# modo Docker: o segredo vem de um ficheiro do volume proxy (escrito pelo configurar); a variável directa ganha.
+# Com _FILE e o ficheiro em falta/inválido: 503 a tudo excepto GET /healthz (nunca aberto); relê no máximo 1×/s até o
+# encontrar (o configurar pode criá-lo depois do arranque); depois de lido não muda até reiniciar.
+PROXY_SEGREDO_FILE = "" if PROXY_SEGREDO else os.environ.get("OFFICE_PROXY_SEGREDO_FILE", "")
+PROXY_SEGREDO_MAX = 1024
+PROXY_FALTA = json.dumps({"error": "Falta configurar: corre `docker compose run --rm configurar`"},
+                         ensure_ascii=False).encode()
+_proxy = {"tentado": float("-inf")}
+_proxy_lock = threading.Lock()
 POST_MAX = 8192
 QUADRO = Path(os.environ.get("QUADRO_DIR", "/data/quadro"))
 QUADRO_POST_MAX = 16384
@@ -176,6 +185,38 @@ RUNNER_ESTADO_MAX = 4096
 RUNNER_ENUM = {"claude": ("ok", "falta"), "credencial": ("ok", "falta", "modo"), "gh": ("ok", "sem sessão")}
 RUNNER_CHAVES = ("v", "em", "versao", "claude", "credencial", "gh")
 RUNNER_VERSAO = re.compile(r"\d+\.\d+\.\d+")
+
+
+def _ler_segredo(caminho: str) -> str:
+    # O_NOFOLLOW, ficheiro regular, ≤ 1 KiB, ASCII visível sem espaços; um \n final sai. Falta ou inválido ⇒ ""
+    try:
+        fd = os.open(caminho, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC)
+    except OSError:
+        return ""
+    try:
+        if not stat.S_ISREG(os.fstat(fd).st_mode):
+            return ""
+        dados = os.read(fd, PROXY_SEGREDO_MAX + 1)
+    except OSError:
+        return ""
+    finally:
+        os.close(fd)
+    if len(dados) > PROXY_SEGREDO_MAX:
+        return ""
+    dados = dados.removesuffix(b"\n")
+    return dados.decode("ascii") if re.fullmatch(rb"[\x21-\x7e]+", dados) else ""
+
+
+def _segredo_proxy() -> str | None:
+    # segredo exigido em X-Office-Segredo: "" = sem verificação (dev local, testes), None = falta configurar (503)
+    global PROXY_SEGREDO
+    if PROXY_SEGREDO or not PROXY_SEGREDO_FILE:
+        return PROXY_SEGREDO
+    with _proxy_lock:
+        if not PROXY_SEGREDO and time.monotonic() - _proxy["tentado"] >= 1.0:
+            _proxy["tentado"] = time.monotonic()
+            PROXY_SEGREDO = _ler_segredo(PROXY_SEGREDO_FILE)
+    return PROXY_SEGREDO or None
 
 
 def _load_tz(name: str):
@@ -201,7 +242,8 @@ def configurar(cfg: dict, aviso: str | None = None) -> None:
     LEADS = {s["id"]: s["lead"] for s in cfg["squads"]}
     FORMATO = {s["id"]: s["formato"] for s in cfg["squads"]}
     LOCAL_TZ = _load_tz(cfg["fuso"])
-    CONFIG_BODY = json.dumps(officecfg.publico(cfg, aviso), ensure_ascii=False).encode()
+    modo = "docker" if os.environ.get("OFFICE_MODO") == "docker" else "vps"
+    CONFIG_BODY = json.dumps({**officecfg.publico(cfg, aviso), "modo": modo}, ensure_ascii=False).encode()
     contacto = cfg["utilizador"]["contacto"]
     PUSH.tz = LOCAL_TZ
     PUSH.contacto = os.environ.get("PUSH_CONTACTO") or (f"mailto:{contacto}" if contacto else "mailto:office@localhost")
@@ -1128,10 +1170,22 @@ class Handler(SimpleHTTPRequestHandler):
         # o único sítio da verificação do segredo do proxy (GET, HEAD e POST); só o /healthz do HEALTHCHECK passa sem ele
         if not super().parse_request():
             return False
-        if not PROXY_SEGREDO or (self.command == "GET" and self.path.partition("?")[0] == "/healthz"):
+        if self.command == "GET" and self.path.partition("?")[0] == "/healthz":
             return True
+        segredo = _segredo_proxy()
+        if segredo == "":
+            return True
+        if segredo is None:
+            self.close_connection = True
+            self.send_response(503)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(PROXY_FALTA)))
+            self.end_headers()
+            if self.command != "HEAD":
+                self.wfile.write(PROXY_FALTA)
+            return False
         recebido = self.headers.get("X-Office-Segredo", "").encode("latin-1", "replace")
-        if hmac.compare_digest(recebido, PROXY_SEGREDO.encode()):
+        if hmac.compare_digest(recebido, segredo.encode()):
             return True
         self.close_connection = True
         self.send_response(403)
@@ -1317,6 +1371,9 @@ configurar(CONFIG, AVISOS[0] if AVISOS else None)
 
 
 if __name__ == "__main__":
+    if _segredo_proxy() is None:
+        print("proxy: falta o segredo (OFFICE_PROXY_SEGREDO_FILE); 503 até correr o configurar", file=sys.stderr,
+              flush=True)
     threading.Thread(target=_usage_loop, daemon=True).start()
     threading.Thread(target=_push_loop, daemon=True).start()   # sem push configurado só verifica a cada 30 s
     ThreadingHTTPServer(("0.0.0.0", int(os.environ.get("PORT", "8080"))), Handler).serve_forever()

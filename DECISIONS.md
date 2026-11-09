@@ -1,7 +1,8 @@
 # Decisões de arquitectura
 
 Os ADR-001…005 vêm do Squad Office em que o Lite se baseia, reescritos para o Lite; o ADR-006 é a passagem a produto
-instalável e o ADR-007 a distribuição pública. «Proxy» = o Caddy do compose (omissão) ou um Traefik existente (`--proxy traefik`).
+instalável, o ADR-007 a distribuição pública e o ADR-008 o modo Docker (no PC, com imagens publicadas). «Proxy» =
+o Caddy do compose (omissão) ou um Traefik existente (`--proxy traefik`).
 
 ## ADR-001 · O Office passa a escrever decisões numa fila JSON (2026-10-31)
 **Contexto:** o Office era só leitura; os pedidos de decisão (`.md` com frontmatter e uma secção `## Decisões`) eram
@@ -257,3 +258,73 @@ servem a árvore pública, que já não tem a lista de nomes; a verificação de
 (`gh attestation verify … --repo MozThinker/squad-office-lite`) é opcional (README e `get.sh`). Nesta versão o
 workflow fica proposto em `docs/propostas-ci/release.yml`, a activar depois do merge. Alternativa recusada: atestar
 na dev (a atestação tem de ser do repositório que o leitor usa).
+
+## ADR-008 · Modo Docker: imagens publicadas no GHCR, runner em contentor e `configurar` por perguntas (2026-11-08)
+**Contexto:** leitores com Windows ou macOS, sem VPS, sem bash nem `git`, querem experimentar a squad no próprio PC.
+O modo VPS (ADR-006/007) exige Ubuntu, systemd e o `claude`, o `gh` e o `git` no host; um porte nativo esbarra no
+`fcntl`, no `killpg` e no `/proc` do runner.
+
+**Decisão:** (1) Segundo modo, só com o Docker Desktop: serviços `office`, `caddy`, `runner` e `configurar` num
+compose gerado por `runner/gerar_compose.py --modo docker` (o `--modo vps` continua a omissão, com os mesmos bytes),
+independente do `office.yaml` (nome `office-lite-pc`; redes `office` e `runner`; só o Caddy publica a porta, por omissão
+em `127.0.0.1:8080`). O `runner` corre `office_runner.py ciclo` (o mesmo código do timer, em `init: true`) com o uid
+10001 (`OFFICE_UID`), raiz só de leitura, sem socket do Docker, e monta `config` e `segredos` só de leitura. O
+`configurar` (perfil próprio, mesma imagem) corre como root só para o `chown` das raízes dos volumes (lista fixa, sem
+seguir symlinks) e larga logo os privilégios; pergunta palavra-passe, projectos, identidade do git, credencial do
+Claude e token do `gh`, e escreve em volumes: o hash bcrypt (`htpasswd`, palavra-passe por stdin), o utilizador e o
+segredo do proxy no `proxy`; o `office.yaml` (validado antes de ir para o lugar) no `config`; o `claude.env` no
+`segredos` (`OFFICE_SEGREDOS_DIR`). O Caddyfile vai no próprio compose (`configs.content`, Compose ≥ 2.23.1) e lê os
+segredos com `{file./proxy/…}`; o Office lê o segredo de `OFFICE_PROXY_SEGREDO_FILE` e responde 503 «Falta
+configurar» enquanto falta (nunca fica aberto). Dados em volumes nomeados, um por pasta de `officecfg.MOUNTS`, com o
+mesmo `ro`/`rw` do modo VPS; só os projectos são uma pasta do PC (bind em `/projectos`). O modo vem de
+`OFFICE_MODO=docker` (imagem e compose): o `office.yaml` não ganha chaves. (2) Imagens `linux/amd64` e `linux/arm64`
+do Office e do runner publicadas em `ghcr.io/<dono>/squad-office-lite` e `…-runner` só por um workflow
+`workflow_dispatch` (`imagens.yml`) do repositório público, depois do `release.yml` e sobre a release em rascunho:
+atesta as imagens (`actions/attest`, guardado também no registry) e gera o `compose.yaml` com as imagens fixadas por
+`tag@sha256:`, que atesta e anexa à release com o `env.example`; publicar a release continua manual. Usa só o token
+do próprio workflow (`packages: write`), sem segredos configurados. A CI dos PRs nunca publica. (3) O token da
+subscrição é gerado pelo leitor (`docker compose run --rm runner claude setup-token`, numa janela à parte) e colado
+no `configurar`, que o explica antes, valida o formato e o grava `0600` no volume `segredos`; o programa nunca corre o
+`setup-token` nem lê `~/.claude`.
+
+**Desvios:** ao ADR-006 («imagem publicada em registry» recusada; «o Lite não publica nada») e ao ADR-007
+(alternativa recusada «imagem pré-construída num registry»): sem bash nem `git` no PC, construir localmente não é
+opção; o modo VPS continua a construir localmente. Ao ADR-007 (1) («o instalador deixa de pedir e de gravar o token da
+subscrição»): no PC o leitor não chega ao volume para escrever o ficheiro ele próprio; mantém-se que o programa nunca
+obtém o token por si. Nas regras do `CLAUDE.md`, «a CI nunca publica imagens» passa a «a CI dos PRs nunca publica;
+única excepção, o `imagens.yml` do repositório público».
+
+**Alternativas recusadas:** construir as imagens no PC (exige `git`/bash e minutos de build); WSL2 à mão; porte
+nativo do runner; o Office sem Caddy em `localhost` (uma rota que lança agentes sem palavra-passe na rede local);
+snippet `import` ou entrypoint `sh` no Caddy para os segredos (validação e escrita a mais, segredos no ambiente);
+`bcrypt` por pip (dependência nova); `configurar` como `run runner configurar` (o runner, onde corre o agente, não
+pode montar o `proxy`); o instalador oficial do `claude` no build (vai sempre buscar o `latest` primeiro): o binário
+vem por download directo da versão fixada (`CLAUDE_VERSAO`), conferido com o sha256 do `manifest.json`, como o `gh`
+(sha256 do `checksums.txt`); pastas do PC (bind mounts) para os dados (lentos e com donos estranhos no Windows).
+
+**Consequências:** um ficheiro (`compose.yaml`) e três comandos (`configurar`, `up -d`, abrir o browser), o mesmo
+código do runner nos dois modos e nenhuma dependência Python nova. Os nomes das imagens, do `compose.yaml`, do
+`env.example`, dos serviços e dos volumes passam a contrato público: mudar exige manter os antigos. O `compose.yaml`
+não entra no `SHA256SUMS` (o `get.sh` exige uma só linha): a integridade vem da atestação dele e dos digests lá
+dentro. Os pacotes GHCR têm de ser tornados públicos uma vez. As versões do `gh`, do `claude` e da base Python ficam
+fixadas à mão no `Dockerfile.runner` (o Dependabot não lê os `ARG`). No modo Docker o agente deixa de ver a casa do
+utilizador, o `~/.ssh` e as credenciais do Office, e o `office.yaml` e o `claude.env` ficam só de leitura para ele; o
+limite do ADR-007 (agente e runner com o mesmo uid) mantém-se para as filas. O sandbox do Claude Code não é suportado
+no contentor (o isolamento é o contentor). `docker compose restart runner` mata as tarefas em curso, que são retomadas
+(até 2 vezes) uns 5 min depois. Domínio, HTTPS, Web Push e Telegram ficam só no modo VPS. Nada de Docker corre nos testes locais: o fumo do modo Docker (`fumo-docker`, Linux amd64)
+fica proposto em `docs/propostas-ci/ci.yml`; Windows, macOS e arm64 verificam-se à mão. Reverter = deixar de publicar
+e retirar `--modo docker`, `Dockerfile.runner`, `Caddyfile.docker`, `configurar.py` e o `ciclo` (o modo VPS não muda).
+
+**Aprovação:** as decisões (2) imagens no GHCR do repositório público só pelo workflow manual da release e (3) token
+da subscrição colado pelo leitor foram aprovadas pelo mantenedor a 8/11/2026.
+
+**Nota (teste numa VPS Linux, 8/11/2026):** com `OFFICE_UID` diferente de 10001 o runner não escrevia: as pastas da
+imagem eram `0750` de 10001 e o Docker copiava para cada volume vazio o ponto de montagem da imagem, voltando a dar a
+raiz a 10001 a cada arranque (observado; mecanismo em
+https://docs.docker.com/engine/storage/volumes/#populate-a-volume-using-a-container). Daí: (a) `nocopy` em todos os
+volumes salvo `caddy-data`/`caddy-config` (precisam do conteúdo da imagem) e, na imagem do runner, pastas-pai e pontos
+de montagem de root `0755`; o dono e o modo das raízes dá-os só o `configurar` (chown como root, modo já sem root);
+(b) o projecto do compose passa a `office-lite-pc` (o VPS fica `office-lite`): os dois modos coexistem no mesmo Linux;
+(c) todos os serviços com `no-new-privileges` e `cap_drop: [ALL]`; `cap_add` só no `configurar` (`CHOWN`,
+`DAC_OVERRIDE`, `SETGID`, `SETUID`) e no Caddy (`NET_BIND_SERVICE`, file capability do binário da imagem oficial, e
+`DAC_OVERRIDE`, para ler o volume `proxy` 0700 do `OFFICE_UID` sendo root), cada uma justificada no compose.

@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 # Squad Office Lite: instala ou actualiza numa VPS Ubuntu com um comando (ver README, «Instalação»).
 #
-#   curl -fsSL https://raw.githubusercontent.com/MozThinker/squad-office-lite/v0.1.3/get.sh | bash
-#   curl -fsSL https://raw.githubusercontent.com/MozThinker/squad-office-lite/v0.1.3/get.sh | bash -s -- [--versao X.Y.Z] [opções do install.sh]
+#   curl -fsSL https://raw.githubusercontent.com/MozThinker/squad-office-lite/v0.1.4/get.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/MozThinker/squad-office-lite/v0.1.4/get.sh | bash -s -- [--versao X.Y.Z] [opções do install.sh]
 #
 # Descarrega o SHA256SUMS e o squad-office-lite-X.Y.Z.tar.gz das releases do GitHub (a última, ou a de --versao),
 # confirma o sha256, extrai para ~/squad-office-lite (a versão anterior fica em ~/squad-office-lite.anterior-<data>)
 # e corre o install.sh com as outras opções. Os teus dados (a casa do install.sh) não são tocados.
 # Verificação opcional da origem (atestação do GitHub; precisa do gh), com o tarball descarregado à mão:
-#   gh attestation verify squad-office-lite-0.1.3.tar.gz --repo MozThinker/squad-office-lite
+#   gh attestation verify squad-office-lite-0.1.4.tar.gz --repo MozThinker/squad-office-lite
 # Tudo corre dentro de main, chamada na última linha: um download interrompido não executa nada.
 set -euo pipefail
 

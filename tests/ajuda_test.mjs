@@ -4,7 +4,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { ROTULOS, rotuloEstado, rotuloDe, TIPOS, TAMANHOS, dicaErro, lancarParado, faixaRunner, primeirosPassos, projectoNovo, COMANDOS,
-  desvioRelogio } from "../static/ajuda.js";
+  desvioRelogio, COMANDOS_DOCKER, comandos, ondeCorre } from "../static/ajuda.js";
 
 const HTML = readFileSync(new URL("../static/index.html", import.meta.url), "utf8");
 const T0 = Date.parse("2026-11-08T19:30:00+00:00");
@@ -96,7 +96,7 @@ test("desvio do relógio: avisos pela hora do servidor, não pela do telemóvel"
   // ligação: o index.html usa o «now» do /api/state medido à chegada
   assert.match(HTML, /stateEm = Date\.now\(\);/);
   assert.match(HTML, /const agoraS = Date\.now\(\) \+ AJ\.desvioRelogio\(state\.now, stateEm\);/);
-  assert.match(HTML, /AJ\.faixaRunner\(state\.runner, agoraS, TZ\), ps = AJ\.primeirosPassos\(state, agoraS\)/);
+  assert.match(HTML, /AJ\.faixaRunner\(state\.runner, agoraS, TZ\), ps = AJ\.primeirosPassos\(state, agoraS, cfg\.modo\)/);
 });
 
 test("C11.1: projecto do cartão novo", () => {
@@ -140,7 +140,7 @@ test("C14.1/B7.4: o painel da tarefa mostra o rótulo e o resultado escapado com
   const fn = (n) => { const i = HTML.indexOf(`\nfunction ${n}(`); assert.ok(i >= 0, n); return HTML.slice(i, HTML.indexOf("\n}\n", i) + 3); };
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const AJ = await import("../static/ajuda.js");
-  const { erroHtml } = vm.runInNewContext(fn("erroHtml") + "; ({ erroHtml })", { AJ, esc, md: (s) => `<p>${esc(s)}</p>` });
+  const { erroHtml } = vm.runInNewContext(fn("erroHtml") + "; ({ erroHtml })", { AJ, esc, md: (s) => `<p>${esc(s)}</p>`, cfg: {} });   // cfg sem «modo»: vps
   const h = erroHtml({ status: "incompleta", resultado: "sem PR <script>x</script>" });
   assert.match(h, /^<div class="issues">sem PR &lt;script&gt;x&lt;\/script&gt;<\/div><div class="md"><p>Terminou sem PR: confirma `gh auth status`\.<\/p><\/div>$/);
   assert.equal(erroHtml({ status: "concluída", resultado: "tudo bem" }), "");   // concluída: a entrega diz o resto
@@ -153,4 +153,61 @@ test("C14.1/B7.4: o painel da tarefa mostra o rótulo e o resultado escapado com
   assert.match(HTML, /#aviso, #runner-f \{/);   // mesmo padrão visual da faixa de config inválida
   assert.match(HTML, /<a href="#quadro\/novo">Criar o primeiro cartão<\/a>/);
   assert.match(HTML, /\$\{esc\(p\.rotulo\)\}\$\{p\.comando \? `<code>\$\{esc\(p\.comando\)\}<\/code>` : ""\}/);
+});
+
+// ---- 0.1.4 modo Docker (AC-o1): GET api/config traz «modo»; ausente ou desconhecido ⇒ vps
+test("AC-o1: comandos e «onde» por modo; omissão vps", () => {
+  assert.deepEqual(COMANDOS_DOCKER, { runner: "docker compose up -d", claude: "docker compose pull; docker compose up -d",
+    credencial: "docker compose run --rm configurar --credenciais", gh: "docker compose run --rm configurar --gh", doctor: "docker compose exec runner doctor" });
+  assert.deepEqual(Object.keys(COMANDOS_DOCKER), Object.keys(COMANDOS));
+  assert.equal(comandos("docker"), COMANDOS_DOCKER);
+  for (const m of ["vps", undefined, null, "", "Docker", "constructor"]) { assert.equal(comandos(m), COMANDOS, String(m)); assert.equal(ondeCorre(m), "no servidor"); }
+  assert.equal(ondeCorre("docker"), "no PC");
+});
+
+test("AC-o1: primeiros passos no modo docker mostram os comandos docker compose", () => {
+  const mau = primeirosPassos({ runner: { ...RUN, claude: "falta", credencial: "falta", gh: "sem sessão" } }, T0, "docker");
+  assert.deepEqual(mau.map((p) => [p.ok, p.comando]), [[true, null], [false, COMANDOS_DOCKER.claude], [false, COMANDOS_DOCKER.credencial], [false, COMANDOS_DOCKER.gh]]);
+  assert.equal(primeirosPassos({ runner: { ...RUN, credencial: "modo" } }, T0, "docker")[2].comando, "docker compose exec runner doctor");
+  const sem = primeirosPassos({ runner: null }, T0, "docker");
+  assert.deepEqual(sem.map((x) => x.comando), ["docker compose up -d", "docker compose pull; docker compose up -d",
+    "docker compose run --rm configurar --credenciais", "docker compose run --rm configurar --gh"]);
+  assert.deepEqual(primeirosPassos({ runner: RUN }, T0, "docker").map((p) => p.comando), [null, null, null, null]);
+  assert.equal(primeirosPassos({ tarefa_entregue: true, runner: null }, T0, "docker"), null);
+  // modo explícito vps = omissão
+  assert.deepEqual(primeirosPassos({ runner: null }, T0, "vps"), primeirosPassos({ runner: null }, T0));
+});
+
+test("AC-o1: dicas de erro no modo docker; vps igual à omissão", () => {
+  assert.equal(dicaErro("erro", "credenciais do Claude inválidas", "docker"),
+    "Corre `docker compose run --rm configurar --credenciais` no PC (na pasta do `compose.yaml`).");
+  assert.equal(dicaErro("incompleta", null, "docker"), "Terminou sem PR: confirma `docker compose exec runner gh auth status`.");
+  assert.equal(dicaErro("erro", "runner.settings inválido: x", "docker"), dicaErro("erro", "runner.settings inválido: x"));
+  assert.equal(dicaErro("erro", "outra coisa", "docker"), null);
+  for (const [e, r] of [["erro", "credenciais do Claude em falta"], ["incompleta", "x"]]) assert.equal(dicaErro(e, r, "vps"), dicaErro(e, r));
+  assert.ok(!dicaErro("erro", "credenciais do Claude x", "docker").includes("install.sh"));
+});
+
+test("AC-o1: faixa «runner sem sinal» e primeiros passos no escritório, nos dois modos", async () => {
+  const { default: vm } = await import("node:vm");
+  const fn = (n) => { const i = HTML.indexOf(`\nfunction ${n}(`); assert.ok(i >= 0, n); return HTML.slice(i, HTML.indexOf("\n}\n", i) + 3); };
+  const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const AJ = await import("../static/ajuda.js");
+  const pinta = (cfg) => {
+    const el = { "#runner-f": { textContent: "", hidden: true }, "#passos": { hidden: true, html: "" } };
+    const ctx = { AJ, esc, cfg, TZ: "UTC", stateEm: T0 + min(10), Date: { now: () => T0 + min(10) },
+      state: { now: "2026-11-08T19:40:00+00:00", tarefa_entregue: false, runner: null },
+      $: (s) => el[s], setHtml: (e, h) => { e.html = h; } };
+    vm.runInNewContext(fn("renderAjuda") + "; renderAjuda()", ctx);
+    return el;
+  };
+  const vps = pinta({ marca: "x" });   // sem «modo» (servidor antigo): vps
+  assert.equal(vps["#runner-f"].textContent, "O runner ainda não deu sinal. Corre o diagnóstico no servidor: " + COMANDOS.doctor);
+  assert.match(vps["#passos"].html, /<code>systemctl --user enable --now office-runner\.timer<\/code>/);
+  const dk = pinta({ marca: "x", modo: "docker" });
+  assert.equal(dk["#runner-f"].hidden, false);
+  assert.equal(dk["#runner-f"].textContent, "O runner ainda não deu sinal. Corre o diagnóstico no PC: docker compose exec runner doctor");
+  for (const c of Object.values(COMANDOS_DOCKER).slice(0, 4)) assert.ok(dk["#passos"].html.includes(`<code>${esc(c)}</code>`), c);
+  assert.doesNotMatch(dk["#passos"].html, /systemctl|install\.sh|squad-office-lite/);
+  assert.match(HTML, /AJ\?\.dicaErro\(t\.status, t\.resultado, cfg\.modo\)/);
 });

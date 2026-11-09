@@ -463,6 +463,8 @@ def env_claude(cred: dict | None) -> dict:
     primeira de CRED_CHAVES do runner.env (guardada no arranque). Nunca as duas."""
     env = env_base()
     env["CLAUDE_CODE_DISABLE_BACKGROUND_TASKS"] = "1"
+    if os.environ.get("OFFICE_MODO") == "docker":   # raiz só de leitura e versão fixada na imagem
+        env["DISABLE_AUTOUPDATER"] = "1"
     if cred:
         env.update(cred)
     else:
@@ -767,14 +769,17 @@ def settings_base(cfg, cfg_path: str | None) -> dict:
     ler, editar = [], []
     if cfg_path:
         cfg_abs = Path(os.path.abspath(os.path.expanduser(str(cfg_path))))
-        segredos = [cfg_abs.parent / n for n in (officecfg.CLAUDE_ENV, "runner.env", ".env")]
+        cred = officecfg.credenciais_claude(cfg_path)   # ao lado da config ou em $OFFICE_SEGREDOS_DIR
+        segredos = [cred, cred.parent / "runner.env", cfg_abs.parent / ".env"]
         ler += [_regra("Read", f) for f in segredos]
         editar += [_regra("Edit", f) for f in segredos] + [_regra("Edit", cfg_abs)]
     cred_home = [home / x for x in (".claude/.credentials.json", ".git-credentials", ".netrc", ".docker/config.json",
                                     ".config/systemd/**")]
     executa = [home / x for x in (".claude/settings.json", ".claude/settings.local.json", ".bashrc", ".profile",
                                   ".bash_profile", ".local/bin/**")]
-    ler += ["Read(//**/.env)", "Read(//**/.env.*)", _regra("Read", home / ".config" / "gh" / "**"),
+    if os.environ.get("OFFICE_MODO") == "docker":   # casa = volume runner-home: site-packages do utilizador e git
+        executa += [home / ".local" / "**", home / ".gitconfig"]
+    ler +=["Read(//**/.env)", "Read(//**/.env.*)", _regra("Read", home / ".config" / "gh" / "**"),
             _regra("Read", home / ".ssh" / "**")] + [_regra("Read", f) for f in cred_home] + ["Read(//proc/**)"]
     editar += [_regra("Edit", f) for f in cred_home + executa]
     editar += [_regra("Edit", officecfg.caminho(cfg, k) / "**")

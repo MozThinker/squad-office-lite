@@ -1,6 +1,6 @@
 // Quadro (kanban), lazy em #quadro. Funções puras testadas em node; DOM só a partir de abrir(). O servidor decide colunas e ordem.
 // HTML: tudo do servidor passa por esc()/md(); «…H()» devolve HTML escapado.
-import { rotuloEstado, rotuloDe, TIPOS, TAMANHOS, dicaErro, lancarParado, projectoNovo, COMANDOS, desvioRelogio } from "./ajuda.js";
+import { rotuloEstado, rotuloDe, TIPOS, TAMANHOS, dicaErro, lancarParado, projectoNovo, comandos, ondeCorre, desvioRelogio } from "./ajuda.js";
 
 export const COL = {
   ideias: ["✦", "Sem ideias guardadas. Quando te lembrares de uma, carrega em + Cartão."],
@@ -230,6 +230,7 @@ const q = (s) => A.root.querySelector(s), qa = (s) => [...A.root.querySelectorAl
 const el = (id) => q(`.q-board .q-card[data-id="${CSS.escape(id)}"]`);
 const agora = () => Date.now();
 const agoraSrv = () => Date.now() + (S.desvio || 0); // para comparar com datas do servidor (desvio pelo «agora» do GET)
+const doctorTxt = () => { const o = ondeCorre(A.cfg?.modo); return `${o[0].toUpperCase() + o.slice(1)}: ${comandos(A.cfg?.modo).doctor}`; }; // «No servidor: …» / «No PC: …»
 const reduz = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
 const largo = () => matchMedia("(min-width: 900px)").matches;
 const cols = () => S.d?.colunas.map((c) => c.chave) || [];
@@ -466,7 +467,7 @@ function avisos() {
   const d = S.d, msgs = [S.erro && "Sem ligação ao Office. A mostrar o último estado.",
     d && !d.escrita && `Só leitura: ${d.aviso || "sem pasta do quadro"}. Não dá para criar nem mover cartões.`,
     d?.invalidos && `${d.invalidos} ${d.invalidos === 1 ? "cartão inválido ignorado" : "cartões inválidos ignorados"} no cartoes.json.`,
-    S.doctor && d?.cartoes.some((c) => lancarParado(c.lancamento, agoraSrv())) && `No servidor: ${COMANDOS.doctor}`].filter(Boolean);
+    S.doctor && d?.cartoes.some((c) => lancarParado(c.lancamento, agoraSrv())) && doctorTxt()].filter(Boolean);
   q(".q-aviso").hidden = !msgs.length;
   setHtml(q(".q-aviso"), msgs.map(esc).join(" ") + (S.erro ? ` <button type="button" class="q-lnk" data-a="recarregar">Tentar de novo</button>` : ""));
 }
@@ -519,7 +520,7 @@ function clique(e) {
     tarefa: () => { const t = cartao(card?.dataset.id ?? S.dr.id)?.links?.tarefa; if (t && A.abrirTarefa(t) === false) aviso("Esta execução já não está no escritório."); },
     exec: () => acc.tarefa(), lock: () => {},
     percebi: () => { gravarDica(globalThis.localStorage); q(".q-dica").hidden = true; q("#q-h").focus(PS); },
-    retentar: async () => { S.doctor = true; await carregar(); avisos(); anuncia(`No servidor: ${COMANDOS.doctor}`); }, // C12.2: só relê, nunca POST
+    retentar: async () => { S.doctor = true; await carregar(); avisos(); anuncia(doctorTxt()); }, // C12.2: só relê, nunca POST
     lcancel: () => !S.dr.busy && fecharDr(true),
     lmover: () => { if (S.dr.busy) return; const { id, posicao } = S.dr, a = deLancar(S.dr); S.dr.enviado = true; fecharDr(); moverJa(a, id, "em-curso", posicao); } };
   if (acc[a]) return acc[a]();
@@ -571,8 +572,8 @@ const LAB = { estado: "Estado", modo: "Modo", branch: "Branch", pr_estado: "PR",
   abertas: "Decisões abertas", criado: "Criado", sonda: "Sonda", falha: "Falhas seguidas", nome: "Ficheiro", data: "Data" };
 const BLOCO = { resultado: "Resultado", resumo: "Resumo", ultimo: "Último erro" };
 // blocos de texto do detalhe (resultado já mascarado no servidor, sempre escapado) e a dica com o comando que resolve (B7)
-export function blocosH(dt, esc, md) {
-  const dica = dicaErro(dt.estado, dt.resultado);
+export function blocosH(dt, esc, md, modo = "vps") {
+  const dica = dicaErro(dt.estado, dt.resultado, modo);
   return Object.entries(BLOCO).filter(([k]) => typeof dt[k] === "string" && dt[k]).map(([k, l]) => `<h3>${esc(l)}</h3><p class="q-blk">${esc(dt[k])}</p>`).join("")
     + (dica ? `<div class="q-dica2 md">${md(dica)}</div>` : "");
 }
@@ -592,7 +593,7 @@ function detalheH(c) {
   ls.push(linhaH("Id", c.id));
   return `<dl class="q-dl">${ls.join("")}</dl>`
     + (fs.length ? `<p class="q-fases" aria-label="Fases">${fs.map(([k, v]) => `<span class="q-fa${v ? " q-ok" : ""}">${v ? "✓" : "○"} ${esc(k)}</span>`).join("")}</p>` : "")
-    + blocosH(dt, esc, A.md)
+    + blocosH(dt, esc, A.md, A.cfg?.modo)
     + (l?.estado === "erro" ? `<h3>Erro ao lançar</h3><p class="q-blk">${esc(l.erro || "sem detalhe")}</p>` : "");
 }
 

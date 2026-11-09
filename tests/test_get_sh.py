@@ -269,13 +269,14 @@ class Estatico(unittest.TestCase):
         for v in ("DONO=${OFFICE_LITE_DONO:-", "REPO=${OFFICE_LITE_REPO:-", "BASE=${OFFICE_LITE_URL:-"):
             self.assertIn(v, texto)
 
-    def test_cabecalho_0_1_3(self):   # CA-E17.3, CA-E17.4
+    def test_cabecalho_0_1_4(self):   # CA-E17.3, CA-E17.4 (endereço da 0.1.4, AC-g3)
         texto = GET.read_text(encoding="utf-8")
         cab = texto[:texto.index("set -euo pipefail")]
         self.assertNotIn("<dono>/<repo>", texto)
         self.assertNotIn("0.1.2", texto)
-        self.assertEqual(cab.count("https://raw.githubusercontent.com/MozThinker/squad-office-lite/v0.1.3/get.sh"), 2)
-        self.assertIn("gh attestation verify squad-office-lite-0.1.3.tar.gz --repo MozThinker/squad-office-lite", cab)
+        self.assertNotIn("v0.1.3/get.sh", texto)
+        self.assertEqual(cab.count("https://raw.githubusercontent.com/MozThinker/squad-office-lite/v0.1.4/get.sh"), 2)
+        self.assertIn("gh attestation verify squad-office-lite-0.1.4.tar.gz --repo MozThinker/squad-office-lite", cab)
         self.assertIn("ex.: --versao 0.1.3", texto)
         self.assertIn("DONO=${OFFICE_LITE_DONO:-MozThinker}", texto)
         self.assertIn("REPO=${OFFICE_LITE_REPO:-squad-office-lite}", texto)

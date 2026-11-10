@@ -2,7 +2,8 @@
 
 ## Por publicar
 
-Só documentação e modelos para os testers da comunidade; o código do Office e do runner não muda.
+Só documentação e modelos para os testers da comunidade (agora também em inglês); o código do Office e do runner
+não muda.
 
 ### Added
 
@@ -24,6 +25,15 @@ Só documentação e modelos para os testers da comunidade; o código do Office 
   issue pedem a edição do Windows.
 - **Testes:** a árvore pública (`scripts/preparar-publico.sh`) leva os ficheiros novos e eles passam no filtro de
   nomes internos e caminhos pessoais.
+- **Documentação em inglês (fase A):** `README.en.md`, `CONTRIBUTING.en.md` e `SECURITY.en.md` (tradução dos
+  ficheiros PT, com os mesmos comandos, blocos de código e caminhos; o texto do ecrã fica em PT, com a tradução entre
+  parênteses, porque a interface ainda é só PT) e `CODE_OF_CONDUCT.en.md` (Contributor Covenant 2.1 original em
+  inglês, consultado a 9/11/2026, com a mesma regra de queixas: só o reporte privado do GitHub). Cada par tem no topo
+  a ligação `🇬🇧 English | 🇵🇹 Português`; o `README.md` continua em PT, com as mesmas secções e âncoras.
+- **Modelos bilingues:** os modelos de issue, o `config.yml` e o modelo de PR passam a ter os rótulos e as
+  descrições «PT / EN» no mesmo formulário.
+- **Testes:** paridade entre cada `.en.md` e o PT (o mesmo número de secções `##` e os mesmos blocos de código, byte a
+  byte), ligações cruzadas, âncoras internas, modelos bilingues e a árvore pública com os ficheiros em inglês.
 
 ## Lite 0.1.4 (2026-11-09)
 

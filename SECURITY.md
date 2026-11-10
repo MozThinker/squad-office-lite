@@ -1,5 +1,7 @@
 # Segurança
 
+🇬🇧 [English](SECURITY.en.md) | 🇵🇹 **Português**
+
 ## Como reportar uma falha
 
 Usa o reporte privado do GitHub: no repositório, separador **Security** → **Report a vulnerability**. Só tu e os

@@ -1,8 +1,8 @@
 blank_issues_enabled: false
 contact_links:
-  - name: Ideias e perguntas
+  - name: Ideias e perguntas / Ideas and questions
     url: https://github.com/MozThinker/squad-office-lite/discussions
-    about: Propostas, dúvidas de instalação e conversa sobre o Lite vão para as Discussions, não para as issues.
-  - name: Falha de segurança (reporte privado)
+    about: Propostas, dúvidas de instalação e conversa sobre o Lite vão para as Discussions, não para as issues. / Proposals, installation questions and talk about the Lite go to Discussions, not issues.
+  - name: Falha de segurança (reporte privado) / Security vulnerability (private report)
     url: https://github.com/MozThinker/squad-office-lite/security/advisories/new
-    about: Nunca numa issue pública. Segue o SECURITY.md e usa o reporte privado do GitHub.
+    about: Nunca numa issue pública. Segue o SECURITY.md e usa o reporte privado do GitHub. / Never in a public issue. Follow SECURITY.en.md and use GitHub's private reporting.

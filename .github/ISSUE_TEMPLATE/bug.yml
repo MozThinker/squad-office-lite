@@ -1,5 +1,5 @@
 name: Bug
-description: Algo no Lite não funciona como o README diz.
+description: Algo no Lite não funciona como o README diz. / Something in the Lite doesn't work as the README says.
 title: "[Bug] "
 labels: ["bug"]
 body:
@@ -11,60 +11,67 @@ body:
         > `office.yaml` reais.** Esta issue é pública: qualquer pessoa a lê. Se precisares de mostrar um ficheiro,
         > troca os segredos por `…`. Falhas de segurança não vêm para aqui: ver o
         > [`SECURITY.md`](https://github.com/MozThinker/squad-office-lite/blob/main/SECURITY.md).
+        >
+        > **Don't paste tokens, API keys, passwords or the contents of your real `.env`, `claude.env`, `runner.env` or
+        > `office.yaml`.** This issue is public: anyone can read it. If you need to show a file, replace the secrets
+        > with `…`. Security vulnerabilities don't belong here: see
+        > [`SECURITY.en.md`](https://github.com/MozThinker/squad-office-lite/blob/main/SECURITY.en.md).
   - type: dropdown
     id: modo
     attributes:
-      label: Modo
+      label: Modo / Mode
       options:
         - VPS (Ubuntu)
-        - Docker no PC (Windows)
-        - Docker no PC (macOS)
-        - Docker no PC (Linux)
+        - Docker no PC (Windows) / Docker on the PC (Windows)
+        - Docker no PC (macOS) / Docker on the PC (macOS)
+        - Docker no PC (Linux) / Docker on the PC (Linux)
     validations:
       required: true
   - type: input
     id: versao
     attributes:
-      label: Versão do Lite
-      description: "A da linha «versão instalada …» do `doctor` (no modo Docker, também a do endereço de onde descarregaste o `compose.yaml`)."
+      label: Versão do Lite / Lite version
+      description: "A da linha «versão instalada …» do `doctor` (no modo Docker, também a do endereço de onde descarregaste o `compose.yaml`). / The one on the «versão instalada …» (installed version) line of `doctor` (in Docker mode, also the one in the URL you downloaded `compose.yaml` from)."
       placeholder: "0.1.4"
     validations:
       required: true
   - type: input
     id: sistema
     attributes:
-      label: Sistema e versão do Docker
-      description: "O sistema, a edição e a versão (por exemplo Windows 11 Home 23H2, macOS 15, Ubuntu 24.04) e a saída de `docker compose version`."
+      label: Sistema e versão do Docker / System and Docker version
+      description: "O sistema, a edição e a versão (por exemplo Windows 11 Home 23H2, macOS 15, Ubuntu 24.04) e a saída de `docker compose version`. / The operating system, edition and version (for example Windows 11 Home 23H2, macOS 15, Ubuntu 24.04) and the output of `docker compose version`."
       placeholder: "Windows 11 23H2, Docker Compose version v2.40.0"
     validations:
       required: true
   - type: textarea
     id: doctor
     attributes:
-      label: Saída do doctor
+      label: Saída do doctor / doctor output
       description: |
         No modo Docker, na pasta do `compose.yaml`: `docker compose exec runner doctor`.
         Na VPS: `python3 ~/squad-office-lite/runner/office_runner.py doctor`.
         Revê-a antes de colar: não deve ter segredos, mas confirma.
+        In Docker mode, in the `compose.yaml` folder, run the first command; on the VPS, the second.
+        Check the output before pasting it: it shouldn't contain secrets, but make sure.
       render: text
     validations:
       required: true
   - type: textarea
     id: aconteceu
     attributes:
-      label: O que aconteceu
-      description: Os passos que fizeste, por ordem, e o que viste (mensagens de erro, capturas de ecrã sem segredos).
+      label: O que aconteceu / What happened
+      description: Os passos que fizeste, por ordem, e o que viste (mensagens de erro, capturas de ecrã sem segredos). / The steps you took, in order, and what you saw (error messages, screenshots without secrets).
     validations:
       required: true
   - type: textarea
     id: esperado
     attributes:
-      label: O que esperavas
+      label: O que esperavas / What you expected
     validations:
       required: true
   - type: textarea
     id: registos
     attributes:
-      label: Registos (opcional)
-      description: "No modo Docker: `docker compose logs runner` (as últimas linhas). Sem segredos."
+      label: Registos (opcional) / Logs (optional)
+      description: "No modo Docker: `docker compose logs runner` (as últimas linhas). Sem segredos. / In Docker mode: `docker compose logs runner` (the last lines). No secrets."
       render: text

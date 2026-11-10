@@ -188,9 +188,11 @@ class PropostasCI(unittest.TestCase):
             self.assertIsNone(re.search(m.group(1), f.read_text(encoding="utf-8"), re.I), f.name)
 
 
+PARES_EN = (("README.md", "README.en.md"), ("CONTRIBUTING.md", "CONTRIBUTING.en.md"),
+            ("SECURITY.md", "SECURITY.en.md"), ("CODE_OF_CONDUCT.md", "CODE_OF_CONDUCT.en.md"))
 COMUNIDADE = ("CONTRIBUTING.md", "CODE_OF_CONDUCT.md", "SECURITY.md", ".github/ISSUE_TEMPLATE/bug.yml",
               ".github/ISSUE_TEMPLATE/teste-instalacao.yml", ".github/ISSUE_TEMPLATE/config.yml",
-              ".github/pull_request_template.md")
+              ".github/pull_request_template.md", *(en for _, en in PARES_EN))
 
 
 def _git(*args):
@@ -305,6 +307,100 @@ class Comunidade(unittest.TestCase):   # documentação e modelos para os tester
             self.assertTrue((destino / ".github" / "pull_request_template.md").is_file())
             self.assertEqual(sorted(x.name for x in (destino / ".github" / "ISSUE_TEMPLATE").iterdir()),
                              ["bug.yml", "config.yml", "teste-instalacao.yml"])
+
+
+_FENCE = re.compile(r"(?ms)^[ \t]*```.*?^[ \t]*```[^\n]*$")
+
+
+def _blocos(texto):
+    return _FENCE.findall(texto)
+
+
+def _titulos(texto, nivel):
+    return re.findall(rf"(?m)^{'#' * nivel} (.+)$", _FENCE.sub("", texto))
+
+
+def _ancora(titulo):   # como o GitHub: minúsculas, sem pontuação (fica \w, - e espaço), espaços por hífens
+    return re.sub(r"[^\w\- ]", "", titulo.strip().lower()).replace(" ", "-")
+
+
+class Ingles(unittest.TestCase):   # documentação em inglês, fase A (9/11/2026): só docs e modelos
+    def ler(self, nome):
+        return (ROOT / nome).read_text(encoding="utf-8")
+
+    def test_paridade_de_seccoes_e_blocos(self):
+        for pt, en in PARES_EN:
+            a, b = self.ler(pt), self.ler(en)
+            self.assertEqual(len(_titulos(a, 2)), len(_titulos(b, 2)), en)
+            self.assertTrue(_blocos(a) or pt == "CODE_OF_CONDUCT.md", pt)
+            self.assertEqual(_blocos(a), _blocos(b), en)   # os mesmos blocos, pela mesma ordem, byte a byte
+
+    def test_readme_mesma_estrutura(self):   # o README.md (PT) mantém secções e âncoras; o EN segue-o nível a nível
+        a, b = self.ler("README.md"), self.ler("README.en.md")
+        for nivel in (2, 3):
+            self.assertEqual(len(_titulos(a, nivel)), len(_titulos(b, nivel)), nivel)
+        for titulo in ("Instalação", "No teu PC (Windows, macOS, Linux) com Docker Desktop", "Referência",
+                       "Credenciais do Claude", "Segurança", "Comunidade", "Contribuir", "Licença"):
+            self.assertIn(titulo, _titulos(a, 2) + _titulos(a, 3))
+
+    def test_ligacoes_cruzadas(self):
+        for pt, en in PARES_EN:
+            a, b = self.ler(pt), self.ler(en)
+            topo_a, topo_b = a[:a.index("\n## ")], b[:b.index("\n## ")]
+            self.assertIn(f"🇬🇧 [English]({en}) | 🇵🇹 **Português**\n", topo_a, pt)
+            self.assertIn(f"🇬🇧 **English** | 🇵🇹 [Português]({pt})\n", topo_b, en)
+
+    def test_ancoras_internas_existem(self):
+        for nome in ("README.md", "README.en.md"):
+            texto = self.ler(nome)
+            ancoras = {_ancora(t) for n in range(1, 7) for t in _titulos(texto, n)}
+            for alvo in set(re.findall(r"\]\(#([^)]+)\)", texto)):
+                self.assertIn(alvo, ancoras, f"{nome}: #{alvo}")
+            for alvo in set(re.findall(r"\]\(README\.en\.md#([^)]+)\)", texto)):
+                self.assertIn(alvo, {_ancora(t) for n in range(1, 7) for t in _titulos(self.ler("README.en.md"), n)})
+
+    def test_ingles_aponta_para_ingles(self):
+        for _, en in PARES_EN:
+            texto = self.ler(en)
+            for pt_ in ("SECURITY.md", "CONTRIBUTING.md", "CODE_OF_CONDUCT.md"):
+                if en != pt_.replace(".md", ".en.md"):
+                    self.assertNotIn(f"]({pt_})", texto, en)
+        self.assertIn("interface is currently in Portuguese only", self.ler("README.en.md"))
+        self.assertIn("«Primeiros passos» (\"First steps\")", self.ler("README.en.md"))
+
+    def test_codigo_de_conduta_original(self):
+        c = self.ler("CODE_OF_CONDUCT.en.md")
+        for x in ("# Contributor Covenant Code of Conduct\n", "version 2.1",
+                  "contributor-covenant.org/version/2/1/code_of_conduct/code_of_conduct.md",
+                  "retrieved on 9 November 2026", "*Report content*", "## Enforcement Guidelines\n",
+                  "Community leaders will follow these Community Impact Guidelines"):
+            self.assertIn(x, c)
+        self.assertNotIn("[INSERT", c)
+        self.assertNotRegex(c, r"[\w.+-]+@[\w-]+\.[\w.]+")
+
+    def test_modelos_bilingues(self):
+        for f in ("bug.yml", "teste-instalacao.yml"):
+            t = self.ler(f".github/ISSUE_TEMPLATE/{f}")
+            rotulos = re.findall(r"(?m)^      label: (.+)$", t)
+            self.assertTrue(rotulos)
+            for r in rotulos:
+                self.assertIn(" / ", r, f)
+            for d in re.findall(r"(?m)^      description: (.+)$", t):
+                if d != "|":   # os blocos têm as duas línguas em linhas separadas
+                    self.assertIn(" / ", d, f)
+            for o in re.findall(r"(?m)^        - (.+)$", t):
+                self.assertTrue(" / " in o or o == "VPS (Ubuntu)", o)
+            self.assertIn("SECURITY.en.md", t)
+            self.assertEqual(t.count("[!WARNING]"), 1, f)   # um só aviso, nas duas línguas
+            self.assertIn("**Don't paste tokens, API keys, passwords", t)
+        self.assertIn("In Docker mode, in the `compose.yaml` folder", self.ler(".github/ISSUE_TEMPLATE/bug.yml"))
+        c = self.ler(".github/ISSUE_TEMPLATE/config.yml")
+        for linha in re.findall(r"(?m)^\s+(?:- name|about): (.+)$", c):
+            self.assertIn(" / ", linha)
+        p = self.ler(".github/pull_request_template.md")
+        for x in ("## O quê e porquê / What and why", "## Lista de verificação / Checklist", "CONTRIBUTING.en.md",
+                  "How your PR gets in", "A single change in this PR."):
+            self.assertIn(x, p)
 
 
 def _git_show(nome):

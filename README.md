@@ -2,6 +2,8 @@
 
 [![Licença: MIT](https://img.shields.io/badge/licen%C3%A7a-MIT-blue)](LICENSE)
 
+🇬🇧 [English](README.en.md) | 🇵🇹 **Português**
+
 Um escritório em pixel art para acompanhares, no browser ou no telemóvel, uma squad de agentes do Claude Code a
 trabalhar nos teus projectos. Escreves um cartão no Quadro, arrastas para «Em curso» e a squad pega no trabalho:
 cria um branch, programa, testa e abre um pull request no GitHub para tu reveres. Tudo corre numa VPS tua ou no

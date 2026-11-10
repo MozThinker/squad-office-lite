@@ -4,6 +4,8 @@ Só o marcador do contacto, na secção «Cumprimento», foi preenchido. -->
 
 # Pacto de Código de Conduta para Colaboradores
 
+🇬🇧 [English](CODE_OF_CONDUCT.en.md) | 🇵🇹 **Português**
+
 ## O nosso compromisso
 
 Nós, enquanto membros, colaboradores e administradores, comprometemo-nos a fazer da participação no nosso projeto uma experiência sem assédio para todos, independentemente da idade, diferença corporal, deficiência visível ou

@@ -1,5 +1,5 @@
-name: Relatório de teste da instalação
-description: Testaste o Lite com o README? Conta-nos como correu (mesmo que tenha corrido bem).
+name: Relatório de teste da instalação / Installation test report
+description: Testaste o Lite com o README? Conta-nos como correu (mesmo que tenha corrido bem). / Tested the Lite with the README? Tell us how it went (even if it went well).
 title: "[Teste] "
 body:
   - type: markdown
@@ -7,69 +7,76 @@ body:
       value: |
         Obrigado por testares. Segue só o README público e conta-nos onde te perdeste: é isso que queremos corrigir.
 
+        Thanks for testing. Follow only the public README (or [`README.en.md`](https://github.com/MozThinker/squad-office-lite/blob/main/README.en.md))
+        and tell us where you got lost: that's what we want to fix. The Office interface is in Portuguese for now.
+
         > [!WARNING]
         > **Não coles tokens, chaves de API, palavras-passe nem o conteúdo do `.env`.** Esta issue é pública.
         > Se encontraste uma falha de segurança, não a descrevas aqui: ver o
         > [`SECURITY.md`](https://github.com/MozThinker/squad-office-lite/blob/main/SECURITY.md).
+        >
+        > **Don't paste tokens, API keys, passwords or the contents of `.env`.** This issue is public.
+        > If you found a security vulnerability, don't describe it here: see
+        > [`SECURITY.en.md`](https://github.com/MozThinker/squad-office-lite/blob/main/SECURITY.en.md).
   - type: dropdown
     id: modo
     attributes:
-      label: Modo
+      label: Modo / Mode
       options:
-        - Docker no PC (Windows)
-        - Docker no PC (macOS)
-        - Docker no PC (Linux)
+        - Docker no PC (Windows) / Docker on the PC (Windows)
+        - Docker no PC (macOS) / Docker on the PC (macOS)
+        - Docker no PC (Linux) / Docker on the PC (Linux)
         - VPS (Ubuntu)
     validations:
       required: true
   - type: input
     id: sistema
     attributes:
-      label: Sistema
-      description: "O sistema, a edição e a versão (no Windows: Home, Pro…), o processador (Intel/AMD ou Apple Silicon/ARM), a memória e a saída de `docker compose version`."
+      label: Sistema / System
+      description: "O sistema, a edição e a versão (no Windows: Home, Pro…), o processador (Intel/AMD ou Apple Silicon/ARM), a memória e a saída de `docker compose version`. / The operating system, edition and version (on Windows: Home, Pro…), the processor (Intel/AMD or Apple Silicon/ARM), the memory and the output of `docker compose version`."
       placeholder: "Windows 11 Home 24H2, Intel i5, 16 GB, Docker Compose version v2.40.0"
     validations:
       required: true
   - type: dropdown
     id: tempo
     attributes:
-      label: Tempo até aos «Primeiros passos» com os 4 ✓
-      description: Desde que começaste o passo 1 do README até veres os quatro ✓ (runner, claude, credencial do Claude, gh).
+      label: Tempo até aos «Primeiros passos» com os 4 ✓ / Time to «Primeiros passos» (First steps) with all 4 ✓
+      description: Desde que começaste o passo 1 do README até veres os quatro ✓ (runner, claude, credencial do Claude, gh). / From starting step 1 of the README until you saw all four ✓ (runner, claude, Claude credential, gh).
       options:
-        - Menos de 15 minutos
-        - 15 a 30 minutos
-        - 30 a 60 minutos
-        - Mais de 1 hora
-        - Não cheguei aos 4 ✓
+        - Menos de 15 minutos / Less than 15 minutes
+        - 15 a 30 minutos / 15 to 30 minutes
+        - 30 a 60 minutos / 30 to 60 minutes
+        - Mais de 1 hora / More than 1 hour
+        - Não cheguei aos 4 ✓ / I didn't get all 4 ✓
     validations:
       required: true
   - type: dropdown
     id: tarefa
     attributes:
-      label: Chegaste à 1.ª tarefa?
+      label: Chegaste à 1.ª tarefa? / Did you get to the first task?
       options:
-        - Sim, e terminou (no projecto exemplo, «Terminou sem PR»)
-        - Sim, e abriu um PR num projecto meu
-        - Lancei, mas acabou em erro
-        - Não cheguei a lançar
+        - Sim, e terminou (no projecto exemplo, «Terminou sem PR») / Yes, and it finished (in the example project, «Terminou sem PR», "Finished without a PR")
+        - Sim, e abriu um PR num projecto meu / Yes, and it opened a PR in one of my projects
+        - Lancei, mas acabou em erro / I launched it, but it ended in an error
+        - Não cheguei a lançar / I didn't get to launch it
     validations:
       required: true
   - type: textarea
     id: readme
     attributes:
-      label: O que não percebeste no README
-      description: A secção (por exemplo «No teu PC…», passo 4) e o que te fez parar, voltar atrás ou procurar fora.
+      label: O que não percebeste no README / What you didn't understand in the README
+      description: A secção (por exemplo «No teu PC…», passo 4) e o que te fez parar, voltar atrás ou procurar fora. / The section (for example “On your PC…”, step 4) and what made you stop, go back or search elsewhere.
     validations:
       required: true
   - type: input
     id: custo
     attributes:
-      label: Custo aproximado do Claude
-      description: Com chave de API, o que a consola da Anthropic mostra para o teste; com a subscrição (Pro/Max), diz qual e se chegaste ao limite.
-      placeholder: "≈ 0,40 USD com chave de API"
+      label: Custo aproximado do Claude / Approximate Claude cost
+      description: Com chave de API, o que a consola da Anthropic mostra para o teste; com a subscrição (Pro/Max), diz qual e se chegaste ao limite. / With an API key, what the Anthropic console shows for the test; with a subscription (Pro/Max), say which one and whether you hit the limit.
+      placeholder: "≈ 0,40 USD com chave de API / ≈ 0.40 USD with an API key"
   - type: textarea
     id: notas
     attributes:
-      label: Mais alguma coisa (opcional)
-      description: Erros que viste, a saída do `docker compose exec runner doctor` se algo ficou ✗ (sem segredos), ideias.
+      label: Mais alguma coisa (opcional) / Anything else (optional)
+      description: Erros que viste, a saída do `docker compose exec runner doctor` se algo ficou ✗ (sem segredos), ideias. / Errors you saw, the output of `docker compose exec runner doctor` if something stayed ✗ (no secrets), ideas.
       render: text

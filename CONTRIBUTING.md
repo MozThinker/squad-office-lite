@@ -1,5 +1,7 @@
 # Contribuir para o Squad Office Lite
 
+🇬🇧 [English](CONTRIBUTING.en.md) | 🇵🇹 **Português**
+
 Obrigado por ajudares. Este guia é curto: lê-o antes de abrires uma issue ou um pull request. Ao participar,
 aceitas o [código de conduta](CODE_OF_CONDUCT.md).
 

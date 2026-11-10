@@ -1,6 +1,6 @@
 <!-- Contributor Covenant 2.1, tradução oficial «Português» (pt), copiada sem alterações de
 https://www.contributor-covenant.org/pt/version/2/1/code_of_conduct/code_of_conduct.md (consultada a 9/11/2026).
-Só o marcador do contacto, na secção «Cumprimento», foi preenchido. -->
+Só o marcador do contacto, na secção «Cumprimento», foi preenchido (o e-mail e uma nota sobre o reporte do GitHub). -->
 
 # Pacto de Código de Conduta para Colaboradores
 
@@ -43,7 +43,7 @@ Este Código de Conduta aplica-se em todos os espaços do projeto e também se a
 
 ## Cumprimento
 
-Os casos de comportamento abusivo, de assédio ou de outro modo inaceitável podem ser comunicados em privado pelo reporte do GitHub: no comentário, issue, discussão ou pull request, menu ⋯ → *Report content*, e escolhe reportar aos mantenedores do repositório. Todas as queixas serão analisadas e investigadas de forma rápida e justa.
+Os casos de comportamento abusivo, de assédio ou de outro modo inaceitável podem ser comunicados em privado por e-mail para info@cubicodigital.com. Também se pode usar o reporte do GitHub (no comentário, issue, discussão ou pull request, menu ⋯ → *Report content*), mas esse reporte vai para o suporte do GitHub, não para os líderes da comunidade deste repositório. Todas as queixas serão analisadas e investigadas de forma rápida e justa.
 
 A equipa do projeto é obrigada a manter a confidencialidade em relação ao elemento que reportou o incidente.
 

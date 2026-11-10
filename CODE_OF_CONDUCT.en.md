@@ -1,6 +1,6 @@
 <!-- Contributor Covenant 2.1, original English text, copied unchanged from
 https://www.contributor-covenant.org/version/2/1/code_of_conduct/code_of_conduct.md (retrieved on 9 November 2026).
-Only the contact placeholder in the "Enforcement" section was filled in. -->
+Only the contact placeholder in the "Enforcement" section was filled in (the email address and a note on GitHub's reporting). -->
 
 # Contributor Covenant Code of Conduct
 
@@ -42,7 +42,7 @@ This Code of Conduct applies within all community spaces, and also applies when 
 
 ## Enforcement
 
-Instances of abusive, harassing, or otherwise unacceptable behavior may be reported privately to the community leaders responsible for enforcement through GitHub's reporting feature: on the comment, issue, discussion or pull request, open the ⋯ menu → *Report content* and choose to report it to the repository maintainers. All complaints will be reviewed and investigated promptly and fairly.
+Instances of abusive, harassing, or otherwise unacceptable behavior may be reported privately to the community leaders responsible for enforcement by email at info@cubicodigital.com. You can also use GitHub's reporting feature (on the comment, issue, discussion or pull request, the ⋯ menu → *Report content*), but that report goes to GitHub Support, not to this repository's community leaders. All complaints will be reviewed and investigated promptly and fairly.
 
 All community leaders are obligated to respect the privacy and security of the reporter of any incident.
 

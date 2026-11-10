@@ -1,5 +1,6 @@
 """Distribuição (0.1.3, bloco A): imagens fixadas por digest, dependências pip em requirements.txt e as propostas
 de CI em docs/propostas-ci/ (só texto; nada aqui corre Docker nem o GitHub Actions)."""
+import hashlib
 import re
 import shutil
 import subprocess
@@ -195,6 +196,42 @@ COMUNIDADE = ("CONTRIBUTING.md", "CODE_OF_CONDUCT.md", "SECURITY.md", ".github/I
               ".github/pull_request_template.md", *(en for _, en in PARES_EN))
 
 
+# Contacto das queixas do código de conduta (decisão do mantenedor, 10/11/2026). O domínio está na lista de nomes
+# internos da CI, por isso aqui só fica o sha256 do endereço; o endereço em claro só pode estar nos dois códigos de
+# conduta (o ci.yml exclui-os do git grep e o preparar-publico.sh aceita só a linha do e-mail).
+CONTACTO_SHA256 = "81f7315e573bd15d2890c3abfa1c3935020c7a6a4de164683bd8e2efbf907231"
+EMAIL = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+")
+TESTE = ".github/ISSUE_TEMPLATE/teste-instalacao.yml"
+FIXTURE_TESTE = ROOT / "tests" / "fixtures" / "issue-teste-instalacao.md"
+CAMPOS_TESTE = ("sistema", "versao_sistema", "versao_lite", "memoria", "docker_antes", "verificacoes", "ajuda",
+                "primeira_tarefa", "minutos", "correu_mal", "readme_confuso", "doctor")
+
+
+def _contacto(testcase, texto, nome):   # exactamente um endereço (o decidido), na secção das queixas
+    emails = EMAIL.findall(texto)
+    testcase.assertTrue(emails, nome)
+    for e in emails:
+        testcase.assertEqual(hashlib.sha256(e.encode()).hexdigest(), CONTACTO_SHA256, f"{nome}: e-mail inesperado")
+
+
+def _campos(yml):   # [(tipo, id, rótulo, [opções])] pela ordem do formulário (sem PyYAML: o formato é o deste repo)
+    campos = []
+    for bloco in re.split(r"(?m)^  - type: ", yml)[1:]:
+        tipo = bloco.split("\n", 1)[0].strip()
+        if tipo == "markdown":
+            continue
+        cid = re.search(r"(?m)^    id: (\S+)$", bloco).group(1)
+        rotulo = re.search(r"(?m)^      label: (.+)$", bloco).group(1)
+        opcoes = re.findall(r"(?m)^        - (?:label: )?(.+)$", bloco)
+        campos.append((tipo, cid, rotulo, opcoes))
+    return campos
+
+
+def _seccoes(corpo):   # o corpo que o GitHub gera: «### <rótulo>», linha vazia, valor
+    partes = re.split(r"(?m)^### (.+)\n", corpo)
+    return [(partes[i], partes[i + 1].strip()) for i in range(1, len(partes), 2)]
+
+
 def _git(*args):
     return subprocess.run(["git", "-C", str(ROOT), *args], capture_output=True, text=True)
 
@@ -213,25 +250,78 @@ class Comunidade(unittest.TestCase):   # documentação e modelos para os tester
         self.assertLess(b.index("[!WARNING]"), b.index("id: modo"))   # o aviso vem antes de qualquer campo
         self.assertIn("docker compose exec runner doctor", self.ler("README.md"))   # o comando é o do README
 
-    def test_modelo_teste(self):
-        t = self.ler(".github/ISSUE_TEMPLATE/teste-instalacao.yml")
-        for x in ("label: Sistema", "«Primeiros passos» com os 4 ✓", "Chegaste à 1.ª tarefa?",
-                  "O que não percebeste no README", "Custo aproximado do Claude", "[!WARNING]"):
+    def test_modelo_teste(self):   # relatório legível por script (10/11/2026): ids e rótulos estáveis e únicos
+        t = self.ler(TESTE)
+        self.assertRegex(t, r"(?m)^labels: \[teste-instalacao\]$")
+        self.assertRegex(t, r'(?m)^title: "\[Teste\] "$')
+        campos = _campos(t)
+        self.assertEqual(tuple(c[1] for c in campos), CAMPOS_TESTE)
+        rotulos = [c[2] for c in campos]
+        self.assertEqual(len(set(rotulos)), len(rotulos))
+        for r in rotulos:
+            self.assertNotRegex(r, r"^[\"'\[{&*!|>%@`#]|: | #")   # escalar simples: o rótulo do YAML é o do corpo
+        tipos = {c[1]: (c[0], c[3]) for c in campos}
+        self.assertEqual(tipos["sistema"], ("dropdown", ["Windows", "macOS", "Linux"]))
+        self.assertEqual(tipos["memoria"][1], ["8 GB", "16 GB", "Mais de 16 GB / More than 16 GB"])
+        self.assertEqual(tipos["docker_antes"][1], ["Sim / Yes", "Não / No"])
+        self.assertEqual([o.split(" / ")[0] for o in tipos["ajuda"][1]],
+                         ["Não", "Sim, nas Discussions", "Sim, por outro meio"])
+        self.assertEqual([o.split(" / ")[0] for o in tipos["primeira_tarefa"][1]],
+                         ["Sim, chegou a «Feito» ou «À espera de …»", "Não", "Não cheguei a lançar"])
+        for cid, tipo in (("versao_sistema", "input"), ("versao_lite", "input"), ("minutos", "input"),
+                          ("correu_mal", "textarea"), ("readme_confuso", "textarea"), ("doctor", "textarea")):
+            self.assertEqual(tipos[cid][0], tipo, cid)
+        self.assertEqual(tipos["verificacoes"][0], "checkboxes")
+        doctor = t[t.index("    id: doctor\n"):]
+        self.assertIn("      render: text\n", doctor)
+        for x in ("«Primeiros passos»", "4 ✓", "edição", "[!WARNING]", "**Este relatório é público.**", "e-mails",
+                  "tapa-os", "SECURITY.md"):
             self.assertIn(x, t)
+        self.assertLess(t.index("[!WARNING]"), t.index("    id: sistema"))   # o aviso vem antes de qualquer campo
+
+    def test_modelo_teste_verificacoes_do_ecra(self):   # as caixas são os 4 «Primeiros passos» do static/ajuda.js
+        js = self.ler("static/ajuda.js")
+        passos = re.search(r"const PASSOS = \{([^}]*)\}", js).group(1)
+        ecra = re.findall(r'\w+: "([^"]+)"', passos)
+        self.assertEqual(len(ecra), 4)
+        caixas = {c[1]: c[3] for c in _campos(self.ler(TESTE))}["verificacoes"]
+        self.assertEqual([c.split(" / ")[0] for c in caixas], ecra)
+
+    def test_fixture_do_relatorio(self):   # contrato do script que conta os relatórios: rótulos do YAML = «### …»
+        campos = _campos(self.ler(TESTE))
+        seccoes = _seccoes(FIXTURE_TESTE.read_text(encoding="utf-8"))
+        self.assertEqual([s[0] for s in seccoes], [c[2] for c in campos])
+        for (tipo, cid, _, opcoes), (_, valor) in zip(campos, seccoes):
+            if valor == "_No response_":
+                continue
+            if tipo == "dropdown":
+                self.assertIn(valor, opcoes, cid)
+            elif tipo == "checkboxes":
+                self.assertEqual(re.findall(r"(?m)^- \[[ x]\] (.+)$", valor), opcoes)
+                self.assertEqual(len(valor.splitlines()), len(opcoes))
+            elif cid == "doctor":
+                self.assertRegex(valor, r"\A```text\n(?s:.*)\n```\Z")
+        vazios = [cid for (_, cid, _, _), (_, v) in zip(campos, seccoes) if v == "_No response_"]
+        self.assertTrue(vazios)   # a fixture mostra também um campo vazio
+        self.assertNotRegex(FIXTURE_TESTE.read_text(encoding="utf-8"), EMAIL)
 
     def test_config_sem_issues_em_branco(self):
         c = self.ler(".github/ISSUE_TEMPLATE/config.yml")
         self.assertRegex(c, r"(?m)^blank_issues_enabled: false$")
-        self.assertIn("/discussions\n", c)
+        self.assertIn("/discussions/categories/ajuda-help\n", c)
+        self.assertIn("/discussions/categories/ideias-ideas\n", c)
         self.assertIn("/security/advisories/new\n", c)
         self.assertIn("SECURITY.md", c)
 
     def test_codigo_de_conduta(self):
         c = self.ler("CODE_OF_CONDUCT.md")
         for x in ("Contributor Covenant", "versão 2.1", "contributor-covenant.org/pt/version/2/1/",
-                  "consultada a 9/11/2026", "Report content"):
+                  "consultada a 9/11/2026", "Report content", "vai para o suporte do GitHub"):
             self.assertIn(x, c)
-        self.assertNotRegex(c, r"[\w.+-]+@[\w-]+\.[\w.]+")   # sem e-mails inventados
+        _contacto(self, c, "CODE_OF_CONDUCT.md")
+        sec = c[c.index("## Cumprimento\n"):]
+        self.assertRegex(sec[:sec.index("\n## ", 1)], r"em privado por e-mail para \S+@\S+\.")
+        self.assertNotIn("reportar aos mantenedores", c)
         self.assertNotIn("[INSIRA", c)
         self.assertNotIn("[CONTACTO A INDICAR", c)
 
@@ -249,6 +339,11 @@ class Comunidade(unittest.TestCase):   # documentação e modelos para os tester
         contrib = r[r.index("## Contribuir\n"):r.index("## Licença\n")]
         self.assertIn("CONTRIBUTING.md", contrib)
         self.assertNotIn("preparar-publico.sh", contrib)   # sem duplicar o CONTRIBUTING
+
+    def test_contribuicoes_em_ingles(self):   # 10/11/2026: issues, discussões e PRs nas duas línguas
+        self.assertIn("Issues, discussões e PRs em português ou em inglês são bem-vindos.", self.ler("CONTRIBUTING.md"))
+        self.assertIn("Issues, discussions and PRs in English or in Portuguese are welcome.",
+                      self.ler("CONTRIBUTING.en.md"))
 
     def test_contributing_explica_como_entra_um_pr(self):   # a árvore pública é gerada: PRs aplicados pelos mantenedores
         c = self.ler("CONTRIBUTING.md")
@@ -284,6 +379,8 @@ class Comunidade(unittest.TestCase):   # documentação e modelos para os tester
             if CI.is_file() else None
         for nome in COMUNIDADE:
             texto = self.ler(nome)
+            if nome.startswith("CODE_OF_CONDUCT"):   # o e-mail das queixas é a única excepção (test_codigo_de_conduta)
+                texto = EMAIL.sub("", texto)
             if m:
                 self.assertIsNone(re.search(m.group(1), texto, re.I), nome)
             for x in re.findall(r"/(?:hom[e]|Users)/[A-Za-z0-9._-]+", texto):
@@ -373,10 +470,14 @@ class Ingles(unittest.TestCase):   # documentação em inglês, fase A (9/11/202
         for x in ("# Contributor Covenant Code of Conduct\n", "version 2.1",
                   "contributor-covenant.org/version/2/1/code_of_conduct/code_of_conduct.md",
                   "retrieved on 9 November 2026", "*Report content*", "## Enforcement Guidelines\n",
-                  "Community leaders will follow these Community Impact Guidelines"):
+                  "Community leaders will follow these Community Impact Guidelines", "goes to GitHub Support"):
             self.assertIn(x, c)
         self.assertNotIn("[INSERT", c)
-        self.assertNotRegex(c, r"[\w.+-]+@[\w-]+\.[\w.]+")
+        _contacto(self, c, "CODE_OF_CONDUCT.en.md")
+        sec = c[c.index("## Enforcement\n"):]
+        self.assertRegex(sec[:sec.index("\n## ", 1)], r"privately .* by email at \S+@\S+\.")
+        self.assertNotIn("report it to the repository maintainers", c)
+        self.assertEqual(EMAIL.findall(c), EMAIL.findall(self.ler("CODE_OF_CONDUCT.md")))
 
     def test_modelos_bilingues(self):
         for f in ("bug.yml", "teste-instalacao.yml"):
@@ -388,8 +489,8 @@ class Ingles(unittest.TestCase):   # documentação em inglês, fase A (9/11/202
             for d in re.findall(r"(?m)^      description: (.+)$", t):
                 if d != "|":   # os blocos têm as duas línguas em linhas separadas
                     self.assertIn(" / ", d, f)
-            for o in re.findall(r"(?m)^        - (.+)$", t):
-                self.assertTrue(" / " in o or o == "VPS (Ubuntu)", o)
+            for o in re.findall(r"(?m)^        - (.+)$", t):   # iguais nas duas línguas: nomes e tamanhos
+                self.assertTrue(" / " in o or o in ("VPS (Ubuntu)", "Windows", "macOS", "Linux", "8 GB", "16 GB"), o)
             self.assertIn("SECURITY.en.md", t)
             self.assertEqual(t.count("[!WARNING]"), 1, f)   # um só aviso, nas duas línguas
             self.assertIn("**Don't paste tokens, API keys, passwords", t)

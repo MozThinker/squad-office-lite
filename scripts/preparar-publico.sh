@@ -35,6 +35,28 @@ copyright_fora() {
   done
 }
 
+# O contacto das queixas do código de conduta é um e-mail público num domínio que está na lista de nomes (decisão do
+# dono do repositório, 10/11/2026): nos dois códigos de conduta, uma linha só é aceite se, sem os e-mails, já não tiver
+# nomes nem caminhos pessoais. Que o único e-mail lá é o endereço decidido confirma-o o tests/test_distribuicao.py
+# (test_codigo_de_conduta e test_codigo_de_conduta_original).
+contacto_fora() {
+  local destino=$1 nomes=$2 achado f n resto
+  local -a fixos=("${@:3}")
+  while IFS= read -r achado; do
+    if [[ "$achado" =~ ^(CODE_OF_CONDUCT(\.en)?\.md):([0-9]+)$ ]]; then
+      f=${BASH_REMATCH[1]}
+      n=${BASH_REMATCH[3]}
+      resto=$(sed -n "${n}p" "$destino/$f" | sed -E 's/[[:alnum:]._%+-]+@[[:alnum:].-]+//g')
+      if ! printf '%s\n' "$resto" | grep -qiE "$nomes" \
+        && ! printf '%s\n' "$resto" | grep -qiF -f <(printf '%s\n' "${fixos[@]}") \
+        && ! printf '%s\n' "$resto" | grep -qE "$CASAS"; then
+        continue
+      fi
+    fi
+    printf '%s\n' "$achado"
+  done
+}
+
 main() {
   local publica=0
   if [ "${1:-}" = --publica ]; then publica=1; shift; fi
@@ -84,7 +106,9 @@ main() {
       grep -rnaoiF -f <(printf '%s\n' "${alts[@]}") . || true
     fi
     grep -rnaoE "$CASAS" . | grep -vE "$CASAS_EXEMPLO" || true
-  } | cut -d: -f1,2 | sed 's|^\./||' | sort -u | copyright_fora "$destino")
+  } | cut -d: -f1,2 | sed 's|^\./||' | sort -u | copyright_fora "$destino" | {
+    if [ "$publica" = 0 ]; then contacto_fora "$destino" "$nomes" "${alts[@]}"; else cat; fi
+  })
   if [ -n "$achados" ]; then
     printf '%s\n' "$achados" >&2
     erro "nomes internos na árvore pública"

@@ -5,6 +5,8 @@
 Thanks for helping. This guide is short: read it before you open an issue or a pull request. By taking part, you
 agree to the [code of conduct](CODE_OF_CONDUCT.en.md).
 
+Issues, discussions and PRs in English or in Portuguese are welcome.
+
 ## Reporting a bug
 
 1. Search the [issues](../../issues) to see whether it already exists. If it does, add your case there.

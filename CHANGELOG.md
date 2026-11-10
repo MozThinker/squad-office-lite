@@ -11,7 +11,10 @@ não muda.
   dos commits e o que se aceita num PR (o modo VPS é o caminho principal). A preparação de uma versão (mantenedores)
   passa do README para aqui.
 - **`CODE_OF_CONDUCT.md`:** Contributor Covenant 2.1, tradução oficial «Português» (consultada a 9/11/2026); as
-  queixas fazem-se em privado pelo reporte do GitHub (*Report content*, aos mantenedores).
+  queixas fazem-se em privado por e-mail (o endereço está na secção «Cumprimento»). Também se pode usar o *Report
+  content* do GitHub, mas num repositório de uma conta pessoal esse reporte vai para o suporte do GitHub, não para os
+  mantenedores (docs.github.com, «Managing how contributors report abuse in your organization's repository»,
+  consultada a 10/11/2026: o reporte aos mantenedores só existe em organizações).
 - **Modelos de issue** (`.github/ISSUE_TEMPLATE/`): `bug.yml` (modo, versão, sistema e Docker, saída do `doctor`, com
   aviso para não colar segredos), `teste-instalacao.yml` (relatório de um tester) e `config.yml` (sem issues em
   branco; ideias e perguntas nas Discussions, falhas de segurança pelo `SECURITY.md`).
@@ -28,10 +31,23 @@ não muda.
 - **Documentação em inglês (fase A):** `README.en.md`, `CONTRIBUTING.en.md` e `SECURITY.en.md` (tradução dos
   ficheiros PT, com os mesmos comandos, blocos de código e caminhos; o texto do ecrã fica em PT, com a tradução entre
   parênteses, porque a interface ainda é só PT) e `CODE_OF_CONDUCT.en.md` (Contributor Covenant 2.1 original em
-  inglês, consultado a 9/11/2026, com a mesma regra de queixas: só o reporte privado do GitHub). Cada par tem no topo
+  inglês, consultado a 9/11/2026, com a mesma regra de queixas: o mesmo e-mail, e o *Report content* vai para o
+  suporte do GitHub). Cada par tem no topo
   a ligação `🇬🇧 English | 🇵🇹 Português`; o `README.md` continua em PT, com as mesmas secções e âncoras.
 - **Modelos bilingues:** os modelos de issue, o `config.yml` e o modelo de PR passam a ter os rótulos e as
   descrições «PT / EN» no mesmo formulário.
+- **Issues, discussões e PRs em português ou em inglês** são bem-vindos (`CONTRIBUTING.md` e `CONTRIBUTING.en.md`).
+- **Relatório de teste legível por script** (`teste-instalacao.yml`): etiqueta `teste-instalacao` automática, título
+  `[Teste] `, aviso no topo (relatório público; sem tokens, chaves, palavras-passe nem e-mails; tapar na saída do
+  `doctor`; falhas de segurança pelo `SECURITY.md`) e campos com `id` e rótulos «PT / EN» estáveis e únicos: sistema,
+  versão do sistema (com a edição do Windows), versão do Lite, memória, Docker já instalado, as 4 verificações dos
+  «Primeiros passos» (caixas com os textos do ecrã), ajuda, 1.ª tarefa, minutos até aos 4 ✓, o que correu mal, o que
+  não se percebeu no README e a saída do `doctor`. Saem o modo e o custo do Claude. O corpo de exemplo que o GitHub
+  gera fica em `tests/fixtures/issue-teste-instalacao.md` (contrato para quem conta os relatórios) e um teste
+  confirma que os rótulos do formulário e os da fixture batem.
+- **Árvore pública e CI:** o e-mail das queixas é a única excepção à lista de nomes internos, só nos dois códigos de
+  conduta (o `preparar-publico.sh` aceita a linha só se, sem o e-mail, já não tiver nomes; o `git grep` de nomes do
+  `ci.yml` deixa de ver os dois códigos de conduta). As ligações do formulário vão para as categorias Ajuda e Ideias.
 - **Testes:** paridade entre cada `.en.md` e o PT (o mesmo número de secções `##` e os mesmos blocos de código, byte a
   byte), ligações cruzadas, âncoras internas, modelos bilingues e a árvore pública com os ficheiros em inglês.
 

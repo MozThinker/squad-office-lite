@@ -59,7 +59,8 @@ jobs:
           for _ in $(seq 20); do curl -fsS -o /dev/null localhost:8099/healthz && break; sleep 0.5; done
           curl -fsS localhost:8099/healthz
           curl -fsS localhost:8099/api/state | python -c 'import json,sys; s = json.load(sys.stdin); assert s["tasks"] == [] and "probes" not in s and "crons" not in s and s["waiting"] == [] and s["aprovacoes"] == []'
-          curl -fsS localhost:8099/ | grep -q "Squad Office"
+          pagina=$(curl -fsS localhost:8099/)   # sem «| grep -q»: com pipefail, o grep fecha o pipe e o curl sai com 23
+          grep -q "Squad Office" <<<"$pagina"
           # /api/config: a do exemplo, sem caminhos (nada começa por / ou ~)
           curl -fsS localhost:8099/api/config | python -c '
           import json, sys
@@ -158,7 +159,8 @@ jobs:
           test "$(curl -s -o /dev/null -w '%{http_code}' http://localhost/)" = 401
           test "$(curl -s -o /dev/null -w '%{http_code}' -u "ci:errada-$RANDOM" http://localhost/api/state)" = 401
           curl -fsS -u "$U" http://localhost/healthz
-          curl -fsS -u "$U" http://localhost/ | grep -q "Squad Office"
+          pagina=$(curl -fsS -u "$U" http://localhost/)   # sem «| grep -q»: com pipefail, o grep fecha o pipe e o curl sai com 23
+          grep -q "Squad Office" <<<"$pagina"
           curl -fsS -u "$U" http://localhost/api/config | python3 -c '
           import json, sys
           c = json.load(sys.stdin)
@@ -388,7 +390,8 @@ jobs:
           test "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/)" = 401
           test "$(curl -s -o /dev/null -w '%{http_code}' -u "ci:errada-$RANDOM" http://localhost:8080/api/state)" = 401
           test "$(curl -s -o /dev/null -w '%{http_code}' -u "$U" http://localhost:8080/)" = 200
-          curl -fsS -u "$U" http://localhost:8080/ | grep -q "Squad Office"
+          pagina=$(curl -fsS -u "$U" http://localhost:8080/)   # sem «| grep -q»: com pipefail, o grep fecha o pipe e o curl sai com 23
+          grep -q "Squad Office" <<<"$pagina"
           curl -fsS -u "$U" http://localhost:8080/api/config | python3 -c '
           import json, sys
           c = json.load(sys.stdin)

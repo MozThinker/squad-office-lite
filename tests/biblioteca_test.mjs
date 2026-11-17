@@ -231,3 +231,9 @@ test("config: produtos = projectos da config + geral; fontes = rótulos da confi
   try { assert.equal(parseRota("#biblioteca?produto=loja").filtros.produto, null); assert.equal(parseRota("#biblioteca?produto=exemplo").filtros.produto, "exemplo"); }
   finally { configurar(CFG); }
 });
+
+test("AC8: a lista é pedida sem cache: \"no-store\" (o browser revalida com o ETag e recebe 304)", () => {
+  const src = readFileSync(new URL("../static/biblioteca.js", import.meta.url), "utf8");
+  assert.ok(!src.includes('"api/biblioteca", { cache: "no-store" }'));
+  assert.match(src, /fetch\(modo \? "api\/biblioteca\?arquivo=1" : "api\/biblioteca"\)/);
+});

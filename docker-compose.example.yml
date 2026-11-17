@@ -8,6 +8,11 @@ services:
     # Pillow descodifica uma miniatura de cada vez (até ~330 MB) + tmpfs das miniaturas + servidor
     mem_limit: 768m
     user: "${OFFICE_UID}:${OFFICE_GID}"
+    # com Docker rootless OFFICE_UID=0: o root do contentor é o teu utilizador no host, sem capacidades
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     environment:
       OFFICE_CONFIG: /config/office.yaml
       OFFICE_PROXY_SEGREDO: ${OFFICE_PROXY_SEGREDO:?falta no .env, corre o install.sh}
@@ -20,6 +25,7 @@ services:
       QUADRO_DIR: /data/quadro
       QUADRO_LANCAR_DIR: /data/quadro-lancar
       PUSH_DIR: /data/push
+      ARQUIVO_FILA_DIR: /data/arquivo-fila
       RUNNER_ESTADO_DIR: /data/runner-estado
     volumes:
       - type: bind
@@ -57,6 +63,10 @@ services:
       - type: bind
         source: "/home/utilizador/office-lite/dados/push"
         target: /data/push
+        read_only: false
+      - type: bind
+        source: "/home/utilizador/office-lite/dados/arquivo-fila"
+        target: /data/arquivo-fila
         read_only: false
       - type: bind
         source: "/home/utilizador/office-lite/dados/runner-estado"

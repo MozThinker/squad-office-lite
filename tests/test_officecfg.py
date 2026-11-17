@@ -218,7 +218,7 @@ class ValidarTest(unittest.TestCase):
     def test_biblioteca(self):
         f = {"id": "notas", "rotulo": "Notas", "pasta": "notas"}
         cfg = validar(com(biblioteca=[f]))
-        self.assertEqual(cfg["biblioteca"], [dict(f, media=False, tipo=None)])
+        self.assertEqual(cfg["biblioteca"], [dict(f, media=False, tipo=None, arquivo_dias=None)])
         self.erro(com(biblioteca=[dict(f, id=f"f{i}x") for i in range(13)]), "biblioteca: tem de ter entre 0 e 12")
         self.erro(com(biblioteca=[dict(f, id="tarefas")]), "reservado")
         self.erro(com(biblioteca=[dict(f, id="aprovacoes-x")]), "reservado")
@@ -231,6 +231,34 @@ class ValidarTest(unittest.TestCase):
         self.erro(com(biblioteca=[dict(f, tipo="outros")]), "biblioteca[0].tipo")
         self.assertEqual(validar(com(biblioteca=[dict(f, tipo="planos")]))["biblioteca"][0]["tipo"], "planos")
         self.erro(com(biblioteca=[dict(f, rotulo="x" * 31)]), "biblioteca[0].rotulo")
+
+    def test_biblioteca_arquivo_dias(self):  # AC19: opcional, 7–3650; ausente = desligado; versao continua 1
+        f = {"id": "notas", "rotulo": "Notas", "pasta": "notas"}
+        for v in (7, 180, 3650):
+            with self.subTest(v=v):
+                cfg = validar(com(biblioteca=[dict(f, arquivo_dias=v)]))
+                self.assertEqual((cfg["biblioteca"][0]["arquivo_dias"], cfg["versao"]), (v, 1))
+        for mau in (6, 3651, 0, -7, "30", True, False, 30.5, [], {}):
+            with self.subTest(mau=mau):
+                self.erro(com(biblioteca=[dict(f, arquivo_dias=mau)]),
+                          "biblioteca[0].arquivo_dias: tem de ser um inteiro entre 7 e 3650")
+        self.erro(com(biblioteca=[dict(f, arquivo_dia=30)]), "biblioteca[0].arquivo_dia: chave desconhecida")
+        self.assertIsNone(validar(com(biblioteca=[f]))["biblioteca"][0]["arquivo_dias"])
+        self.assertIsNone(officecfg.exemplo()["biblioteca"][0]["arquivo_dias"])   # no exemplo vai comentada
+        self.assertIn("    # arquivo_dias: 180", EXEMPLO_TXT.splitlines())
+
+    def test_biblioteca_arquivo_dias_em_yaml(self):
+        # sem aspas é inteiro; «"30"» é texto e true é booleano: recusados
+        base = ("squads:\n  - id: dev\n    nome: Dev\nprojectos:\n  - id: loja\n    nome: Loja\nbiblioteca:\n"
+                "  - id: notas\n    rotulo: Notas\n    pasta: notas\n")
+        self.assertEqual(validar(ler_yaml(base + "    arquivo_dias: 30\n"))["biblioteca"][0]["arquivo_dias"], 30)
+        for mau in ('"30"', "true", "6", "3651", "trinta"):
+            with self.subTest(mau=mau):
+                self.erro(ler_yaml(base + f"    arquivo_dias: {mau}\n"), "biblioteca[0].arquivo_dias")
+
+    def test_publico_sem_arquivo_dias(self):
+        cfg = validar(com(biblioteca=[{"id": "notas", "rotulo": "Notas", "pasta": "notas", "arquivo_dias": 30}]))
+        self.assertEqual(officecfg.publico(cfg, None)["biblioteca"], [{"id": "notas", "rotulo": "Notas"}])
 
     def test_runner(self):
         for k, lo, hi in (("tecto_diario", 1, 100), ("paralelo", 1, 4), ("rotacao_dias", 1, 365)):
@@ -444,7 +472,14 @@ class LayoutTest(unittest.TestCase):
             self.assertTrue(destino.startswith("/data/"))
             self.assertIn(modo, ("ro", "rw"))
         self.assertEqual(sorted(o for o, _, m, _ in officecfg.MOUNTS if m == "rw"),
-                         ["decisoes_fila", "push", "quadro", "quadro_lancar"])
+                         ["arquivo_fila", "decisoes_fila", "push", "quadro", "quadro_lancar"])
+
+    def test_arquivo_fila(self):  # AC16: pasta própria em dados, rw no contentor; a biblioteca continua ro
+        cfg = self.cfg(dados="/d", projectos="/p", claude_projects="/c")
+        self.assertEqual(officecfg.caminho(cfg, "arquivo_fila"), Path("/d/arquivo-fila"))
+        self.assertIn(("0750", Path("/d/arquivo-fila")), officecfg.pastas(cfg))
+        self.assertIn(("arquivo_fila", "/data/arquivo-fila", "rw", "ARQUIVO_FILA_DIR"), officecfg.MOUNTS)
+        self.assertIn(("biblioteca", "/data/biblioteca", "ro", "BIBLIOTECA_DIR"), officecfg.MOUNTS)
 
     def test_mangle(self):  # AC-b1
         self.assertEqual(officecfg.mangle("/tmp/xyz/.worktrees/20261106-x"), "-tmp-xyz--worktrees-20261106-x")

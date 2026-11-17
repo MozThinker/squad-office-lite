@@ -40,6 +40,7 @@ def preparar(tmp, monkeypatch, com_claude=True, dominio="office.example.org", cr
     path_ = [str(falsos(tmp, **saidas))] + ([str(c.BIN)] if com_claude else [])
     monkeypatch.setenv("PATH", os.pathsep.join(path_))
     monkeypatch.setattr(diagnostico, "porta_aberta", lambda p: portas)
+    monkeypatch.setattr(diagnostico, "no_grupo_docker", lambda eu: False)   # o grupo do host não decide o teste
     _, path = c.config(tmp)
     if cred is not None:
         f = tmp / "claude.env"
@@ -79,7 +80,7 @@ def test_falhas_com_o_comando_que_corrige(tmp_path, monkeypatch):
     assert codigo == 1
     eu = diagnostico._eu()
     esperado = {
-        "✗ Docker a responder (grupo docker) → sudo usermod -aG docker " + eu,
+        "✗ Docker a responder → dockerd-rootless-setuptool.sh install (README, «Docker rootless»)",
         f"✗ linger activo (o runner continua sem sessão aberta) → sudo loginctl enable-linger {eu}",
         "✗ timer office-runner.timer activo → systemctl --user enable --now office-runner.timer",
         "✗ claude no PATH → curl -fsSL https://claude.ai/install.sh | bash",
@@ -245,3 +246,108 @@ def test_claude_em_local_bin_ou_no_path_da_unit(tmp_path, monkeypatch):
     unit.parent.mkdir(parents=True)
     unit.write_text(f"[Service]\nEnvironment=PATH={c.BIN}:/usr/bin:/bin\n", encoding="utf-8")
     assert "✓ claude no PATH" in doctor(path)[1]
+
+
+# ---------------------------------------------------------------- Docker rootless e o grupo docker
+
+ROOTLESS = (0, "29.1.0 name=apparmor name=seccomp,profile=builtin name=rootless name=cgroupns")
+
+
+def com_env_uid(tmp, uid="0", gid="0"):
+    env = tmp / ".env"
+    env.write_text(env.read_text(encoding="utf-8") + f"OFFICE_UID='{uid}'\nOFFICE_GID='{gid}'\n", encoding="utf-8")
+    (tmp / "docker-compose.yml").write_text("services:\n  office:\n    x: 1\n  caddy:\n    x: 1\n", encoding="utf-8")
+
+
+def test_rootless_tudo_bem(tmp_path, monkeypatch):
+    path = preparar(tmp_path, monkeypatch, docker=ROOTLESS)
+    com_env_uid(tmp_path)
+    monkeypatch.setattr(diagnostico, "porta_sem_privilegios", lambda: 80)
+    codigo, linhas = doctor(path)
+    assert codigo == 0, linhas
+    assert "✓ Docker rootless a responder" in linhas
+    assert "✓ portas 80/443 permitidas ao Docker rootless" in linhas
+    assert "✓ Office com o teu utilizador (OFFICE_UID=0 e OFFICE_GID=0 no .env)" in linhas
+    assert "Docker a responder (grupo docker)" not in "\n".join(linhas)
+    assert "docker info --format {{.ServerVersion}} {{range .SecurityOptions}}{{.}} {{end}}" in (
+        tmp_path / "chamadas").read_text(encoding="utf-8")
+
+
+def test_rootless_sem_portas_nem_uid(tmp_path, monkeypatch):
+    path = preparar(tmp_path, monkeypatch, docker=ROOTLESS)
+    com_env_uid(tmp_path, uid="1001", gid="1001")
+    monkeypatch.setattr(diagnostico, "porta_sem_privilegios", lambda: 1024)
+    codigo, linhas = doctor(path)
+    assert codigo == 1
+    assert ("✗ portas 80/443 permitidas ao Docker rootless → com o utilizador que tem sudo: echo "
+            "net.ipv4.ip_unprivileged_port_start=80 | sudo tee /etc/sysctl.d/60-office-lite.conf && sudo sysctl "
+            "--system") in linhas
+    assert (f"✗ Office com o teu utilizador (OFFICE_UID=0 e OFFICE_GID=0 no .env) → cd {lancador.RUNNER_REPO} && "
+            "./install.sh") in linhas
+
+
+def test_rootless_com_setcap_no_rootlesskit(tmp_path, monkeypatch):
+    path = preparar(tmp_path, monkeypatch, docker=ROOTLESS, rootlesskit=(0, ""),
+                    getcap=(0, "/usr/bin/rootlesskit cap_net_bind_service=ep"))
+    com_env_uid(tmp_path)
+    monkeypatch.setattr(diagnostico, "porta_sem_privilegios", lambda: 1024)
+    assert "✓ portas 80/443 permitidas ao Docker rootless" in doctor(path)[1]
+
+
+def test_rootless_sem_caddy_nao_verifica_portas(tmp_path, monkeypatch):
+    path = preparar(tmp_path, monkeypatch, docker=ROOTLESS)
+    com_env_uid(tmp_path)
+    (tmp_path / "docker-compose.yml").write_text("services:\n  office:\n    x: 1\n", encoding="utf-8")
+    monkeypatch.setattr(diagnostico, "porta_sem_privilegios", lambda: 1024)
+    assert not any("portas 80/443" in x for x in doctor(path)[1])
+
+
+def test_rootless_parado_diz_como_arrancar(tmp_path, monkeypatch):
+    path = preparar(tmp_path, monkeypatch, docker=(1, ""))
+    unit = tmp_path / ".config" / "systemd" / "user" / "docker.service"
+    unit.parent.mkdir(parents=True)
+    unit.write_text("[Service]\n", encoding="utf-8")
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / ".config"))
+    linhas = doctor(path)[1]
+    assert "✗ Docker a responder → systemctl --user start docker (Docker rootless)" in linhas
+
+
+def test_grupo_docker_avisa_sem_mudar_o_codigo(tmp_path, monkeypatch):
+    path = preparar(tmp_path, monkeypatch)
+    monkeypatch.setattr(diagnostico, "no_grupo_docker", lambda eu: True)
+    codigo, linhas = doctor(path)
+    eu = diagnostico._eu()
+    assert codigo == 0, linhas
+    assert "✓ Docker a responder (grupo docker)" in linhas
+    aviso = [x for x in linhas if x.startswith("⚠ ")]
+    assert aviso == [f"⚠ {eu} está no grupo docker, que equivale a root: um programa de uma squad chega a tudo na VPS "
+                     f"→ muda para o Docker rootless (README, «Docker rootless») e depois: sudo gpasswd -d {eu} docker"]
+
+
+def test_no_grupo_docker_le_o_grupo(monkeypatch):
+    import grp
+    import pwd
+
+    class G:
+        gr_gid, gr_mem = 999, ["fabrica"]
+
+    class P:
+        pw_gid = 1001
+
+    monkeypatch.setattr(grp, "getgrnam", lambda n: G)
+    monkeypatch.setattr(pwd, "getpwnam", lambda n: P)
+    assert diagnostico.no_grupo_docker("fabrica") is True
+    assert diagnostico.no_grupo_docker("dono") is False
+    P.pw_gid = 999
+    assert diagnostico.no_grupo_docker("dono") is True
+
+    def sem(n):
+        raise KeyError(n)
+    monkeypatch.setattr(grp, "getgrnam", sem)
+    assert diagnostico.no_grupo_docker("fabrica") is False
+
+
+def test_env_uid_so_digitos(tmp_path):
+    (tmp_path / ".env").write_text("OFFICE_UID='0'\nOFFICE_GID='$(id)'\n", encoding="utf-8")
+    assert diagnostico.env_uid(tmp_path) == ("0", None)
+    assert diagnostico.env_uid(tmp_path / "nada") == (None, None)

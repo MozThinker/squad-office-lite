@@ -38,6 +38,10 @@ Lançar a partir do Quadro (lancar.py, ADR-005): POST /api/quadro/lancar (mesmas
 pedido JSON em QUADRO_LANCAR_DIR e move o cartão para «Em curso» sob o lock do cartoes.json: 5.ª escrita do serviço.
 O runner do host lança e responde em <id>.feito.json; o GET /api/quadro liga o cartão à execução e, no fim, move-o
 uma vez só (marca <id>.movido.json). O Office nunca lança nada directamente.
+
+Arquivo da Biblioteca (biblioteca.py + arquivo.py, ADR-011): POST /api/biblioteca/arquivo (mesmas verificações do
+/api/decisao) grava um pedido «arquivar|repor» em ARQUIVO_FILA_DIR: 6.ª escrita do serviço. Quem move é o runner do
+host; o Office só lê as `<fonte>/.arquivo/` («Ver arquivados» e links antigos) e nunca escreve nas fontes.
 """
 from __future__ import annotations
 
@@ -179,6 +183,8 @@ QUADRO_POST_MAX = 16384
 LANCAR = Path(os.environ.get("QUADRO_LANCAR_DIR", "/data/quadro-lancar"))
 LANCAR_POST_MAX = 32768
 BIBLIOTECA_DIR = Path(os.environ.get("BIBLIOTECA_DIR", "/data/biblioteca"))
+ARQUIVO_FILA = Path(os.environ.get("ARQUIVO_FILA_DIR") or "/data/arquivo-fila")   # ADR-011: pedidos de arquivo
+ARQUIVO_POST_MAX = 4096
 # estado.json do runner (só leitura, sem segredos): chaves exactas, só enumerados; inválido ⇒ "runner": null
 RUNNER_ESTADO_DIR = Path(os.environ.get("RUNNER_ESTADO_DIR", "/data/runner-estado"))
 RUNNER_ESTADO_MAX = 4096
@@ -233,11 +239,12 @@ PUSH_EVERY_S = 30
 PUSH_ROTAS = ("/api/push/subscrever", "/api/push/cancelar", "/api/push/teste")
 CONFIG_BODY = b"{}"   # corpo do GET /api/config, pré-serializado em configurar
 BIBLIOTECA = biblioteca.Indice({}, TASKS, APROVACOES)
+BIBLIOTECA_ARQ = biblioteca.Indice({}, TASKS, APROVACOES, arquivo=True)
 
 
 def configurar(cfg: dict, aviso: str | None = None) -> None:
     # troca as globais que vêm da config (arranque e testes); cada módulo troca só as suas
-    global SQUADS, LEADS, FORMATO, LOCAL_TZ, CONFIG_BODY, BIBLIOTECA
+    global SQUADS, LEADS, FORMATO, LOCAL_TZ, CONFIG_BODY, BIBLIOTECA, BIBLIOTECA_ARQ
     SQUADS = tuple(s["id"] for s in cfg["squads"])
     LEADS = {s["id"]: s["lead"] for s in cfg["squads"]}
     FORMATO = {s["id"]: s["formato"] for s in cfg["squads"]}
@@ -252,6 +259,8 @@ def configurar(cfg: dict, aviso: str | None = None) -> None:
     push.configurar(cfg)
     biblioteca.configurar(cfg)
     BIBLIOTECA = biblioteca.Indice(biblioteca.dirs(cfg, BIBLIOTECA_DIR), TASKS, APROVACOES)
+    # o índice das `<fonte>/.arquivo/` só varre quando é pedido («Ver arquivados», link antigo de um item arquivado)
+    BIBLIOTECA_ARQ = biblioteca.Indice(biblioteca.dirs(cfg, BIBLIOTECA_DIR), TASKS, APROVACOES, arquivo=True)
 
 
 def _num(v) -> float | int | None:
@@ -1208,7 +1217,7 @@ class Handler(SimpleHTTPRequestHandler):
     def do_GET(self):
         path, _, query = self.path.partition("?")
         if path == "/api/biblioteca" or path.startswith("/api/biblioteca/"):
-            biblioteca.handle(self, "GET", path, query, BIBLIOTECA)
+            biblioteca.handle(self, "GET", path, query, BIBLIOTECA, BIBLIOTECA_ARQ, ARQUIVO_FILA)
             return
         if path == "/api/state":
             self._json(200, _state_cached()[0])
@@ -1250,7 +1259,7 @@ class Handler(SimpleHTTPRequestHandler):
     def do_HEAD(self):
         path, _, query = self.path.partition("?")
         if path == "/api/biblioteca" or path.startswith("/api/biblioteca/"):
-            biblioteca.handle(self, "HEAD", path, query, BIBLIOTECA)
+            biblioteca.handle(self, "HEAD", path, query, BIBLIOTECA, BIBLIOTECA_ARQ, ARQUIVO_FILA)
             return
         super().do_HEAD()
 
@@ -1304,6 +1313,9 @@ class Handler(SimpleHTTPRequestHandler):
         if path in PUSH_ROTAS:
             self._post_push(path)
             return
+        if path == "/api/biblioteca/arquivo":
+            self._post_arquivo()
+            return
         if path != "/api/decisao":
             self._err(404, "não encontrado")
             return
@@ -1347,6 +1359,16 @@ class Handler(SimpleHTTPRequestHandler):
         code, out = lancar.escrever(LANCAR, QUADRO, data, quadro.chaves(), LOCAL_TZ, time.time())
         self._json(code, json.dumps(out, ensure_ascii=False).encode())
 
+    def _post_arquivo(self):
+        # _post_json (413/403/400) → forma, item e arquivável (400) → pedido na fila (202, 409, 429, 503)
+        data = self._post_json(ARQUIVO_POST_MAX)
+        if data is None:
+            return
+        ip = self.headers.get("X-Forwarded-For", "").split(",")[-1].strip() or self.client_address[0]
+        code, out = biblioteca.pedir_arquivo(ARQUIVO_FILA, BIBLIOTECA, BIBLIOTECA_ARQ, data, ip,
+                                             self.headers.get("User-Agent", ""), LOCAL_TZ, time.time())
+        self._json(code, json.dumps(out, ensure_ascii=False).encode())
+
     def _post_push(self, path: str):
         # _post_json (413/403/400) → 503 sem push → validação (400) → acção
         data = self._post_json(push.CORPO_MAX)
@@ -1376,4 +1398,5 @@ if __name__ == "__main__":
               flush=True)
     threading.Thread(target=_usage_loop, daemon=True).start()
     threading.Thread(target=_push_loop, daemon=True).start()   # sem push configurado só verifica a cada 30 s
+    BIBLIOTECA.aquecer()   # 1.º índice da Biblioteca em fundo; até lá /f/ e /mini/ validam directamente no disco
     ThreadingHTTPServer(("0.0.0.0", int(os.environ.get("PORT", "8080"))), Handler).serve_forever()

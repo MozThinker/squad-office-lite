@@ -117,7 +117,9 @@ class ServerTest(unittest.TestCase):
         return tid
 
     def state(self):
-        return server.build_state()["tasks"]
+        # o relógio do NOW com que os ficheiros foram escritos, não o de agora: com a suite longa (≈ 3 min na CI)
+        # o import fica a mais de ACTIVE_S e os subagentes escritos «há 30 s» passavam a parados
+        return server.build_state(NOW)["tasks"]
 
     # --- (a) dev igual a hoje ---
     def test_dev_task_unchanged(self):
@@ -443,7 +445,7 @@ class ServerTest(unittest.TestCase):
         # 1.005 + 2.004 = 3.009 → 3.01 (arredondar a cada soma dava 1.0 + 2.004 → 3.0)
         self.dev_log("d-5dias", json.dumps({"type": "result", "total_cost_usd": 2.004, "num_turns": 1, "duration_ms": 1}))
         self.squad_task(self.sup, "support", "s1", "-x", started_at=(day + timedelta(hours=1)).isoformat())
-        st = server.build_state()
+        st = server.build_state(NOW)   # o «hoje» do NOW do import, não o do relógio (a suite pode passar a meia-noite)
         # v2 (AC-30): terminadas até 30 dias aparecem
         self.assertEqual(sorted(t["id"] for t in st["tasks"]), ["d-5dias", "d-8dias", "d-hoje", "d-sem-inicio", "s1"])
         zero = {"cost_usd": 0, "tasks": 0, "sem_custo": 0}

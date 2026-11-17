@@ -6,6 +6,7 @@ nunca mostra o valor de uma credencial (só formato e modo do ficheiro).
 """
 from __future__ import annotations
 
+import grp
 import json
 import os
 import pwd
@@ -28,6 +29,10 @@ GH_S = 10                         # timeout do `gh auth status`
 GH_CADA_S = 10 * 60               # no máximo uma verificação do gh a cada 10 min
 CMD_S = 10                        # timeout dos comandos do doctor
 TIMER = "office-runner.timer"
+ROOTLESS = "README, «Docker rootless»"
+PORTA_SYSCTL = "/proc/sys/net/ipv4/ip_unprivileged_port_start"
+SYSCTL_CMD = ("com o utilizador que tem sudo: echo net.ipv4.ip_unprivileged_port_start=80 | "
+              "sudo tee /etc/sysctl.d/60-office-lite.conf && sudo sysctl --system")
 ESTADO_VIVO_S = 3 * 60            # doctor no modo Docker: o ciclo grava o estado.json a cada passagem (60 s)
 _DOMINIO = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9.-]{0,251}[A-Za-z0-9])?")
 
@@ -218,6 +223,64 @@ def _unit_path() -> str:
     return m.group(1) if m else ""
 
 
+def no_grupo_docker(eu: str) -> bool:
+    """O utilizador pertence ao grupo docker (membro ou grupo primário): acesso ao daemon root = root na VPS."""
+    try:
+        g = grp.getgrnam("docker")
+    except KeyError:
+        return False
+    try:
+        primario = pwd.getpwnam(eu).pw_gid == g.gr_gid
+    except KeyError:
+        primario = False
+    return eu in g.gr_mem or primario
+
+
+def docker_info() -> tuple[bool, bool]:
+    """(responde, rootless): `docker info` com as opções de segurança do daemon (rootless diz «name=rootless»)."""
+    r = _corre(["docker", "info", "--format", "{{.ServerVersion}} {{range .SecurityOptions}}{{.}} {{end}}"])
+    if r is None or r.returncode != 0:
+        return False, False
+    return True, "name=rootless" in r.stdout.split()
+
+
+def porta_sem_privilegios() -> int:
+    """net.ipv4.ip_unprivileged_port_start do host (1024 se não se ler)."""
+    try:
+        return int(Path(PORTA_SYSCTL).read_text(encoding="ascii").strip())
+    except (OSError, ValueError):
+        return 1024
+
+
+def rootlesskit_com_cap() -> bool:
+    """O rootlesskit tem CAP_NET_BIND_SERVICE (a alternativa ao sysctl na documentação do Docker)."""
+    rk = shutil.which("rootlesskit")
+    r = _corre(["getcap", rk]) if rk else None
+    return r is not None and r.returncode == 0 and "cap_net_bind_service" in r.stdout
+
+
+def env_uid(casa: Path) -> tuple[str | None, str | None]:
+    """OFFICE_UID e OFFICE_GID do .env da casa (só essas linhas; None se faltarem)."""
+    try:
+        linhas = (casa / ".env").read_text(encoding="utf-8").splitlines()
+    except (OSError, UnicodeDecodeError):
+        return None, None
+    v: dict[str, str] = {}
+    for linha in linhas:
+        m = re.fullmatch(r"(OFFICE_UID|OFFICE_GID)='([0-9]{1,10})'", linha)
+        if m:
+            v.setdefault(m.group(1), m.group(2))
+    return v.get("OFFICE_UID"), v.get("OFFICE_GID")
+
+
+def com_caddy(casa: Path) -> bool:
+    """O docker-compose.yml da casa tem o serviço caddy (o Caddy publica as portas 80/443)."""
+    try:
+        return "\n  caddy:\n" in (casa / "docker-compose.yml").read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return False
+
+
 def claude_do_runner() -> bool:
     """claude no PATH da sessão, no da unit do runner ou em ~/.local/bin (onde o instalador oficial o põe)."""
     caminhos = [os.environ.get("PATH", ""), _unit_path(), str(Path.home() / ".local" / "bin")]
@@ -225,7 +288,8 @@ def claude_do_runner() -> bool:
 
 
 def doctor(cfg_path: str) -> tuple[int, list[str]]:
-    """(0 se tudo ✓ senão 1, linhas). Funciona com o office.yaml inválido: nenhuma verificação depende dele."""
+    """(0 se tudo ✓ senão 1, linhas; as linhas ⚠ não contam). Funciona com o office.yaml inválido: nenhuma
+    verificação depende dele."""
     linhas: list[str] = []
 
     def linha(ok: bool, oque: str, corrige: str = "") -> None:
@@ -242,13 +306,29 @@ def doctor(cfg_path: str) -> tuple[int, list[str]]:
         linha(True, "office.yaml válido")
     except officecfg.ConfigErro as e:
         linha(False, f"office.yaml inválido ({e})", f"python3 {repo}/officecfg.py validar {cfg_path}")
-    # Docker e o grupo docker: `docker info` só responde a quem tem acesso ao socket
+    # Docker: rootless (recomendado) ou o daemon root pelo grupo docker; `docker info` só responde a quem lhe chega
+    rootless = False
     if shutil.which("docker") is None:
         linha(False, "Docker não está instalado", "https://docs.docker.com/engine/install/ubuntu/")
     else:
-        r = _corre(["docker", "info", "--format", "{{.ServerVersion}}"])
-        linha(r is not None and r.returncode == 0, "Docker a responder (grupo docker)",
-              f"sudo usermod -aG docker {eu} (e volta a entrar); sudo systemctl start docker")
+        responde, rootless = docker_info()
+        if responde:
+            linha(True, "Docker rootless a responder" if rootless else "Docker a responder (grupo docker)")
+        else:
+            unit = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config") / "systemd/user/docker.service"
+            linha(False, "Docker a responder",
+                  "systemctl --user start docker (Docker rootless)" if unit.exists()
+                  else f"dockerd-rootless-setuptool.sh install ({ROOTLESS})")
+    if rootless:
+        if com_caddy(casa):
+            linha(porta_sem_privilegios() <= 80 or rootlesskit_com_cap(),
+                  "portas 80/443 permitidas ao Docker rootless", SYSCTL_CMD)
+        uid, gid = env_uid(casa)
+        linha(uid == "0" and gid == "0", "Office com o teu utilizador (OFFICE_UID=0 e OFFICE_GID=0 no .env)",
+              f"cd {repo} && ./install.sh")
+    if no_grupo_docker(eu):   # só avisa: o modo do grupo docker continua a funcionar
+        linhas.append(f"⚠ {eu} está no grupo docker, que equivale a root: um programa de uma squad chega a tudo na VPS "
+                      f"→ muda para o Docker rootless ({ROOTLESS}) e depois: sudo gpasswd -d {eu} docker")
     r = _corre(["loginctl", "show-user", eu, "-p", "Linger", "--value"])
     linha(r is not None and r.stdout.strip() == "yes", "linger activo (o runner continua sem sessão aberta)",
           f"sudo loginctl enable-linger {eu}")

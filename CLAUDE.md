@@ -16,9 +16,15 @@ Produto instalável numa VPS ou num PC com Docker Desktop (modo Docker; ver READ
 
 ## Testes
 ```bash
-python -m pytest tests -q
-node --test tests/*.mjs
+python -m pytest tests -q                     # suite completa: ≈ 2,5 min (≈ 150 s; medido a 16/11/2026, 4 núcleos)
+python -m pytest tests/test_biblioteca.py -q  # um ficheiro: ≈ 2–25 s (o test_biblioteca é dos maiores: ≈ 24 s)
+node --test tests/*.mjs                       # ≈ 1 s
 ```
+A suite completa passa os 2 min do timeout por omissão do Bash no Claude Code: correr com `timeout` maior (ex.:
+600000 ms) ou durante o trabalho só os ficheiros tocados. Com 3 suites em paralelo leva o mesmo (≈ 150–155 s cada): o
+tempo é sobretudo espera (servidores HTTP e subprocessos), não CPU.
+Testes de desempenho (`test_r1`/`r2`/`r3`) medem CPU da thread (`tests/tempo.py`), não o relógio; datas e «hoje» vêm
+de um `NOW` fixo passado ao código (`build_state(NOW)`), nunca do relógio a meio do teste.
 Os testes nunca usam a `~` real nem chamam o `claude` verdadeiro (`tests/bin/claude` é um falso). Docker, Caddy,
 systemd e o `install.sh` só correm na CI (job de fumo), não localmente.
 `docker-compose.example.yml` tem de ser igual à saída do gerador (`tests/test_compose.py`) e `compose.example.yaml` à

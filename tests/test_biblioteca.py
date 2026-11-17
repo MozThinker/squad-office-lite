@@ -24,6 +24,7 @@ from unittest import mock
 from urllib.parse import quote
 from zoneinfo import ZoneInfo
 
+import arquivo
 import biblioteca
 import server
 from tests import cfg
@@ -186,7 +187,7 @@ class RegrasTest(Base):
     def test_limite_de_entradas(self):
         for i in range(6):
             self.w(f"relatorios/r{i}.md", "# r")
-        with mock.patch.object(biblioteca, "ENTRADAS_MAX", 3), mock.patch("sys.stderr", new=io.StringIO()) as err:
+        with mock.patch.object(arquivo, "ENTRADAS_MAX", 3), mock.patch("sys.stderr", new=io.StringIO()) as err:
             fs = biblioteca.varrer("relatorios", self.root / "relatorios")
         self.assertEqual(len(fs), 3)
         self.assertIn("varrimento cortado", err.getvalue())
@@ -313,11 +314,14 @@ class RegrasTest(Base):
                 mock.patch("sys.stderr", new_callable=io.StringIO) as err:
             self.now += 61
             s = self.snap()
+            self.idx.aguardar()
             self.snap()
+            self.idx.aguardar()
             self.assertEqual(c.call_count, 1)   # não re-varre a cada pedido
             self.assertIs(s.por_id, antes.por_id)
             self.now += 61
             self.snap()
+            self.idx.aguardar()
             self.assertEqual(c.call_count, 2)   # tenta outra vez só depois do TTL
         self.assertEqual(len(err.getvalue().strip().splitlines()), 2)   # uma linha por falha, sem traceback
         vazio = self.novo_indice()
@@ -334,13 +338,24 @@ class Http(Base):
         super().setUp()
         self.old = server.BIBLIOTECA
         server.BIBLIOTECA = self.idx
+        # índice das `.arquivo/` e fila do arquivo (ADR-011) também na pasta temporária, nunca em /data
+        self.p_arq = mock.patch.multiple(server, BIBLIOTECA_ARQ=biblioteca.Indice(
+            self.raizes, self.tasks, {"marketing": self.aprov}, clock=lambda: self.now, arquivo=True),
+            ARQUIVO_FILA=self.root / "arquivo-fila")
+        self.p_arq.start()
         self.httpd = ThreadingHTTPServer(("127.0.0.1", 0), server.Handler)
         threading.Thread(target=self.httpd.serve_forever, daemon=True).start()
         self.host = f"127.0.0.1:{self.httpd.server_address[1]}"
         self.p_mini = mock.patch.object(biblioteca, "MINI_DIR", self.mini_dir)
         self.p_mini.start()
+        # o _mini guarda por processo as miniaturas que falharam; a chave é raiz/rel|mtime|tamanho e os ficheiros de
+        # teste repetem-se, por isso sem este estado limpo uma falha do Pillow real num teste salta a geração no seguinte
+        self.p_mini_estado = mock.patch.object(biblioteca, "_mini", {"falhas": set(), "grandes": set(), "total": None})
+        self.p_mini_estado.start()
 
     def tearDown(self):
+        self.p_arq.stop()
+        self.p_mini_estado.stop()
         self.p_mini.stop()
         self.httpd.shutdown()
         self.httpd.server_close()
@@ -424,6 +439,7 @@ class SymlinkTest(Http):
 
     def test_tamanho_mudado_depois_do_varrimento(self):
         p = self.w("rascunhos/v.mp4", b"0123")
+        self.snap()   # já com índice (sem ele, /f/ valida directamente no disco: test_biblioteca_rapida)
         self.assertEqual(self.req(self.f("rascunhos/v.mp4"))[0], 200)
         p.write_bytes(b"012345")
         self.assertEqual(self.get_json(self.f("rascunhos/v.mp4")), (404, NAO))
@@ -753,6 +769,8 @@ class DatasCacheTest(Base):
         self.assertNotIn("relatorios/novo.md", self.snap().por_id)
         self.assertEqual(self.idx.scans, 1)
         self.now += 2
+        self.assertNotIn("relatorios/novo.md", self.snap().por_id)   # responde já com o anterior; refaz em fundo
+        self.idx.aguardar()
         self.assertIn("relatorios/novo.md", self.snap().por_id)
         self.assertEqual(self.idx.scans, 2)
 
@@ -772,6 +790,8 @@ class DatasCacheTest(Base):
         with mock.patch.object(biblioteca, "_ler_inicio", side_effect=lambda *a: lidos.append(a[0]) or orig(*a)):
             self.now += 61
             self.snap()
+            self.idx.aguardar()
+        self.assertEqual(self.idx.scans, 2)
         self.assertFalse([p for p in lidos if p.endswith(".md")])   # nada mudou: nenhum .md relido
 
 
@@ -815,9 +835,9 @@ class ServirTest(Http):
                     self.assertNotIn("content-security-policy", h)
                 else:
                     self.assertIn("sandbox", h["content-security-policy"])
-        for p in ("/api/biblioteca", f"/api/biblioteca/item?id={quote(LOTE)}"):
+        for p, cc in (("/api/biblioteca", "private, no-cache"), (f"/api/biblioteca/item?id={quote(LOTE)}", "no-store")):
             h = self.req(p)[1]
-            self.assertEqual(h["cache-control"], "no-store")
+            self.assertEqual(h["cache-control"], cc)   # a lista revalida com ETag (Biblioteca rápida)
             self.assertTrue(h["content-type"].startswith("application/json"))
         self.assertEqual(self.req(self.f("rascunhos/nao.md"))[1]["cache-control"], "no-store")
 
@@ -901,7 +921,8 @@ class ServirTest(Http):
                                    "n", "bytes", "resumo", "principal", "zip", "q"})
         code, d = self.get_json(f"/api/biblioteca/item?id={quote(LOTE, safe='')}")
         self.assertEqual((code, d["foco"], d["item"]["id"]), (200, None, LOTE))
-        self.assertEqual(set(d), {"item", "foco", "destaque", "textos", "trabalho", "pedidos"})
+        # «arquivo»: arquivável, arquivado, pedido pendente e último erro (ADR-011)
+        self.assertEqual(set(d), {"item", "foco", "destaque", "textos", "trabalho", "pedidos", "arquivo"})
         f0 = d["destaque"][0]
         self.assertEqual(f0["url"], f"api/biblioteca/f/{LOTE}/final/status-01-quem-9x16.jpg?v={int(NOW - 2 * H)}")
         self.assertEqual(f0["dl"], f0["url"] + "&dl=1")
@@ -918,7 +939,7 @@ class ServirTest(Http):
     def test_indice_gzip(self):
         code, h, body = self.req("/api/biblioteca", headers={"Accept-Encoding": "gzip, br"})
         self.assertEqual((code, h["content-encoding"], h["vary"], h["cache-control"]),
-                         (200, "gzip", "Accept-Encoding", "no-store"))
+                         (200, "gzip", "Accept-Encoding", "private, no-cache"))
         self.assertEqual(gzip.decompress(body), self.req("/api/biblioteca")[2])
 
     def test_grande(self):
@@ -1313,7 +1334,7 @@ class RegressaoTest(Http):
         tree = ast.parse(Path(biblioteca.__file__).read_text())
         mods = {a.name.split(".")[0] for n in ast.walk(tree) if isinstance(n, ast.Import) for a in n.names}
         mods |= {n.module.split(".")[0] for n in ast.walk(tree) if isinstance(n, ast.ImportFrom) and n.module}
-        self.assertLessEqual(mods - {"reader", "aprovacoes", "PIL"}, set(sys.stdlib_module_names))
+        self.assertLessEqual(mods - {"reader", "aprovacoes", "arquivo", "PIL"}, set(sys.stdlib_module_names))
 
 
 if __name__ == "__main__":

@@ -1,4 +1,4 @@
-# Squad Office Lite 0.1.4, modo Docker. Gerado por runner/gerar_compose.py --modo docker.
+# Squad Office Lite 0.2.0, modo Docker. Gerado por runner/gerar_compose.py --modo docker.
 # Primeiro: docker compose run --rm configurar
 # Depois: docker compose up -d e abre http://localhost:8080
 # Opcional: .env ao lado (ver env.example) com OFFICE_ENDERECO, OFFICE_PORTA, OFFICE_PROJECTOS,
@@ -7,7 +7,7 @@
 name: office-lite-pc
 services:
   office:
-    image: ghcr.io/mozthinker/squad-office-lite:0.1.4
+    image: ghcr.io/mozthinker/squad-office-lite:0.2.0
     restart: unless-stopped
     read_only: true
     # Pillow descodifica uma miniatura de cada vez (até ~330 MB) + tmpfs das miniaturas + servidor
@@ -27,6 +27,7 @@ services:
       QUADRO_DIR: /data/quadro
       QUADRO_LANCAR_DIR: /data/quadro-lancar
       PUSH_DIR: /data/push
+      ARQUIVO_FILA_DIR: /data/arquivo-fila
       RUNNER_ESTADO_DIR: /data/runner-estado
     # sem capacidades: um servidor HTTP do Python na porta 8080, sem root
     security_opt:
@@ -85,6 +86,11 @@ services:
         volume:
           nocopy: true
       - type: volume
+        source: arquivo-fila
+        target: /data/arquivo-fila
+        volume:
+          nocopy: true
+      - type: volume
         source: runner-estado
         target: /data/runner-estado
         read_only: true
@@ -139,7 +145,7 @@ services:
     networks:
       - office
   runner:
-    image: ghcr.io/mozthinker/squad-office-lite-runner:0.1.4
+    image: ghcr.io/mozthinker/squad-office-lite-runner:0.2.0
     restart: unless-stopped
     init: true
     read_only: true
@@ -199,6 +205,11 @@ services:
         volume:
           nocopy: true
       - type: volume
+        source: arquivo-fila
+        target: /dados/arquivo-fila
+        volume:
+          nocopy: true
+      - type: volume
         source: runner-estado
         target: /dados/runner-estado
         volume:
@@ -233,7 +244,7 @@ services:
     networks:
       - runner
   configurar:
-    image: ghcr.io/mozthinker/squad-office-lite-runner:0.1.4
+    image: ghcr.io/mozthinker/squad-office-lite-runner:0.2.0
     profiles:
       - configurar
     entrypoint: ["configurar"]
@@ -304,6 +315,11 @@ services:
       - type: volume
         source: push
         target: /dados/push
+        volume:
+          nocopy: true
+      - type: volume
+        source: arquivo-fila
+        target: /dados/arquivo-fila
         volume:
           nocopy: true
       - type: volume
@@ -379,6 +395,7 @@ volumes:
   quadro:
   quadro-lancar:
   push:
+  arquivo-fila:
   runner-estado:
   runner:
   runner-home:

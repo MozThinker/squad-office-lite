@@ -64,6 +64,13 @@
 .bib-maisn { color: var(--muted); font-size: 12px; padding-left: 4px; }
 .bib-acts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: auto; }
 .bib-novo { display: inline-block; padding: 0 5px; font-size: 11px; font-weight: 600; background: var(--accent); color: var(--on-accent); }
+/* arquivo: aviso, estado (fila/erro) e botão a toda a largura a 360 px */
+.bib-arqb { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+.bib-arqb:empty { display: none; }
+.bib-arqm { margin: 6px 0 0; padding: 6px 10px; border-left: 3px solid var(--muted); color: var(--text); font-size: 13px; }
+.bib-arqe { margin: 0; font-size: 13px; color: var(--text); }
+.bib-arqx { color: var(--bad); }
+@media (max-width: 520px) { .bib-arqb .bib-btn { align-self: stretch; } }
 .bib-est { white-space: nowrap; font-weight: 600; }
 .bib-nw { white-space: nowrap; }
 .bib-zerr { flex-basis: 100%; margin: 4px 0 0; color: var(--bad); }

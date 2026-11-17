@@ -2,12 +2,12 @@
 
 Tokens falsos construídos em runtime (concatenação) para não disparar o gitleaks.
 """
-import time
 import unittest
 
 import reader
 import server
 from tests import fake
+from tests import tempo
 from tests import test_server as base
 from tests.test_live import LiveBase
 from tests import cfg
@@ -21,9 +21,7 @@ LAUNCHED = "Async agent launched successfully.\nagentId: a1"
 
 
 def fast(test, fn, *args):
-    t = time.perf_counter()
-    fn(*args)
-    test.assertLess(time.perf_counter() - t, 0.5)
+    test.assertLess(tempo.cpu(fn, *args), tempo.CPU_MAX_S)
 
 
 class R2Base(LiveBase):
@@ -235,7 +233,7 @@ class SensitiveR2Test(unittest.TestCase):
 
 class LinearR2Test(unittest.TestCase):
     def test_no_quadratic_regex(self):
-        # 200 KB adversarial nas regexes alteradas: mask + env_file < 0,5 s cada
+        # 200 KB adversarial nas regexes alteradas: mask + env_file < tempo.CPU_MAX_S de CPU cada
         adv = {"assign quote": 'key="' + '\\"' * 100000, "assign quotes": 'key="a ' * 28000,
                "assign bearer": "key=bearer " * 18000, "assign esc": 'key="\\' * 33000,
                "redis": "redis-cli " * 20000, "redis -a": ("redis-cli" + " -a" * 60 + "\n") * 1000,

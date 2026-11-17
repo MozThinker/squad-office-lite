@@ -14,7 +14,7 @@ export const DATAS = [["hoje", "hoje"], ["7d", "7 d"], ["30d", "30 d"], ["tudo",
 let P = new Map(PRODUTOS), FONTE = fontesCfg(null);
 const T = new Map(TIPOS), D = new Map(DATAS);
 export function configurar(cfg) { PRODUTOS = produtosCfg(cfg); P = new Map(PRODUTOS); FONTE = fontesCfg(cfg); }
-export const FILTROS0 = Object.freeze({ produto: null, tipo: null, data: "tudo", q: "" });
+export const FILTROS0 = Object.freeze({ produto: null, tipo: null, data: "tudo", q: "", arquivo: false });
 const MEDIA = new Set(["imagem", "video", "audio"]), MEDIA_EXT = /\.(jpe?g|png|webp|gif|mp4|webm|m4v|mp3|wav|m4a|ogg|opus)$/i;
 const ICONE = { imagens: "▣", videos: "▶", audio: "♪", estudos: "◆", planos: "▦", pareceres: "§", relatorios: "▥" };
 export const ESTADOS = { aprovado: ["✓", "Aprovado", "ok"], executado: ["✓", "Aprovado · executado", "ok"],
@@ -34,6 +34,7 @@ export function parseRota(hash) {
   if (T.has(p.get("tipo"))) f.tipo = p.get("tipo");
   if (D.has(p.get("data"))) f.data = p.get("data");
   f.q = (p.get("q") || "").trim().slice(0, 100);
+  f.arquivo = p.get("arquivo") === "1";
   const segs = path.split("/").filter(Boolean);
   if (!segs.length || !path.startsWith("/")) return { vista: "lista", id: null, filtros: f };
   try { return { vista: "item", id: segs.map(decodeURIComponent).join("/"), filtros: f }; }
@@ -48,6 +49,7 @@ export function rotaHash(r = {}) {
   if (f.tipo) p.set("tipo", f.tipo);
   if (f.data && f.data !== "tudo") p.set("data", f.data);
   if (f.q) p.set("q", f.q);
+  if (f.arquivo) p.set("arquivo", "1");
   const s = p.toString();
   return "#biblioteca" + (s ? "?" + s : "");
 }
@@ -153,6 +155,25 @@ export function mediaRecente(itens, n = 6) {
 }
 // item de 1 só documento: o cartão abre logo o leitor
 export const umDoc = (it) => it?.n === 1 && !!it.principal;
+// arquivo (ADR-011)
+export const corpoArquivo = (token, accao, item) => JSON.stringify({ token, accao, item });
+export function fmtArquivado(a) {
+  if (!a) return "";
+  const t = Date.parse(a.em || "");
+  return [`Arquivado${a.em ? " em " + (Number.isNaN(t) ? a.em : fmtData(t / 1000)) : ""}`, a.motivo].filter(Boolean).join(" · ");
+}
+export const FILA_TXT = "Pedido em fila · o runner trata-o no próximo minuto";
+export function estadoArquivo(d) {
+  const a = d?.arquivo;
+  if (!a || a.pendente) return { botao: null, texto: a ? FILA_TXT : "" };
+  return { botao: a.arquivado ? "repor" : a.arquivavel ? "arquivar" : null, texto: a.aviso || (a.erro ? `O último pedido falhou: ${a.erro}.` : "") };
+}
+export function respostaArquivo(status, j) {
+  if (status === 202 || status === 409) return { fila: true, texto: FILA_TXT };
+  const m = { 403: "a sessão mudou, recarrega a página", 429: "a fila está cheia, tenta mais tarde",
+    503: "a fila do arquivo não está disponível" }[status];
+  return { fila: false, texto: `Não foi possível pedir: ${!status ? "sem ligação ao Office" : m || j?.error || "erro " + status}.` };
+}
 // só URLs da própria API (relativos); qualquer outra coisa vira ""
 export const safeU = (u) => (/^api\/biblioteca\/[^\s\x22\x27<>\\]*$/.test(String(u ?? "")) ? String(u) : "");
 const dlDe = (u) => (u ? u + (u.includes("?") ? "&" : "?") + "dl=1" : "");
@@ -160,7 +181,7 @@ const dlDe = (u) => (u ? u + (u.includes("?") ? "&" : "?") + "dl=1" : "");
 // ---- DOM (só depois de abrir())
 
 let A = null, esc = (s) => String(s ?? "");
-const S = { itens: null, carregado: 0, f: { ...FILTROS0 }, limite: 20, seq: 0, lseq: 0, cur: null, vista: null, scroll: 0,
+const S = { itens: null, modo: false, carregado: 0, f: { ...FILTROS0 }, limite: 20, seq: 0, lseq: 0, cur: null, vista: null, scroll: 0,
   focoId: null, focoRec: false, refrescar: false, chips: {} };
 const V = { lista: [], i: 0, pushed: false, prog: false, de: null };
 const q = (s) => A.root.querySelector(s);
@@ -177,6 +198,7 @@ const SHELL = `<div class="bib-lista">
 <div class="bib-g"><span class="bib-gl" aria-hidden="true">Produto</span><div class="bib-chips" role="group" aria-label="Produto" data-g="produto"></div></div>
 <div class="bib-g"><span class="bib-gl" aria-hidden="true">Tipo</span><div class="bib-chips" role="group" aria-label="Tipo" data-g="tipo"></div></div>
 <div class="bib-g"><span class="bib-gl" aria-hidden="true">Data</span><div class="bib-chips bib-datas" role="group" aria-label="Data" data-g="data"></div></div>
+<div class="bib-g"><span class="bib-gl" aria-hidden="true">Arquivo</span><div class="bib-chips" role="group" aria-label="Arquivo" data-g="arquivo"><button type="button">Ver arquivados</button></div></div>
 </div><div class="bib-main"><p class="bib-cnt" aria-live="polite"></p><ul class="bib-cards"></ul><div class="bib-vazio"></div>
 <button type="button" class="bib-btn bib-mais" data-a="mais" hidden></button></div></div></div>
 <div class="bib-item" hidden></div>
@@ -278,6 +300,7 @@ export async function rota(hash) {
   if (r.vista === "lista") {
     if (dlg.open) { V.prog = true; dlg.close(); }
     S.f = r.filtros;
+    trocaModo();
     S.cur = S.rend = null; // o item só se reaproveita dentro dele (visualizador, leitor); da lista abre-se sempre de novo
     if (q(".bib-q").value.trim() !== S.f.q) q(".bib-q").value = S.f.q;
     if (S.itens && !S.refrescar && S.pintado !== rotaHash({ filtros: S.f })) pintarLista(); // antes de mostrar: o foco volta ao cartão
@@ -311,6 +334,12 @@ export async function rota(hash) {
   }
 }
 
+function trocaModo() {
+  if (S.modo === S.f.arquivo) return false;
+  S.modo = S.f.arquivo; S.itens = null;
+  return true;
+}
+
 // o que abre um id/caminho dentro do item já carregado
 function acha(d, id) {
   if (!id) return null;
@@ -329,7 +358,7 @@ function abrirAlvo(a) {
   if (a.k === "ler") { if (dlg.open) { V.prog = true; dlg.close(); } return ler(a.f); }
   if (a.k === "item" && d && umDoc(d.item)) {
     const f = [...(d.destaque || []), ...(d.textos || [])][0];
-    if (f) return ler({ ...f, titulo: d.item.titulo });
+    if (f) return ler({ ...f, titulo: d.item.titulo, d });
   }
   const novo = S.vista !== "item" || S.rend !== d.item.id;
   if (S.rend !== d.item.id) { q(".bib-item").innerHTML = itemH(d); S.rend = d.item.id; V.lista = seccoes(d).media; }
@@ -348,10 +377,11 @@ async function carregar() {
   S.cur = S.rend = null;
   if (!S.itens) { q(".bib-cards").innerHTML = SKEL; q(".bib-cnt").textContent = "A carregar…"; q(".bib-vazio").textContent = ""; }
   try {
-    const r = await fetch("api/biblioteca", { cache: "no-store" });
+    const modo = S.modo;
+    const r = await fetch(modo ? "api/biblioteca?arquivo=1" : "api/biblioteca");
     if (!r.ok) throw new Error(r.status);
     const d = await r.json();
-    if (n !== S.lseq) return;
+    if (n !== S.lseq || modo !== S.modo) return;
     S.itens = Array.isArray(d.itens) ? d.itens : [];
     S.carregado = Date.now();
     q(".bib-off").hidden = true;
@@ -379,6 +409,7 @@ function pintarChips(c) {
     b.disabled = !on && n === 0;
   }
   for (const b of S.chips.data) b.setAttribute("aria-pressed", b.dataset.k === S.f.data);
+  q('[data-g="arquivo"] button').setAttribute("aria-pressed", S.f.arquivo);
 }
 
 function pintarLista() {
@@ -398,8 +429,8 @@ function pintarLista() {
 }
 
 function vazioH() {
-  if (!S.itens.length) return `<p class="bib-msg">Ainda não há nada na biblioteca.</p>`;
-  const outros = S.f.produto || S.f.tipo || S.f.data !== "tudo";
+  if (!S.itens.length) return `<p class="bib-msg">${S.f.arquivo ? "Ainda não há nada no arquivo." : "Ainda não há nada na biblioteca."}</p>`;
+  const outros = S.f.produto || S.f.tipo || S.f.data !== "tudo" || S.f.arquivo;
   const limpaF = `<button type="button" class="bib-btn" data-a="limpar-f">Limpar filtros</button>`;
   if (!S.f.q) return `<p class="bib-msg">Nada com estes filtros.</p>${limpaF}`;
   return `<p class="bib-msg">${esc(`Nada para «${S.f.q}»${S.f.tipo ? " em " + T.get(S.f.tipo) : ""}.`)}</p>`
@@ -410,6 +441,7 @@ function mudaFiltro(m) {
   S.f = { ...S.f, ...m };
   S.limite = 20;
   history.replaceState(history.state, "", rotaHash({ vista: "lista", filtros: S.f }));
+  if (trocaModo()) return carregar();
   pintarLista();
 }
 
@@ -506,6 +538,7 @@ function itemH(d) {
   let h = barraH() + `<div class="bib-ih"><p class="sub">${esc([fonteDe(it.raiz), produtosDe(it), fmtData(it.actualizado)].filter(Boolean).join(" · "))} ${novoH(it)}</p>`
     + `<h2 tabindex="-1">${esc(it.titulo || it.sub)}</h2>${it.sub && it.sub !== it.titulo ? `<p class="sub">${esc(it.sub)}</p>` : ""}`
     + (linhaH.trim() ? `<p class="bib-meta">${linhaH}</p>` : "")
+    + `<div class="bib-arqb">${arqH(d)}</div>`
     + (it.zip ? `<a class="bib-btn bib-pri bib-zip" href="${esc("api/biblioteca/zip?id=" + encodeURIComponent(it.id))}" download data-zip>${esc(`⤓ Descarregar tudo (zip) · ${fmtBytes(it.zip.bytes)}`)}</a>` : "")
     + `</div><div class="bib-cols">`;
   if (s.media.length) h += `<section class="bib-pecas"><h3>${esc(`Peças finais (${s.media.length})`)}</h3><ul class="bib-grid">${s.media.map(pecaH).join("")}</ul></section>`;
@@ -520,6 +553,32 @@ function itemH(d) {
     `<h4>${esc(g.pasta || "outros")}</h4><ul>${(g.ficheiros || []).map((f) => docH(f, g.pasta ? "" : "Trabalho", true)).join("")}</ul>`).join(""), so);
   if (so) secsH = `<p class="bib-msg">Este lote só tem ficheiros de trabalho.</p>` + secsH;
   return h + `<div class="bib-secs">${secsH}</div></div>`;
+}
+
+function arqH(d) {
+  const a = d?.arquivo, { botao: b, texto } = estadoArquivo(d);
+  if (!a) return "";
+  return (a.arquivado ? `<p class="bib-arqm" role="note">${esc(fmtArquivado(a.arquivado))}</p>` : "")
+    + (texto ? `<p class="bib-arqe${a.pendente ? "" : " bib-arqx"}" tabindex="-1">${esc(texto)}</p>` : "")
+    + (b ? `<button type="button" class="bib-btn" data-a="arq" data-accao="${esc(b)}">${b === "repor" ? "↺ Repor na biblioteca" : "Arquivar"}</button>` : "");
+}
+
+// o Office só grava o pedido; quem move é o runner
+async function pedirArquivo(b) {
+  const d = S.cur, accao = b.dataset.accao, t = d?.item.titulo;
+  if (!d?.arquivo || !confirm(accao === "repor" ? `Repor «${t}» na biblioteca?` : `Arquivar «${t}»? Pode ser reposto.`)) return;
+  b.disabled = true;
+  let r = null, j = {};
+  try {
+    r = await fetch("api/biblioteca/arquivo", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: corpoArquivo(A.getState?.()?.token, accao, d.item.id) });
+    j = await r.json().catch(() => ({}));
+  } catch { r = null; }
+  const res = respostaArquivo(r?.status, j), box = b.closest(".bib-arqb");
+  Object.assign(d.arquivo, res.fila ? { pendente: accao, erro: null, aviso: null } : { aviso: res.texto });
+  box.innerHTML = arqH(d);
+  box.querySelector(".bib-arqe").focus();
+  q(".bib-sr").textContent = res.texto;
 }
 
 // ---- visualizador de ecrã inteiro (<dialog>)
@@ -598,7 +657,7 @@ async function ler(f) {
   box.innerHTML = `<div class="bib-bar bib-fix"><button type="button" class="bib-btn" data-a="voltar">‹ Biblioteca</button><span class="bib-sp"></span>${dlH}`
     + (pdf || f.grande ? "" : `<button type="button" class="bib-btn" data-a="copiar-tudo" disabled>Copiar texto</button>`) + `</div>`
     + `<p class="sub">${esc([fonteDe(raiz), f.mtime ? fmtData(f.mtime) : "", f.bytes ? fmtBytes(f.bytes) : ""].filter(Boolean).join(" · "))}</p>`
-    + `<h2 class="bib-lh" tabindex="-1">${esc(f.titulo || f.nome)}</h2>`
+    + `<h2 class="bib-lh" tabindex="-1">${esc(f.titulo || f.nome)}</h2><div class="bib-arqb">${arqH(f.d)}</div>`
     + `<div class="bib-rd"><div class="bib-rside"></div><article class="md bib-md"><div class="bib-sk bib-skl" aria-hidden="true">${"<i></i>".repeat(8)}</div></article></div>`
     + `<div class="bib-bar"><button type="button" class="bib-btn" data-a="voltar">‹ Biblioteca</button><button type="button" class="bib-btn" data-a="topo">↑ Topo</button></div>`;
   q(".bib-lh").focus({ preventScroll: true });
@@ -710,6 +769,7 @@ function clique(e) {
   const chip = t.closest?.(".bib-chips button");
   if (chip) {
     const g = chip.closest("[data-g]").dataset.g, k = chip.dataset.k;
+    if (g === "arquivo") return mudaFiltro({ arquivo: !S.f.arquivo });
     return mudaFiltro({ [g]: g === "data" ? k : k === "todos" || S.f[g] === k ? null : k });
   }
   const th = t.closest?.(".bib-th");
@@ -742,6 +802,7 @@ function clique(e) {
   else if (act === "limpar-q") { q(".bib-q").value = ""; mudaFiltro({ q: "" }); q(".bib-q").focus(); }
   else if (act === "limpar-f") { q(".bib-q").value = ""; mudaFiltro({ ...FILTROS0 }); }
   else if (act === "aprov") A.verAprovacao(b.dataset.fonte, b.dataset.fich);
+  else if (act === "arq") pedirArquivo(b);
   else if (act === "topo") { scrollTo(0, 0); q(".bib-lh")?.focus({ preventScroll: true }); }
   else if (act === "copiar-tudo") { // texto já renderizado (sem «##», «**», «|») para colar no WhatsApp; sem os botões «Copiar» nem a Ficha
     const art = q(".bib-md"), cps = [...art.querySelectorAll(".bib-cp")];

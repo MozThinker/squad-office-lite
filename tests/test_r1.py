@@ -7,7 +7,6 @@ import os
 import shutil
 import tempfile
 import threading
-import time
 import unittest
 import urllib.request
 from http.server import ThreadingHTTPServer
@@ -17,6 +16,7 @@ from unittest import mock
 import reader
 import server
 from tests import fake
+from tests import tempo
 from tests import test_server as base
 from tests.test_live import LiveBase
 from tests import cfg
@@ -120,7 +120,7 @@ class MaskR1Test(unittest.TestCase):
         self.assertEqual(reader.mask("sorted(x, key=lambda y: y)"), f"sorted(x, key={S} y: y)")
 
     def test_no_quadratic_regex(self):
-        # 200 KB de texto adversarial por padrão: cada mask + env_file < 0,5 s
+        # 200 KB de texto adversarial por padrão: cada mask + env_file < tempo.CPU_MAX_S de CPU
         adv = {"assign": "a.token-" * 25000, "dsn": "x://u:" * 35000, "docker login": "docker login " * 16000,
                "htpasswd": "htpasswd -b " * 17000, "htflags": "htpasswd " + "-a " * 66000, "mysql": "mysql " * 35000,
                "pem": "-----BEGIN " + "A " * 100000, "pem2": "-----BEGIN " + "PRIVATE KEY-----" * 12000,
@@ -131,10 +131,8 @@ class MaskR1Test(unittest.TestCase):
                "words": "abc-def.ghi+jkl" * 14000, "gh auth": "gh auth status " * 14000}
         for k, v in adv.items():
             with self.subTest(k=k):
-                t = time.perf_counter()
-                reader.mask(v)
-                reader.env_file("Bash", {"command": v})
-                self.assertLess(time.perf_counter() - t, 0.5)
+                self.assertLess(tempo.cpu(lambda: (reader.mask(v), reader.env_file("Bash", {"command": v}))),
+                                tempo.CPU_MAX_S)
 
 
 class ClipR1Test(unittest.TestCase):
@@ -412,9 +410,7 @@ class GitHubR1Test(LiveBase):
     def test_strip_cmd_linear(self):
         for cmd in ("cat <<A\n" * 40000, "x\n" * 100000, '"' * 200000, "'a" * 100000):
             with self.subTest(cmd=cmd[:10]):
-                t = time.perf_counter()
-                server._gh_cls("Bash", {"command": cmd})
-                self.assertLess(time.perf_counter() - t, 0.5)
+                self.assertLess(tempo.cpu(server._gh_cls, "Bash", {"command": cmd}), tempo.CPU_MAX_S)
 
 
 

@@ -33,6 +33,8 @@ biblioteca:
     rotulo: Material
     pasta: material
     media: true
+    # arquivo automático por idade (7–3650 dias; sem esta chave nunca arquiva sem pedido): ver README, «Biblioteca»
+    # arquivo_dias: 180
 runner:
   tecto_diario: 10
   paralelo: 1

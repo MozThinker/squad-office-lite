@@ -53,7 +53,7 @@ class HistoryTest(unittest.TestCase):
         self.meta("31d", utc_naive(d0 - timedelta(days=31)), cost=100, age=31 * 86400)
         self.squad_task(self.sup, "support", "s1", "-x", status="concluido", cost_usd=0.5, duration_s=180,
                         started_at=(d0 + timedelta(hours=1)).isoformat())
-        st = server.build_state()
+        st = server.build_state(NOW)   # o day0 vem do NOW do import: com o relógio, a meia-noite a meio da suite partia-o
         hist = st["history"]
         self.assertEqual(len(hist), 30)
         self.assertEqual(hist[-1]["date"], self.today)

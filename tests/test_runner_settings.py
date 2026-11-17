@@ -58,6 +58,7 @@ def test_base_tem_exactamente_as_negacoes(ctx):
         f"Edit({abs_(dados / 'quadro-lancar/**')})", f"Edit({abs_(dados / 'decisoes-fila/**')})",
         f"Edit({abs_(dados / 'decisoes/**')})", f"Edit({abs_(dados / 'quadro/**')})",
         f"Edit({abs_(dados / 'runner/**')})", f"Edit({abs_(dados / 'runner-estado/**')})",
+        f"Edit({abs_(dados / 'arquivo-fila/**')})",
         f"Edit({abs_(c.RAIZ / '**')})",
     ], "blockWritesOutsideWorkingDirectories": True}}
     regras = base["permissions"]["deny"]
@@ -71,6 +72,7 @@ def test_base_sem_config_e_com_settings(ctx):
     assert not any("claude.env" in r or "office.yaml" in r for r in regras)   # sem casa
     assert regras[-1] == f"Edit({abs_(ctx / 's.json')})"                      # o próprio runner.settings
     assert f"Edit({abs_(ctx / 'dados' / 'quadro-lancar' / '**')})" in regras
+    assert f"Edit({abs_(ctx / 'dados' / 'arquivo-fila' / '**')})" in regras   # AC16: a fila do arquivo também
 
 
 def test_base_segue_a_config(tmp_path, monkeypatch):

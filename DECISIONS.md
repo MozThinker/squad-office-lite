@@ -1,8 +1,8 @@
 # Decisões de arquitectura
 
 Os ADR-001…005 vêm do Squad Office em que o Lite se baseia, reescritos para o Lite; o ADR-006 é a passagem a produto
-instalável, o ADR-007 a distribuição pública e o ADR-008 o modo Docker (no PC, com imagens publicadas). «Proxy» =
-o Caddy do compose (omissão) ou um Traefik existente (`--proxy traefik`).
+instalável, o ADR-007 a distribuição pública e o ADR-008 o modo Docker (no PC, com imagens publicadas); o ADR-009
+é o Docker rootless na VPS; os ADR-010…012 são a Biblioteca rápida e o arquivo dos documentos antigos. «Proxy» = o Caddy do compose (omissão) ou um Traefik existente (`--proxy traefik`).
 
 ## ADR-001 · O Office passa a escrever decisões numa fila JSON (2026-10-31)
 **Contexto:** o Office era só leitura; os pedidos de decisão (`.md` com frontmatter e uma secção `## Decisões`) eram
@@ -328,3 +328,110 @@ de montagem de root `0755`; o dono e o modo das raízes dá-os só o `configurar
 (c) todos os serviços com `no-new-privileges` e `cap_drop: [ALL]`; `cap_add` só no `configurar` (`CHOWN`,
 `DAC_OVERRIDE`, `SETGID`, `SETUID`) e no Caddy (`NET_BIND_SERVICE`, file capability do binário da imagem oficial, e
 `DAC_OVERRIDE`, para ler o volume `proxy` 0700 do `OFFICE_UID` sendo root), cada uma justificada no compose.
+
+## ADR-009 · VPS: Docker rootless como caminho recomendado; portas 80/443 pelo `ip_unprivileged_port_start` (2026-11-13)
+**Contexto:** o modo VPS pedia o utilizador do Office no grupo `docker`, que equivale a root (`docker run -v /:/host`).
+A squad corre programas com esse utilizador: um programa dela chegava a tudo na VPS, incluindo a pasta e as
+credenciais de outro utilizador (ex.: quem administra a VPS com `sudo`).
+
+**Decisão:** o README recomenda o Docker rootless (documentação do Docker, «Rootless mode», consultada a 13/11/2026)
+para um utilizador do Office sem `sudo`; quem tem `sudo` instala os pacotes (`docker-ce-rootless-extras`, `uidmap`,
+`dbus-user-session`), desliga o Docker de sistema, liga o *linger* e o sysctl; o utilizador do Office corre
+`dockerd-rootless-setuptool.sh install`. O `install.sh` detecta o rootless (`docker info`: `name=rootless`), recusa
+sem as portas 80/443 permitidas, grava `OFFICE_UID=0`/`OFFICE_GID=0` no `.env` (no rootless o uid 0 do contentor é o
+utilizador no host; qualquer outro uid cai nos subuids e não escreve nas pastas `0700` dele) e, se o `docker` só chega
+ao daemon pelo `DOCKER_HOST`, activa o contexto `rootless` (o runner e as squads não recebem o `DOCKER_HOST`). O
+serviço `office` do compose passa a ter `cap_drop: ALL` e `no-new-privileges` (como no modo Docker). O `doctor` diz
+qual dos Dockers responde, verifica portas e `OFFICE_UID` no rootless e avisa (`⚠`, sem mudar o código de saída)
+quem está no grupo `docker`. O modo do grupo `docker` continua a funcionar; o modo Docker (PC) não muda.
+
+**Portas 80/443:** `net.ipv4.ip_unprivileged_port_start=80` em `/etc/sysctl.d/`. É uma das duas formas da
+documentação do Docker, uma linha que sobrevive a actualizações, e com 80 (não 0) as portas abaixo, incluindo o SSH
+na 22, continuam só do root. O `install.sh` e o `doctor` aceitam também o `setcap` no `rootlesskit`.
+
+**Alternativas recusadas:** `setcap cap_net_bind_service=ep` no `rootlesskit` (dá a capacidade a qualquer utilizador
+que corra esse binário, e uma actualização do pacote substitui o binário e perde-a em silêncio: o Office deixa de
+abrir as portas depois de um `apt upgrade`); portas altas com redirecção na `ufw`/`nftables` (regras NAT à mão no
+`before.rules`, o tráfego local precisa de outra regra no `OUTPUT`, as portas altas ficam abertas se a firewall falhar,
+e o Caddy pede certificados nas 80/443 que não são as dele); `userns-remap` no Docker de sistema (o daemon continua
+root e o grupo `docker` continua a valer root).
+
+**Consequências:** qualquer utilizador da VPS pode abrir portas 80–1023 que estejam livres (com o Caddy a correr, a
+80 e a 443 estão ocupadas). O Caddy deixa de ver o IP real do cliente (o *port driver* `builtin` por omissão não o
+preserva; o campo `ip` das decisões fica com um endereço interno). As portas publicadas passam pela `ufw` (no Docker
+de sistema saltavam-na). Reverter = voltar ao grupo `docker`: o `install.sh` repõe o uid/gid no `.env`.
+
+## ADR-010 · Biblioteca: índice em fundo, `/f/` sem lock e ETag com `private, no-cache` (2026-11-17)
+**Contexto:** com milhares de ficheiros o varrimento corria dentro do pedido e com lock: a lista, os `/f/` e as
+miniaturas esperavam por ele (centenas de ms a segundos no telemóvel) e a lista descarregava inteira a cada abertura.
+Porte do Squad Office (Biblioteca rápida, 13/11/2026), sem as constantes da casa.
+
+**Decisão:** o instantâneo do índice é refeito numa thread passados os 60 s do `TTL_S` (uma de cada vez,
+`acquire(blocking=False)`); os pedidos respondem com o anterior e só o 1.º, logo depois do arranque, espera (o
+`server.py` chama `aquecer()` ao arrancar). `/f/`, `HEAD /f/` e `/mini/` nunca tocam no lock: usam o instantâneo
+actual e, sem ele ou com ele mais velho que o TTL, resolvem o caminho directamente no disco com as mesmas regras do
+varrimento (allowlist, denylist, profundidade, pastas escondidas, descida pasta a pasta por fds `O_NOFOLLOW`, `lstat`
+do ficheiro; o `_abrir` continua a confirmar dev/inode/tamanho). A lista leva `ETag` fraco (hash dos itens, sem
+`gerado`; `-gz` na variante comprimida) e `Cache-Control: private, no-cache`: `If-None-Match` igual dá `304` sem
+corpo. Os pedidos de aprovação só se relêem quando o `lstat` muda e as ligações item ↔ pedido saem de um índice
+invertido. As regras de caminho passam para `arquivo.py`, partilhado com o runner (ADR-011): uma só fonte.
+
+**Alternativas recusadas:** varrimento síncrono com TTL maior (continua a bloquear, só menos vezes); `inotify` (fora
+da stdlib portátil e não vê montagens de rede); `max-age` na lista (mostraria itens velhos sem revalidar).
+
+**Consequências:** muda cabeçalhos públicos (`ETag`, `304`, `private, no-cache` na lista); `/item` e `/f/` sem `?v=`
+continuam `no-store`. Com o índice velho, o `/f/` serve um ficheiro novo antes do índice seguinte (como o código
+antigo, que refazia o índice dentro do pedido). A lista, o `/item`, o `/zip` e o `/f/` dão os mesmos bytes que a 0.1.4
+sobre as mesmas fixtures (teste de equivalência). Reverter = voltar ao `get()` síncrono e tirar os cabeçalhos.
+
+## ADR-011 · Biblioteca: arquivo pela fila, o runner move, links antigos e push seguro (2026-11-17)
+**Contexto:** quem usa a Biblioteca no telemóvel quer tirar da vista o material antigo sem o apagar; o contentor do
+Office não pode escrever nas fontes (ADR-002: `read_only`, `biblioteca` só de leitura).
+
+**Decisão:** arquivar = mover o item (documento com as suas versões, ou lote de media, de uma fonte `biblioteca:`)
+para `<fonte>/.arquivo/<o mesmo caminho>`, tudo ou nada, nunca sobrescrever, nunca apagar; repor = o inverso. O
+Office só grava pedidos v1 em `<dados>/arquivo-fila/` (mount `rw`; 50 pendentes; 409 para um item que já tenha um
+pedido pendente, de qualquer acção); o runner, a cada passagem, revalida tudo contra a config, aplica as protecções
+(pedido de aprovação pendente ou de estado desconhecido que cite o item, ficheiro alterado há < 48 h), move com
+`os.rename` por fds sem seguir symlinks, responde em `<id>.feito.json` com um erro de uma lista fechada e regista uma
+linha por ficheiro no `<fonte>/.arquivo/REGISTO.tsv`. Um 2.º índice sobre as `.arquivo/`, feito só a pedido, serve
+«Ver arquivados» e os links antigos (mesmo id e mesmos caminhos; `/f/` e `/mini/` pelo resolver directo, sem lock).
+Se o topo do repositório git da fonte for `<dados>/biblioteca` ou estiver dentro dele, os ficheiros seguidos vão num
+só commit por fonte e por passagem `chore(arquivo): N ficheiros` (caminhos por stdin, hooks desligados) e o push só
+acontece no ramo do `origin/HEAD` com 0 atrás e 1 à frente; senão uma linha `AVISO` no log do runner. O commit leva o
+conteúdo do disco: um item com seguidos modificados, em stage ou apagados não se move (`alterações por commitar`), nem
+um com um submódulo (gitlink: o ponteiro por commitar não se vê no status; `não arquivável`); se o ls-files, o add ou o
+commit falhar, os renames dessa fonte e passagem são desfeitos (tudo ou nada) e os pedidos recebem `erro
+git`, para nada ficar fora do git escondido pelo `.gitignore` da `.arquivo/`. O runner trata no máximo 50 pedidos por
+passagem (um Office comprometido não o põe a fazer milhares de commits e pushes) e recusa um 2.º pedido do mesmo item
+na mesma passagem (`pedido ilegível`).
+
+**Alternativas recusadas:** o Office mover os ficheiros (o contentor passava a escrever nas fontes); `git mv` com os
+nomes na linha de comandos; push sempre (publica trabalho alheio e cria merges no `pull` seguinte); sem push (o `pull`
+seguinte cria um merge); arquivar tarefas, planos e pedidos de aprovação (o Quadro, o runner e as aprovações lêem
+essas pastas directamente: mudava contratos v1).
+
+**Consequências:** mesmo modelo dos ADR-001/005 (o Office pede, o runner faz); uma 6.ª escrita do Office, limitada a
+itens existentes das fontes, às protecções e a 50 pendentes, e reversível pelo «Repor». Contrato novo `v: 1` no
+README («Referência»); mudar o formato exige `v: 2` e o runner a ler os dois. Um item reposto volta a abrir pelo mesmo
+link no varrimento seguinte (≤ 60 s). Instalações Docker existentes: o volume novo nasce do root e o «Arquivar» dá 503
+até se correr o `configurar` uma vez. Reverter = tirar a rota, o mount e a passagem do runner; o «Repor» devolve os
+ficheiros.
+
+## ADR-012 · Arquivo automático por idade, opt-in por fonte (`biblioteca[].arquivo_dias`) (2026-11-17)
+**Contexto:** quem instala quer que o material velho saia sozinho da Biblioteca, sem as regras próprias de uma casa
+(prefixos, calendários, pastas fixas).
+
+**Decisão:** chave opcional `arquivo_dias` (7–3650) por fonte; sem ela o runner nunca arquiva nada sem pedido. O
+runner corre o automático no máximo 1× por dia (marca em `<dados>/runner/arquivo-auto.dia`) sobre os itens cujo
+ficheiro mais recente tem mais de N dias, com as protecções do arquivo a pedido mais duas: não sai o que é citado por
+um pedido de aprovação alterado há < 14 dias, nem o que já foi reposto alguma vez (pelo item ou por algum dos seus
+ficheiros no REGISTO). Motivo no REGISTO: `idade (N
+dias)`. A chave é aditiva: a `versao` do `office.yaml` continua `1`.
+
+**Alternativas recusadas:** chave global (uma fonte de estudos e uma de rascunhos têm ritmos diferentes); ligado por
+omissão (moveria ficheiros em instalações existentes sem aviso); regras por prefixo ou calendário (são de uma casa,
+não do Lite); mínimo abaixo de 7 dias (arquivos por engano).
+
+**Consequências:** reversível pela chave e pelo «Repor»; a 1.ª passagem numa fonte antiga pode mover muito (o README
+manda experimentar numa fonte de teste). O que já saiu só volta pelo «Repor» (o REGISTO diz o quê e quando).

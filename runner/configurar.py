@@ -45,7 +45,7 @@ CASA = Path("/home/office")
 PROXY = Path("/proxy")
 CONFIG_OMISSAO = "/config/office.yaml"
 VOLUMES_DADOS = ("tasks", "squads", "decisoes", "biblioteca", "runner_estado", "decisoes_fila", "quadro",
-                 "quadro_lancar", "push", "runner")
+                 "quadro_lancar", "push", "arquivo_fila", "runner")
 UID_OMISSAO = 10001
 RX_UTILIZADOR = re.compile(r"[a-z][a-z0-9._-]{1,31}")   # = RX_UTILIZADOR do install.sh
 ERRO_UTILIZADOR = "utilizador inválido (minúsculas, números, . _ -; 2 a 32 caracteres)"

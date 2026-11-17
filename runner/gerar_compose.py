@@ -52,7 +52,9 @@ def gerar(cfg, config, proxy="caddy", rede=None, certresolver="letsencrypt", dom
            "name: office-lite", "services:", "  office:", f"    build: {_q(repo)}", "    restart: unless-stopped",
            "    read_only: true",
            "    # Pillow descodifica uma miniatura de cada vez (até ~330 MB) + tmpfs das miniaturas + servidor",
-           "    mem_limit: 768m", '    user: "${OFFICE_UID}:${OFFICE_GID}"', "    environment:",
+           "    mem_limit: 768m", '    user: "${OFFICE_UID}:${OFFICE_GID}"',
+           "    # com Docker rootless OFFICE_UID=0: o root do contentor é o teu utilizador no host, sem capacidades",
+           *_endurecer(), "    environment:",
            "      OFFICE_CONFIG: /config/office.yaml", f"      OFFICE_PROXY_SEGREDO: {SEGREDO}"]
     out += [f"      {var}: {destino}" for _, destino, _, var in officecfg.MOUNTS]
     if push:

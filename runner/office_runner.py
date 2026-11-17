@@ -2,7 +2,8 @@
 """Runner do Squad Office Lite (stdlib, Python >= 3.10). No host, corrido pelo timer systemd de utilizador; no modo
 Docker, pelo `ciclo` (processo principal do contentor runner).
 
-    office_runner.py --uma-vez [--config FICH]            uma passagem: decisões → retomas → fila do Quadro → rotação
+    office_runner.py --uma-vez [--config FICH]            uma passagem: decisões → retomas → fila do Quadro → arquivo
+                                                          da Biblioteca (fila e automático) → rotação
     office_runner.py correr TASK_ID [--retomar] [--config FICH]   (interno) corre o claude numa tarefa já preparada
     office_runner.py parar TASK_ID [--config FICH]        pára uma tarefa «a correr» (fecha em erro; não é retomada)
     office_runner.py doctor [--config FICH]               diagnóstico: uma linha ✓/✗ por verificação (exit 0/1)
@@ -31,6 +32,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(1, str(Path(__file__).resolve().parent.parent))
+import arquivador
 import decisoes
 import diagnostico
 import lancador
@@ -167,7 +169,10 @@ def uma_vez(cfg, cfg_path: str, now: float | None = None) -> list[str]:
                                      runner / ".historico.json", cfg["utilizador"]["nome"], lancador.agora(cfg, now))
         linhas += lancador.retomas(cfg, cfg_path, now)
         linhas += lancador.processar_fila(cfg, cfg_path, now)
+        linhas += arquivador.processar(cfg, now)
+        linhas += arquivador.automatico(cfg, now)
         linhas += rodar(cfg, now)
+        linhas += arquivador.rodar(cfg, now)
     return linhas
 
 

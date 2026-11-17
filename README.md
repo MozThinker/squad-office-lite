@@ -23,8 +23,10 @@ O Lite instala-se de duas formas:
 - processador **x86_64** (testado). **arm64** é aceite pelo `get.sh`, com aviso, mas não é testado: a imagem pode não
   construir;
 - memória: **4 GB ou mais** (requisito do Claude Code); no nosso teste, tarefas curtas correram em 1 GB;
-- **Docker** com o plugin `docker compose`, e o teu utilizador no grupo `docker`
-  ([instruções oficiais](https://docs.docker.com/engine/install/ubuntu/));
+- **Docker** com o plugin `docker compose` ([instruções oficiais](https://docs.docker.com/engine/install/ubuntu/)):
+  recomendado em modo **rootless**, com um utilizador só para o Office e as squads, sem `sudo` (ver
+  [Docker rootless](#docker-rootless)); continua a funcionar com o teu utilizador no grupo `docker`, que equivale a
+  root;
 - o **Claude Code** (`claude`) instalado nessa VPS e uma forma de o autenticar: uma **chave de API** (recomendada; o
   instalador pede-a) ou um **token da subscrição**, que escreves tu num ficheiro (o instalador não o pede; ver
   [Credenciais do Claude](#credenciais-do-claude));
@@ -37,7 +39,9 @@ O Lite instala-se de duas formas:
 
 **Passos:**
 
-1. **Prepara a VPS.** Instala o Docker e junta-te ao grupo: `sudo usermod -aG docker $USER`; sai e volta a entrar.
+1. **Prepara a VPS.** Instala o Docker em modo rootless para o utilizador do Office (recomendado; ver
+   [Docker rootless](#docker-rootless)) e entra com ele. Alternativa, que dá root ao teu utilizador: instala o Docker e
+   junta-te ao grupo, `sudo usermod -aG docker $USER`; sai e volta a entrar.
 2. **Instala e autentica o `claude` e o `gh`.**
    ```bash
    curl -fsSL https://claude.ai/install.sh | bash
@@ -47,17 +51,17 @@ O Lite instala-se de duas formas:
    depois de instalar (o instalador não o pede nem o guarda; ver [Credenciais do Claude](#credenciais-do-claude)).
    O `gh` instala-se pelas [instruções oficiais para Ubuntu](https://github.com/cli/cli/blob/trunk/docs/install_linux.md);
    no `gh auth login` usa de preferência um [token só para os repositórios do Office](#token-do-github).
-3. **Descarrega e instala o Office.** O endereço fica fixado à versão (`v0.1.4`), para leres sempre o mesmo script
+3. **Descarrega e instala o Office.** O endereço fica fixado à versão (`v0.2.0`), para leres sempre o mesmo script
    que o livro e este README descrevem.
    **Forma prudente** (recomendada: lês o script antes de o correr):
    ```bash
-   curl -fsSLO https://raw.githubusercontent.com/MozThinker/squad-office-lite/v0.1.4/get.sh
+   curl -fsSLO https://raw.githubusercontent.com/MozThinker/squad-office-lite/v0.2.0/get.sh
    less get.sh
-   bash get.sh --versao 0.1.4
+   bash get.sh --versao 0.2.0
    ```
    **Com um comando:**
    ```bash
-   curl -fsSL https://raw.githubusercontent.com/MozThinker/squad-office-lite/v0.1.4/get.sh | bash -s -- --versao 0.1.4
+   curl -fsSL https://raw.githubusercontent.com/MozThinker/squad-office-lite/v0.2.0/get.sh | bash -s -- --versao 0.2.0
    ```
    > Este comando descarrega um script da internet e corre-o no teu servidor, com o teu utilizador. Só o faças com
    > endereços em que confias, e de preferência lê-o primeiro. O `get.sh` confere o sha256 do pacote: isso apanha uma
@@ -70,14 +74,14 @@ O Lite instala-se de duas formas:
    prudente. Opções (depois de `bash -s --` no comando de uma linha, ou de `bash get.sh`):
    - `--sem-perguntas`: as respostas vêm do ambiente (ver o cabeçalho do `install.sh`; `OFFICE_GIT_NOME` e
      `OFFICE_GIT_EMAIL` para a identidade do git; sem elas, e sem identidade no git, só avisa). Ex.:
-     `curl -fsSL …/get.sh | bash -s -- --versao 0.1.4 --sem-perguntas`;
-   - `--versao X.Y.Z`: instala essa versão em vez da última (`… | bash -s -- --versao 0.1.4`);
+     `curl -fsSL …/get.sh | bash -s -- --versao 0.2.0 --sem-perguntas`;
+   - `--versao X.Y.Z`: instala essa versão em vez da última (`… | bash -s -- --versao 0.2.0`);
    - as outras opções passam ao `install.sh` (ex.: `--proxy traefik --rede <rede>`).
 
    **Verificação opcional da origem.** O sha256 só confirma que o pacote não se estragou. Para confirmar que foi
    construído pelo repositório público (atestação do GitHub; precisa do `gh` com sessão), descarrega o pacote à mão e:
    ```bash
-   gh attestation verify squad-office-lite-0.1.4.tar.gz --repo MozThinker/squad-office-lite
+   gh attestation verify squad-office-lite-0.2.0.tar.gz --repo MozThinker/squad-office-lite
    ```
    Só as versões publicadas com atestação passam. Uma falha aqui é motivo para não instalar e reportar (ver
    [`SECURITY.md`](SECURITY.md)).
@@ -117,7 +121,7 @@ de reinício. Se mudaste as `raizes`, corre outra vez `./install.sh` (não volta
 
 O mesmo `get.sh`, sem `--versao` (instala a última versão publicada; lê o aviso em «Instalação»):
 ```bash
-curl -fsSL https://raw.githubusercontent.com/MozThinker/squad-office-lite/v0.1.4/get.sh | bash
+curl -fsSL https://raw.githubusercontent.com/MozThinker/squad-office-lite/v0.2.0/get.sh | bash
 ```
 A versão instalada passa para `~/squad-office-lite.anterior-<data>` e a nova fica em `~/squad-office-lite`.
 `~/office-lite` (config, `.env`, credenciais e dados) não é tocada pelo `get.sh`; o `install.sh` só volta a
@@ -138,6 +142,99 @@ install -d -m 700 -o u -g u /home/u/.ssh
 install -m 600 -o u -g u /root/.ssh/authorized_keys /home/u/.ssh/authorized_keys
 ```
 Sai e entra com `ssh u@<vps>`; daí em diante segue os passos acima com esse utilizador (não com o `root`).
+
+### Docker rootless
+
+O grupo `docker` equivale a root: quem lá está consegue, com um `docker run -v /:/host`, ler e mudar tudo na VPS
+(incluindo a pasta e as credenciais de outros utilizadores). Como a squad corre programas com o utilizador do Office,
+o caminho recomendado na VPS é o **Docker rootless**: o Docker corre com esse utilizador, sem root e sem o grupo
+`docker`, e o pior que um programa da squad faz é o que esse utilizador já podia fazer. A documentação do Docker
+([Rootless mode](https://docs.docker.com/engine/security/rootless/), consultada a 13/11/2026) é a fonte destes passos.
+
+Os exemplos usam dois utilizadores: `dono` (tu, com `sudo`) e `fabrica` (o do Office e das squads, **sem** `sudo`).
+Troca os nomes pelos teus. O que precisa de `sudo` faz o `dono`; o resto faz a `fabrica`.
+
+**Com o `dono`** (uma vez):
+```bash
+# 1. Docker Engine pelas instruções oficiais (repositório apt do Docker), o que o modo rootless precisa, git e gh
+sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin \
+  docker-ce-rootless-extras uidmap dbus-user-session git gh
+# 2. o Docker de sistema (root) não é preciso: desliga-o (é ele que dá root ao grupo docker)
+sudo systemctl disable --now docker.service docker.socket containerd
+sudo rm -f /var/run/docker.sock
+# 3. o utilizador das squads, sem sudo nem palavra-passe (só entra com a tua chave SSH)
+sudo adduser --disabled-password --comment "" fabrica
+sudo install -d -m 700 -o fabrica -g fabrica ~fabrica/.ssh
+sudo install -m 600 -o fabrica -g fabrica ~/.ssh/authorized_keys ~fabrica/.ssh/authorized_keys
+grep '^fabrica:' /etc/subuid /etc/subgid     # tem de mostrar uma linha em cada (o adduser cria-as)
+# 4. o Caddy precisa das portas 80 e 443 (abaixo da 80, incluindo o SSH na 22, continua só para o root)
+echo net.ipv4.ip_unprivileged_port_start=80 | sudo tee /etc/sysctl.d/60-office-lite.conf && sudo sysctl --system
+# 5. o Docker, o Office e o runner da fabrica continuam a correr sem sessão aberta
+sudo loginctl enable-linger fabrica
+# 6. só se usas a ufw: com Docker rootless as portas publicadas passam pela firewall
+sudo ufw allow 80,443/tcp
+```
+O `git` e o `gh` vão no passo 1 porque a `fabrica` não os consegue instalar (o `install.sh` não avança sem eles). O
+passo 2 pode avisar «Stopping docker.service, but it can still be activated by: docker.socket»: é inofensivo (o
+`docker.socket` é desligado no mesmo comando). O passo 3 cria a `fabrica` sem palavra-passe (a casa fica
+`drwxr-x---`; no Ubuntu 22.04 troca `--comment ""` por `--gecos ""`) e copia para ela as **tuas** chaves SSH
+(`~/.ssh/authorized_keys` do `dono`). No Ubuntu 24.04 e seguintes o pacote `apparmor` já traz o perfil do
+`rootlesskit` instalado pelo apt (não há nada a fazer).
+Confirma também que a tua casa não é legível pela `fabrica`: `ls -ld ~` tem de mostrar `drwxr-x---` (ou mais
+fechada); se não, `chmod 750 ~`.
+
+**Com a `fabrica`**, entra por SSH: `ssh fabrica@<vps>` (funciona com a tua chave, copiada no passo 3). Não uses
+`su` nem `sudo -iu fabrica` para o que se segue: sem sessão do systemd falta o `XDG_RUNTIME_DIR` e o
+`systemctl --user` falha, por isso o Docker rootless não se instala nem arranca (depois de instalado, o `docker`
+funciona também numa sessão `sudo -iu`).
+```bash
+dockerd-rootless-setuptool.sh install         # cria e liga o docker.service do utilizador e o contexto «rootless»
+docker info --format '{{.SecurityOptions}}'   # tem de incluir name=rootless
+```
+Depois segue os [passos](#instalação) 2 a 5 com a `fabrica` (o passo 1 já está feito). O `install.sh` vê que o Docker
+é rootless e:
+- recusa se as portas 80/443 não estiverem permitidas (diz o comando para o `dono`);
+- grava `OFFICE_UID=0` e `OFFICE_GID=0` no `.env`: no rootless o root do contentor é a `fabrica` no host, e é assim
+  que os ficheiros escritos pelo Office ficam da `fabrica` (o contentor do Office corre sem capacidades e com
+  `no-new-privileges`);
+- se o `docker` só chega ao rootless pelo `DOCKER_HOST`, activa o contexto `rootless` (o runner e as squads não
+  recebem o `DOCKER_HOST`).
+
+O `doctor` diz «Docker rootless a responder», confirma as portas e o `OFFICE_UID` e avisa (`⚠`, sem mudar o código de
+saída) se o utilizador está no grupo `docker`.
+
+**Limitações conhecidas** (todas da documentação do Docker):
+- o Caddy não vê o IP real de quem acede (vê um endereço interno): o campo `ip` das decisões fica com esse endereço.
+  A documentação do Docker descreve como o preservar (outro *port driver*); não testámos;
+- as imagens e os volumes ficam em `~/.local/share/docker` da `fabrica` (conta para o disco da casa dela);
+- o `mem_limit` do compose funciona com cgroup v2 e systemd, o que o Ubuntu 22.04 e seguintes já têm;
+- o `--proxy traefik` só funciona com um Traefik no mesmo Docker rootless (não testado).
+
+**Passar uma instalação existente para rootless** (com o utilizador do Office, `u`): pára-a enquanto o Docker de
+sistema ainda corre (`docker compose -f ~/office-lite/docker-compose.yml down`); o `dono` faz os passos 1, 2, 4, 5 e 6
+acima (com `u` em vez de `fabrica`); a seguir, numa sessão nova do `u`, `dockerd-rootless-setuptool.sh install` e
+`cd ~/squad-office-lite && ./install.sh` (troca `OFFICE_UID`/`OFFICE_GID` no `.env` e constrói a imagem no Docker
+rootless; o Caddy pede outra vez o certificado). Por fim o `dono` tira o `u` do grupo: `sudo gpasswd -d u docker`.
+Para voltar ao grupo `docker`, o inverso: o `install.sh` repõe o teu uid e gid no `.env`.
+
+**Desfazer** (apaga o Office, os dados e a `fabrica`; guarda antes o que quiseres, ver [Backups](#backups)):
+```bash
+# com a fabrica: pára o Office, desinstala o Docker rootless e apaga os dados dele (o uninstall não os apaga)
+docker compose -f ~/office-lite/docker-compose.yml down -v
+dockerd-rootless-setuptool.sh uninstall
+rootlesskit rm -rf ~/.local/share/docker
+# com o dono: tira o linger, termina os processos da fabrica e apaga-a; repõe as portas só do root
+sudo loginctl disable-linger fabrica
+sudo loginctl terminate-user fabrica
+sudo deluser --remove-home fabrica
+sudo rm /etc/sysctl.d/60-office-lite.conf
+sudo sysctl -w net.ipv4.ip_unprivileged_port_start=1024
+```
+O `rm` dos dados corre dentro do `rootlesskit` porque parte dos ficheiros pertence aos subuids da `fabrica` e um `rm`
+normal não os apaga.
+
+**Ainda não testado:** o `get.sh` com a `fabrica` em rootless (testámos o `install.sh`) e as portas publicadas com a
+`ufw` activa.
 
 ### Token do GitHub
 
@@ -170,9 +267,11 @@ Começa pelo diagnóstico, na VPS:
 ```bash
 python3 ~/squad-office-lite/runner/office_runner.py doctor
 ```
-Uma linha por verificação (`office.yaml`, Docker e o grupo `docker`, *linger*, o timer do runner, `claude` no PATH,
+Uma linha por verificação (`office.yaml`, Docker rootless ou pelo grupo `docker` e, no rootless, as portas 80/443 e
+o `OFFICE_UID`; *linger*, o timer do runner, `claude` no PATH,
 credencial do Claude, sessão do `gh`, DNS do domínio, portas 80 e 443 e a versão instalada): `✓` ou `✗ … → <comando
-que corrige>`. Sai com 0 se estiver tudo bem, 1 se não. Vê o que o runner veria: a credencial e o `GH_TOKEN` do
+que corrige>`. Sai com 0 se estiver tudo bem, 1 se não. Uma linha `⚠` avisa sem mudar o código de saída (o
+utilizador está no grupo `docker`). Vê o que o runner veria: a credencial e o `GH_TOKEN` do
 `runner.env` e o `claude` também em `~/.local/bin` e no PATH da unit. Da credencial vê só o formato e o modo do
 ficheiro, nunca o valor. Funciona mesmo com o `office.yaml` inválido (di-lo e segue).
 
@@ -331,17 +430,17 @@ só neste PC. A squad só trabalha enquanto o PC está ligado e o Docker Desktop
    ```bash
    mkdir -p ~/office && cd ~/office
    ```
-3. **Descarrega o `compose.yaml`** da versão 0.1.4. As imagens do Office e do runner vêm fixadas por digest: o que
+3. **Descarrega o `compose.yaml`** da versão 0.2.0. As imagens do Office e do runner vêm fixadas por digest: o que
    corre é sempre o que foi publicado com esta versão.
    No PowerShell (é `curl.exe`, não `curl`):
    ```powershell
-   curl.exe -fsSLO https://github.com/MozThinker/squad-office-lite/releases/download/v0.1.4/compose.yaml
+   curl.exe -fsSLO https://github.com/MozThinker/squad-office-lite/releases/download/v0.2.0/compose.yaml
    ```
    No Terminal:
    ```bash
-   curl -fsSLO https://github.com/MozThinker/squad-office-lite/releases/download/v0.1.4/compose.yaml
+   curl -fsSLO https://github.com/MozThinker/squad-office-lite/releases/download/v0.2.0/compose.yaml
    ```
-   Também o podes descarregar pelo browser, na página da release `v0.1.4`, e guardá-lo nesta pasta com o nome
+   Também o podes descarregar pelo browser, na página da release `v0.2.0`, e guardá-lo nesta pasta com o nome
    `compose.yaml`. Para mudar a porta ou a pasta dos projectos, ver
    [Mudar a porta, o endereço ou a pasta dos projectos](#mudar-a-porta-o-endereço-ou-a-pasta-dos-projectos) (opcional).
    **No Linux**, cria já o `.env` com o teu utilizador e grupo, antes do passo 4, para os ficheiros dos projectos
@@ -418,7 +517,7 @@ Sem `.env` valem as omissões. Para mudar, descarrega o `env.example` da release
 `compose.yaml`, tira o `#` das linhas que queres mudar e corre `docker compose up -d` (no Linux já tens um `.env` do
 passo 3: não o substituas, acrescenta-lhe as linhas):
 ```powershell
-curl.exe -fsSLo .env https://github.com/MozThinker/squad-office-lite/releases/download/v0.1.4/env.example
+curl.exe -fsSLo .env https://github.com/MozThinker/squad-office-lite/releases/download/v0.2.0/env.example
 ```
 (no Terminal, `curl` em vez de `curl.exe`). O anexo chama-se `env.example` porque o GitHub muda o nome dos anexos que
 começam por ponto.
@@ -490,7 +589,9 @@ docker compose pull
 docker compose up -d
 ```
 (ou numa só linha, também no PowerShell do Windows: `docker compose pull; docker compose up -d`). O `.env` e os volumes (config, credenciais, dados) ficam como estão. Vê o que mudou no
-`CHANGELOG.md`.
+`CHANGELOG.md`. **Da 0.1.x para a 0.2.0** corre uma vez `docker compose run --rm configurar` depois do `up -d`: o
+volume novo `arquivo-fila` nasce do root e só o `configurar` lhe dá o dono certo (até lá «Arquivar» responde
+«fila do arquivo indisponível» e o runner escreve no log que a fila está insegura).
 
 ### Desinstalar do PC
 
@@ -565,7 +666,7 @@ valores em várias linhas, vários documentos (`---`). `~/x` é texto (expandido
 | `squads[]` | 1–6: `id`, `nome`, `lead` (papel do líder, `tech-lead`), `personagem`, `formato` `worktree` (lançável, omissão) ou `sessao` (só acompanhada); `tipos` (`[feat, fix]`) e `modos` (`[goal, task]`) só em `worktree` |
 | `projectos[]` | 1–30: `id` (minúsculas), `nome`, `glifo` (1–2 caracteres, «◆»), `repo` (pasta em `raizes.projectos`, omissão = `id`) |
 | `colunas` | rótulos de `ideias`, `a-fazer`, `em-curso`, `a-espera`, `feito` (chaves e ordem fixas), 1–30; sem `a-espera`: «À espera de <`utilizador.nome`>» (um valor vazio não valida) |
-| `biblioteca[]` | 0–12 fontes: `id`, `rotulo`, `pasta` (relativa a `<dados>/biblioteca`), `media` (`false`), `tipo` opcional (`relatorios`, `estudos`, `planos`, `conhecimento`, `textos`) |
+| `biblioteca[]` | 0–12 fontes: `id`, `rotulo`, `pasta` (relativa a `<dados>/biblioteca`), `media` (`false`), `tipo` opcional (`relatorios`, `estudos`, `planos`, `conhecimento`, `textos`); `arquivo_dias` opcional, 7–3650: o runner arquiva sozinho, no máximo 1× por dia, os itens da fonte sem alterações há mais de N dias (ADR-012; sem a chave nunca arquiva nada sem pedido; ver [Arquivo da Biblioteca](#arquivo-da-biblioteca-adr-011)) |
 | `runner` | `tecto_diario` 1–100 (10), `paralelo` 1–4 (1), `rotacao_dias` 1–365 (14), `permission_mode` `dontAsk` (omissão), `auto`, `acceptEdits`, `default` ou `bypassPermissions`; `settings` (`""`, caminho absoluto de um JSON juntado às negações por omissão); `ferramentas` 0–100 regras para `--allowedTools` (`Nome` ou `Nome(regra)`, sem espaços nem vírgulas fora dos parênteses, sem `-` inicial; omissão: a lista em [Runner](#runner)); `max_usd` opcional, teto de custo em USD por arranque do `claude` (`--max-budget-usd`), número > 0 e ≤ 1000 com até 2 casas (`5`, `2.5`); `modelo` opcional, `--model` (alias como `sonnet` ou nome completo; letras, dígitos, `.`, `_`, `-`, até 64, sem `-` inicial). Sem as duas: nenhuma flag (o `claude` usa as suas omissões) |
 
 Lançáveis = cada squad `worktree` × cada projecto.
@@ -586,8 +687,10 @@ Lançáveis = cada squad `worktree` × cada projecto.
     decisoes-fila/              decisões vindas do Office (JSON)
     quadro/cartoes.json         cartões manuais
     quadro-lancar/              pedidos de lançamento
+    arquivo-fila/               pedidos de arquivar/repor vindos da Biblioteca (JSON)
     push/                       chaves e subscrições Web Push (0700)
     biblioteca/<pasta>/         fontes da Biblioteca
+    biblioteca/<pasta>/.arquivo/  o que se arquivou (mesmos caminhos) e o REGISTO.tsv; só o runner lá escreve
     runner/                     lock, histórico, logs, settings/, office.yaml.sha256 e gh-verificado.json
                                 do runner (só no host)
     runner-estado/estado.json   sinal do runner para o Office (sem segredos; ver Runner)
@@ -595,7 +698,7 @@ Lançáveis = cada squad `worktree` × cada projecto.
 ```
 No contentor, `tasks`, `claude_projects`, `squads`, `decisoes`, `biblioteca` e `runner-estado` são montadas só de
 leitura; o Office só
-escreve em `decisoes-fila`, `quadro`, `quadro-lancar`, `push` e nas miniaturas (num `tmpfs`). O contentor corre com o
+escreve em `decisoes-fila`, `quadro`, `quadro-lancar`, `push`, `arquivo-fila` e nas miniaturas (num `tmpfs`). O contentor corre com o
 uid/gid de quem instalou (`OFFICE_UID`/`OFFICE_GID` no `.env`), `read_only`, sem portas publicadas.
 
 **No modo Docker** não há `~/office-lite` nem `~/squad-office-lite`: cada pasta de `dados/` é um volume do Docker com
@@ -630,13 +733,15 @@ arranque seguinte. No modo Docker o `doctor` não verifica *linger*, timer, Dock
 `office.yaml`, o `claude`, a credencial, o `gh`, cada projecto em `/projectos` (git e gravável) e se o `estado.json` tem
 menos de 3 min.
 Cada passagem (com lock, nunca duas ao mesmo tempo): grava o `estado.json` → confirma se o `office.yaml` mudou →
-aplica decisões → retoma tarefas interrompidas (até 2 vezes) → trata a fila do Quadro → arquiva pedidos antigos.
+aplica decisões → retoma tarefas interrompidas (até 2 vezes) → trata a fila do Quadro → trata a fila do arquivo da
+Biblioteca e o arquivo automático (ver [Arquivo da Biblioteca](#arquivo-da-biblioteca-adr-011)) → arquiva pedidos
+antigos (de todas as filas). No log, o que é da Biblioteca começa por «biblioteca:».
 
 **`estado.json`** (`<dados>/runner-estado/`, 0644, escrita atómica): o sinal do runner para o Office, que o lê só de
 leitura e com ele desenha os «Primeiros passos» e a faixa «O runner não dá sinal desde HH:MM» (mais de 3 min sem
 passagem). Só valores de uma lista conhecida, nunca segredos, caminhos nem a saída dos comandos:
 ```json
-{"v": 1, "em": "2026-11-08T19:30:00+00:00", "versao": "0.1.4",
+{"v": 1, "em": "2026-11-08T19:30:00+00:00", "versao": "0.2.0",
  "claude": "ok|falta", "credencial": "ok|falta|modo", "gh": "ok|sem sessão"}
 ```
 `credencial` diz se há uma credencial válida (`claude.env`, `runner.env` ou o login do `claude`), sem a ler para fora
@@ -895,12 +1000,87 @@ Sucesso: **202** `{id, versao, movido, cartoes}`. O `GET /api/quadro` acrescenta
 lançáveis) e, em cada cartão manual, `lancamento` (`a-lancar`, `ligado` ou `erro`); no fim da execução move o cartão,
 uma vez só, para «À espera de …» (erro ou PR por rever) ou «Feito».
 
+### Arquivo da Biblioteca (ADR-011)
+
+Arquivar tira um documento (com as suas versões: `x.md`, `x.copy.md`, `x.revisao.md`…) ou um lote de media da lista
+sem o apagar: o item inteiro passa para `<fonte>/.arquivo/<o mesmo caminho>`, tudo ou nada; nada se apaga nem se
+sobrescreve (destino que já existe ⇒ erro e nada mexe). Só itens das fontes `biblioteca:` (tarefas, planos da inbox,
+pedidos de aprovação e pastas de media fora de `media/` não). No detalhe: «Arquivar» (com confirmação) ou, nos
+arquivados, «Repor»; o chip «Ver arquivados» mostra só o arquivo (`GET /api/biblioteca?arquivo=1`, um 2.º índice
+feito só a pedido, com as mesmas regras, ETag e 304). O Office nunca move nada: grava um pedido numa fila e o runner
+trata-o na passagem seguinte (até 1 min).
+
+**Links antigos:** um item arquivado mantém o id e os caminhos. `/f/`, `/mini/`, `/zip` e `/item?id=` (logo
+`#biblioteca/<id>`, os links do WhatsApp, dos pedidos de aprovação e do Telegram) procuram primeiro no índice principal
+e depois na `.arquivo/` da mesma fonte (`/f/` e `/mini/` directamente no disco, sem esperar pelo índice); o detalhe
+diz «Arquivado em `<data>` · `<motivo>`». Reposto, volta a abrir pelo mesmo link (no varrimento seguinte, ≤ 60 s).
+
+**Protecções** (no pedido e no automático; o runner responde com o motivo): não se arquiva um item citado por um pedido
+de aprovação pendente (ou com estado desconhecido), nem com algum ficheiro alterado há menos de 48 h. Só no automático
+(`arquivo_dias`): também não sai o que é citado por um pedido alterado há menos de 14 dias, nem o que já foi reposto
+alguma vez (pelo item ou por algum dos seus ficheiros, segundo o REGISTO). Repor não tem protecções. Experimenta o `arquivo_dias` primeiro numa fonte de teste: numa fonte antiga a
+1.ª passagem pode mover muito (tudo reversível pelo «Repor»).
+
+**Pedido** `<dados>/arquivo-fila/<id>.json` (contrato `v: 1`, escrito pelo Office; nome só do relógio e de
+`secrets.token_hex(4)`), chaves exactas por esta ordem:
+```json
+{"v": 1, "id": "20261117T183400-0a1b2c3d", "accao": "arquivar", "fonte": "material", "chave": "relatorios/x.md",
+ "pedido_em": "2026-11-17T18:34:00+00:00", "ip": "…", "ua": "…"}
+```
+`accao` `arquivar` ou `repor`; `fonte` o id de uma fonte da config; `chave` o id do item sem a fonte (documento: o
+caminho do principal; lote: `media/<lote>`), com as regras de caminho da Biblioteca (sem `..`, componentes escondidos
+ou negados, ≤ 8 componentes); `ip` ≤ 64 e `ua` ≤ 200 caracteres. Escrita tmp + `fsync` + `os.link` (nunca
+sobrescreve). **Resposta do runner** `<id>.feito.json`: `{"ok": true}` ou `{"erro": "<motivo>"}`, com o motivo de uma
+lista fechada (`pedido ilegível`, `fonte desconhecida`, `item inexistente`, `não arquivável`, `destino já existe`,
+`sistemas de ficheiros diferentes`, `symlink no caminho`, `nome com tab ou quebra de linha`, `não está no arquivo`,
+`erro a mover`, `protegido: citado por um pedido de aprovação pendente`, `protegido: alterado há menos de 48 h`,
+`alterações por commitar`, `erro git`). Cada passagem trata no máximo 50 pedidos, por ordem do nome (os outros ficam
+para a seguinte); um 2.º pedido para o mesmo item (ou ficheiros já movidos) na mesma passagem dá `pedido ilegível`.
+**Rotação:** o pedido e a resposta vão para `feito/` quando a resposta tem mais de `runner.rotacao_dias` (o Office só
+lê a raiz).
+
+**Contrato do runner** (a fila vem de um contentor; o runner não confia nela): só nomes
+`^\d{8}T\d{6}-[0-9a-f]{8}\.json$`, abertos com `O_NOFOLLOW` e `fstat` (ficheiro regular, ≤ 4 KB); revalida tudo
+contra a config; desce os caminhos pasta a pasta sem seguir symlinks (a raiz da fonte pode ser um symlink, abaixo dela
+não) e move com `os.rename` (mesmo sistema de ficheiros: entre discos dá `sistemas de ficheiros diferentes` e nada se
+move, sem cópias). `repor` faz o inverso, só se o item estiver na `.arquivo/`.
+
+**`<fonte>/.arquivo/REGISTO.tsv`** (só o runner escreve): separado por tabs, cabeçalho `data accao caminho motivo
+item` e uma linha por ficheiro movido: data com o fuso da config, `arquivar`/`repor`, caminho relativo à fonte, motivo
+(`pedido no Office`, `reposto a pedido do Office`, `idade (N dias)`) e o item (= `chave`). Nomes com tab ou quebra de
+linha são recusados antes de mexer.
+
+**Git:** se a fonte estiver num repositório git cujo topo é `<dados>/biblioteca` ou está dentro dele, os ficheiros
+seguidos movidos vão num só commit por fonte e por passagem, `chore(arquivo): N ficheiros` (repor: `chore(arquivo):
+repor N ficheiros`; os dois na mesma passagem: `chore(arquivo): arquivar e repor N ficheiros`) só com esses caminhos (passados por stdin, nunca na linha de comandos; hooks, `fsmonitor` e assinatura desligados), e a
+`.arquivo/` leva um `.gitignore` com `*`. Depois, `git fetch origin` e `git push` só se o ramo actual for o do
+`origin/HEAD` e estiver exactamente 1 commit à frente e 0 atrás (nunca `--force`); senão uma linha `AVISO: sem push em
+<fonte>: <motivo>` no log do runner, e o push fica para ti. Um item com ficheiros seguidos modificados, em stage ou
+apagados (`git status`) não se move (`alterações por commitar`): o commit nunca publica trabalho por commitar; um item
+com um submódulo (entrada `160000` no `git ls-files -s`) também não (`não arquivável`). Se o `git ls-files`, o
+`git add` ou o commit falhar (ex.: `index.lock`), os renames dessa fonte e dessa passagem são desfeitos, o índice
+volta ao que estava e os pedidos recebem `erro git`. Um repositório que contém os dados por acaso (topo fora de
+`<dados>/biblioteca`) ou sem git: só `os.rename`.
+
+**`POST /api/biblioteca/arquivo`** `{"token", "accao", "item"}` (chaves exactas; `item` = id do item na Biblioteca):
+413 (> 4 KB), 403 (Content-Type, origem, token, segredo do proxy), 400 (`campos inválidos`, `acção inválida`, `item
+inexistente`: arquivar um item que não está na lista ou repor um que não está no arquivo; `não arquivável`), 409
+(`já há um pedido em fila para este item`, de qualquer acção), 429 `fila cheia` (50 pendentes), 503 (`fila do arquivo
+indisponível`: pasta ausente ou sem escrita). Sucesso: **202** `{"id", "accao"}`. O `GET /api/biblioteca/item`
+acrescenta `arquivo`: `{"arquivavel", "arquivado": null | {"em", "motivo"}, "pendente": null | "arquivar" | "repor",
+"erro": null | <motivo do último pedido falhado>}`; na lista do arquivo cada item traz `arquivado`.
+
 ### Outras partes
 
 - **Biblioteca** (`▤`): ficheiros das fontes de `biblioteca` e os `SPEC/PLAN/QA.md` das tarefas, para ver e
   descarregar no telemóvel. Só extensões permitidas (imagem, vídeo, áudio, `md txt csv pdf`), sem ficheiros ocultos,
   segredos ou symlinks, textos mascarados; miniaturas com Pillow num `tmpfs` de 128 MB. Fontes com `media: true` são
-  agrupadas em lotes (uma pasta = um lote; destaque em `final/`).
+  agrupadas em lotes (uma pasta = um lote; destaque em `final/`). Nunca espera por um varrimento (ADR-010): o índice
+  é refeito numa thread passados 60 s e os pedidos respondem com o anterior (só o 1.º, logo depois do arranque,
+  espera); `/f/` e `/mini/` nunca esperam pelo índice (sem ele, ou com ele velho, validam o caminho directamente no
+  disco, com as mesmas regras). A lista leva `ETag` e `Cache-Control: private, no-cache`: o browser revalida e, sem
+  mudanças, recebe `304` sem corpo. Documentos e lotes antigos podem ser arquivados e repostos (ver
+  [Arquivo da Biblioteca](#arquivo-da-biblioteca-adr-011)).
 - **Notificações no telemóvel** (⚙ Definições): Web Push (VAPID, `cryptography`) para fins de tarefa, PR aberto,
   tarefas paradas, aprovações e fases; precisa de HTTPS (domínio). Chaves e subscrições em `<dados>/push/`. As
   mensagens levam só squad, projecto, estado e ids, nunca o texto das tarefas.
@@ -1005,7 +1185,7 @@ Para reportar uma falha, ver [`SECURITY.md`](SECURITY.md) (reporte privado no Gi
 
 Postas pelo compose gerado: `OFFICE_CONFIG` (omissão `/config/office.yaml`), `TASKS_DIR`, `CLAUDE_PROJECTS_DIR`,
 `SQUADS_DIR`, `APROVACOES_DIR`, `BIBLIOTECA_DIR`, `DECISOES_FILA_DIR`, `QUADRO_DIR`, `QUADRO_LANCAR_DIR`, `PUSH_DIR`,
-`RUNNER_ESTADO_DIR` (omissão `/data/runner-estado`), `PUSH_CONTACTO` (opcional) e
+`ARQUIVO_FILA_DIR` (omissão `/data/arquivo-fila`), `RUNNER_ESTADO_DIR` (omissão `/data/runner-estado`), `PUSH_CONTACTO` (opcional) e
 `BIBLIOTECA_MINI_DIR` (omissão `/tmp/miniaturas`); `PORT` (8080). No modo Docker também `OFFICE_MODO=docker`
 (`GET /api/config` ganha `"modo": "docker"`, senão `"vps"`; os «Primeiros passos» mostram os comandos
 `docker compose …`) e `OFFICE_PROXY_SEGREDO_FILE=/proxy/segredo` em vez de `OFFICE_PROXY_SEGREDO`: o segredo vem desse

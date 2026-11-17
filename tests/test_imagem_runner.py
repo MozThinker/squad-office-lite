@@ -107,7 +107,8 @@ class ImagemRunner(unittest.TestCase):
 
     def test_codigo_copiado(self):
         self.assertIn("WORKDIR /app", INSTR)
-        self.assertIn("COPY officecfg.py office.example.yaml ./", INSTR)
+        # arquivo.py: regras partilhadas da Biblioteca e do arquivo (o runner importa-o de /app, como o officecfg)
+        self.assertIn("COPY officecfg.py arquivo.py office.example.yaml ./", INSTR)
         self.assertIn("COPY runner/*.py ./runner/", INSTR)
         # /app/runner/office_runner.py importa officecfg de /app (pasta acima de runner/)
         self.assertIn("sys.path.insert(1, str(Path(__file__).resolve().parent.parent))",

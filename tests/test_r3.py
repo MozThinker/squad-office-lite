@@ -11,6 +11,7 @@ import unittest
 import reader
 import server
 from tests import fake
+from tests import tempo
 from tests import test_server as base
 from tests import cfg
 
@@ -123,9 +124,7 @@ class SpeedTest(unittest.TestCase):
         for adv in ("k_" * 100000 + "=", 'KEY="' + '\\"' * 100000, "aB" * 100000 + ":",
                     "a_key:\n" + "  x\n" * 50000, "x-" * 100000 + "sk", "password:\n" + " " * 200000):
             with self.subTest(adv=adv[:20]):
-                t = time.perf_counter()
-                reader.mask(adv)
-                self.assertLess(time.perf_counter() - t, 1.5)
+                self.assertLess(tempo.cpu(reader.mask, adv), tempo.CPU_MAX_S)
 
 
 class SquadLaunchersTest(unittest.TestCase):

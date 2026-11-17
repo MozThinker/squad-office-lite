@@ -76,11 +76,16 @@ class CIActiva(unittest.TestCase):   # CA-A3.1, CA-A3.2, CA-A2.4: as propostas d
         self.assertEqual(blocos, [("github-actions", "/", "weekly"), ("docker", "/", "weekly"),
                                   ("pip", "/", "weekly")])
 
-    def test_ci_com_fumo_docker(self):   # AC-p2: o job fumo-docker, activado a 9/11/2026, é o último do ci.yml
+    def test_ci_com_fumo_docker(self):   # AC-p2: o job fumo-docker (9/11/2026); desde 13/11 segue-o o fumo-rootless (ADR-009)
         p = CI.read_text(encoding="utf-8")
         self.assertIn("\n\n  fumo-docker:\n", p)
         job = p[p.index("\n\n  fumo-docker:\n") + 1:]
-        self.assertEqual(re.findall(r"(?m)^  ([\w-]+):$", job), ["fumo-docker"])
+        self.assertEqual(re.findall(r"(?m)^  ([\w-]+):$", job), ["fumo-docker", "fumo-rootless"])
+        rootless = job[job.index("\n  fumo-rootless:\n") + 1:]
+        job = job[:job.index("\n  fumo-rootless:\n") + 1]
+        self.assertIn("    needs: checks\n", rootless)
+        for u in re.findall(r"^\s*- uses: .*$", rootless, re.M):
+            self.assertRegex(u.strip(), rf"^- {USES_FIXO}$")
         self.assertIn("    needs: checks\n    runs-on: ubuntu-latest\n", job)
         usos = re.findall(r"^\s*- uses: .*$", job, re.M)
         self.assertTrue(usos)

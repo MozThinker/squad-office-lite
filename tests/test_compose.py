@@ -18,7 +18,7 @@ HOME_EXEMPLO = str(Path("/", "home", "utilizador"))
 CASA_EXEMPLO = f"{HOME_EXEMPLO}/office-lite"
 REPO_EXEMPLO = f"{HOME_EXEMPLO}/squad-office-lite"
 SEGREDO = "${OFFICE_PROXY_SEGREDO:?falta no .env, corre o install.sh}"
-RW = {"/data/decisoes-fila", "/data/quadro", "/data/quadro-lancar", "/data/push"}
+RW = {"/data/decisoes-fila", "/data/quadro", "/data/quadro-lancar", "/data/push", "/data/arquivo-fila"}
 
 CONFIG = """versao: 1
 raizes:
@@ -82,7 +82,7 @@ class ComposeGerado(unittest.TestCase):
         out = self.caddy()
         b = binds(out)
         office = [x for x in b if x[1] != "/etc/caddy/Caddyfile"]
-        self.assertEqual(len(office), 11)
+        self.assertEqual(len(office), 12)
         for s, alvo, _ in office:
             dentro = s == str(self.cfg) or any(s == str(self.t / r) or s.startswith(str(self.t / r) + "/")
                                                for r in ("dados", "claude"))
@@ -90,6 +90,10 @@ class ComposeGerado(unittest.TestCase):
         self.assertIn((str(self.cfg), "/config/office.yaml", True), office)
         self.assertEqual({a for _, a, ro in office if not ro}, RW)
         self.assertIn((str(ROOT / "Caddyfile"), "/etc/caddy/Caddyfile", True), b)
+        # AC16: a fila do arquivo é a única escrita nova; as fontes da Biblioteca continuam só de leitura
+        self.assertIn((str(self.t / "dados" / "arquivo-fila"), "/data/arquivo-fila", False), office)
+        self.assertIn((str(self.t / "dados" / "biblioteca"), "/data/biblioteca", True), office)
+        self.assertIn("      ARQUIVO_FILA_DIR: /data/arquivo-fila\n", servico(out, "office"))
 
     def test_office_endurecido(self):  # AC-b3
         office = servico(self.caddy(), "office")
@@ -214,7 +218,7 @@ class Ficheiros(unittest.TestCase):
         self.assertIn("tzdata", d)
         copy = re.search(r"(?m)^COPY (.*\.py.*) \./$", d).group(1).split()
         for f in ("server.py", "reader.py", "aprovacoes.py", "biblioteca.py", "quadro.py", "push.py", "progresso.py",
-                  "lancar.py", "officecfg.py", "office.example.yaml"):
+                  "lancar.py", "officecfg.py", "arquivo.py", "office.example.yaml"):
             self.assertIn(f, copy)
 
     def test_caddyfile(self):  # AC-d3

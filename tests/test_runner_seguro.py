@@ -139,8 +139,11 @@ def test_lancados_hoje_ignora_symlinks_e_fifos(ctx):
     alvo.write_text('{"task_id": "x"}', encoding="utf-8")
     (fila / "20261106T090000-11111111.feito.json").symlink_to(alvo)
     os.mkfifo(fila / "20261106T090000-22222222.feito.json")
-    (fila / "20261106T090000-33333333.feito.json").write_text('{"task_id": "y"}', encoding="utf-8")
-    assert lancador.lancados_hoje(cfg, fila, time.time()) == 1
+    feito = fila / "20261106T090000-33333333.feito.json"
+    feito.write_text('{"task_id": "y"}', encoding="utf-8")
+    t = time.time()
+    os.utime(feito, (t, t))   # mtime e «hoje» do mesmo instante: escrever e ler à volta da meia-noite dava 0
+    assert lancador.lancados_hoje(cfg, fila, t) == 1
 
 
 def _trio_velho(fila, stem):

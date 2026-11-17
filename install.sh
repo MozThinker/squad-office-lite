@@ -14,6 +14,9 @@
 # claude.env e no runner.env) ou com --credenciais (com --sem-perguntas, também com OFFICE_CLAUDE_CRED não vazio);
 # o token da subscrição nunca é pedido (escreve-o o utilizador, ver README). claude.env e runner.env existentes têm de
 # ser ficheiros normais do utilizador, sem permissões para o grupo nem outros (chmod 600).
+# Docker rootless (recomendado na VPS; README, «Docker rootless»): detectado pelo `docker info`; os contentores correm
+# com OFFICE_UID=0 (o root do contentor é o teu utilizador no host) e o Caddy precisa das portas 80/443 permitidas a
+# utilizadores normais (sysctl net.ipv4.ip_unprivileged_port_start=80, posto pelo utilizador com sudo).
 set -euo pipefail
 
 REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -32,6 +35,9 @@ RX_CAMINHO='^/[A-Za-z0-9/._+-]*$'
 RX_CRED_API='^sk-ant-[A-Za-z0-9_-]+$'
 # só para o hash da palavra-passe; fixada por digest do index multi-arquitectura (actualizar à mão)
 HTTPD_IMAGEM=httpd:2.4-alpine@sha256:d72968666c0a6961b07036d85fc053bc3cf640583cb1ff8360e1617818f164dc
+
+# só para os testes (o sysctl do host)
+PORTA_SYSCTL=${OFFICE_LITE_PORTA_SYSCTL:-/proc/sys/net/ipv4/ip_unprivileged_port_start}
 
 erro() { printf 'erro: %s\n' "$*" >&2; exit 1; }
 aviso() { printf 'aviso: %s\n' "$*" >&2; }
@@ -77,13 +83,52 @@ precisa docker "https://docs.docker.com/engine/install/ubuntu/"
 if ! command -v claude >/dev/null 2>&1 && [ -x "$HOME/.local/bin/claude" ]; then PATH="$HOME/.local/bin:$PATH"; fi
 # claude em ~/.local/bin: fim
 precisa claude "curl -fsSL https://claude.ai/install.sh | bash   (depois corre 'claude' uma vez para entrar)"
-precisa gh "https://github.com/cli/cli/blob/trunk/docs/install_linux.md   (depois 'gh auth login')"
+precisa gh "sudo apt-get install -y gh, ou https://github.com/cli/cli/blob/trunk/docs/install_linux.md (sem sudo, como no Docker rootless: pede-o ao utilizador que tem sudo; depois 'gh auth login')"
 precisa git "sudo apt-get install -y git"
 precisa python3 "sudo apt-get install -y python3"
+# docker rootless: início
+ROOTLESS=0
+docker_contexto() {  # rootless a correr, mas o docker sem DOCKER_HOST não lhe chega: activa o contexto «rootless»
+  # (o runner e as squads não recebem o DOCKER_HOST; o contexto fica em ~/.docker e serve a todos)
+  local sock="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/docker.sock"
+  [ -S "$sock" ] || return 0
+  ! env -u DOCKER_HOST -u DOCKER_CONTEXT docker info >/dev/null 2>&1 || return 0
+  docker --host "unix://$sock" info >/dev/null 2>&1 || return 0
+  if ! env -u DOCKER_HOST -u DOCKER_CONTEXT docker context inspect rootless >/dev/null 2>&1; then
+    env -u DOCKER_HOST -u DOCKER_CONTEXT docker context create rootless --docker "host=unix://$sock" >/dev/null \
+      || return 0
+  fi
+  env -u DOCKER_HOST -u DOCKER_CONTEXT docker context use rootless >/dev/null || return 0
+  info "Docker rootless: o contexto «rootless» do docker passa a ser o activo (o runner e as squads usam-no)."
+}
+docker_rootless() {  # ROOTLESS=1 se o daemon a que o docker chega é rootless (Security Options: name=rootless)
+  local so
+  so=$(docker info --format '{{range .SecurityOptions}}{{.}} {{end}}' 2>/dev/null) || so=""
+  case " $so " in *" name=rootless "*) ROOTLESS=1 ;; *) ROOTLESS=0 ;; esac
+}
+portas_rootless() {  # o rootlesskit consegue abrir as portas 80/443: sysctl <= 80 ou CAP_NET_BIND_SERVICE nele
+  local p rk c
+  p=$(cat "$PORTA_SYSCTL" 2>/dev/null) || p=1024
+  [[ "$p" =~ ^[0-9]+$ ]] || p=1024
+  [ "$p" -gt 80 ] || return 0
+  rk=$(command -v rootlesskit || true)
+  [ -n "$rk" ] || return 1
+  c=$(getcap "$rk" 2>/dev/null) || c=""
+  [[ "$c" == *cap_net_bind_service* ]]
+}
+falta_docker() {  # sem acesso ao Docker: o rootless é o caminho recomendado; o grupo docker equivale a root
+  if command -v dockerd-rootless-setuptool.sh >/dev/null 2>&1; then
+    printf 'falta: acesso ao Docker. Docker rootless (recomendado): dockerd-rootless-setuptool.sh install (README, «Docker rootless»)\n' >&2
+  else
+    printf '%s\n' "falta: acesso ao Docker. Recomendado: Docker rootless (README, «Docker rootless»; o utilizador com sudo instala docker-ce-rootless-extras, uidmap e dbus-user-session)." >&2
+    printf '  Alternativa, que equivale a dar root a este utilizador: sudo usermod -aG docker %s (e volta a entrar)\n' "$(id -un)" >&2
+  fi
+}
+# docker rootless: fim
 if command -v docker >/dev/null 2>&1; then
+  docker_contexto
   if ! docker info >/dev/null 2>&1; then
-    printf 'falta: acesso ao Docker. Junta-te ao grupo docker: sudo usermod -aG docker %s (e volta a entrar)\n' \
-      "$(id -un)" >&2
+    falta_docker
     falta=1
   elif ! docker compose version >/dev/null 2>&1; then
     printf 'falta: docker compose. Instala com: sudo apt-get install -y docker-compose-plugin\n' >&2
@@ -91,6 +136,13 @@ if command -v docker >/dev/null 2>&1; then
   elif [ "$PROXY" = traefik ] && ! docker network inspect "$REDE" >/dev/null 2>&1; then
     printf 'falta: a rede Docker «%s» do Traefik (docker network ls)\n' "$REDE" >&2
     falta=1
+  else
+    docker_rootless
+    if [ "$ROOTLESS" = 1 ] && [ "$PROXY" = caddy ] && ! portas_rootless; then
+      printf 'falta: o Docker rootless não pode abrir as portas 80/443 do Caddy. Com o utilizador que tem sudo:\n' >&2
+      printf '  echo net.ipv4.ip_unprivileged_port_start=80 | sudo tee /etc/sysctl.d/60-office-lite.conf && sudo sysctl --system\n' >&2
+      falta=1
+    fi
   fi
 fi
 if command -v python3 >/dev/null 2>&1 && ! python3 -c 'import sys; sys.exit(sys.version_info < (3, 10))'; then
@@ -104,7 +156,18 @@ if command -v gh >/dev/null 2>&1 && ! timeout 10 gh auth status >/dev/null 2>&1;
   aviso "o gh não tem sessão: as tarefas acabam sem PR. Corre gh auth login"
 fi
 # gh com sessão: fim
-[ "$(id -u)" != 0 ] || aviso "a correr como root: o Office e as pastas ficam do root (recomendado: um utilizador normal no grupo docker)"
+[ "$(id -u)" != 0 ] || aviso "a correr como root: o Office e as pastas ficam do root (recomendado: um utilizador normal com Docker rootless)"
+if [ "$ROOTLESS" = 1 ]; then
+  info "Docker rootless: os contentores correm com o teu utilizador (OFFICE_UID=0 no .env)."
+  OFFICE_UID_ENV=0
+  OFFICE_GID_ENV=0
+else
+  OFFICE_UID_ENV=$(id -u)
+  OFFICE_GID_ENV=$(id -g)
+  if [ "$(id -u)" != 0 ] && [[ " $(id -nG) " == *" docker "* ]]; then
+    aviso "estás no grupo docker, que equivale a root: um programa de uma squad chega a tudo na VPS. Recomendado: Docker rootless (README, «Docker rootless»)"
+  fi
+fi
 for c in "$REPO" "$CASA"; do
   [[ "$c" =~ $RX_CAMINHO ]] || erro "caminho com caracteres não suportados (usa só letras, números e / . _ + -): $c"
 done
@@ -336,8 +399,8 @@ fi
 if [ ! -f "$ENVF" ]; then
   {
     echo "# Squad Office Lite (install.sh). Aspas simples: o compose não interpola os \$ do hash."
-    echo "OFFICE_UID='$(id -u)'"
-    echo "OFFICE_GID='$(id -g)'"
+    echo "OFFICE_UID='$OFFICE_UID_ENV'"
+    echo "OFFICE_GID='$OFFICE_GID_ENV'"
     echo "OFFICE_SITE='${DOMINIO:-:80}'"
     echo "OFFICE_DOMINIO='$DOMINIO'"
     echo "OFFICE_AUTH_USER='$UTILIZADOR'"
@@ -355,6 +418,21 @@ elif [ "$PALAVRA_PASSE" = 1 ]; then
   chmod 0600 "$ENVF.tmp"
   mv "$ENVF.tmp" "$ENVF"
   info "Palavra-passe actualizada em $ENVF."
+fi
+# uid/gid dos contentores: com Docker rootless 0 (o teu utilizador no host); ao mudar de modo (rootless <-> grupo docker)
+# só estas duas linhas mudam. Um valor à mão que não seja o de nenhum dos modos fica como está.
+uid_antes=$(env_valor OFFICE_UID)
+gid_antes=$(env_valor OFFICE_GID)
+if [ "$uid_antes:$gid_antes" != "$OFFICE_UID_ENV:$OFFICE_GID_ENV" ] \
+  && { [ "$ROOTLESS" = 1 ] || [ "$uid_antes:$gid_antes" = 0:0 ]; }; then
+  {
+    grep -vE '^OFFICE_(UID|GID)=' "$ENVF" || true
+    echo "OFFICE_UID='$OFFICE_UID_ENV'"
+    echo "OFFICE_GID='$OFFICE_GID_ENV'"
+  } > "$ENVF.tmp"
+  chmod 0600 "$ENVF.tmp"
+  mv "$ENVF.tmp" "$ENVF"
+  info "OFFICE_UID/OFFICE_GID actualizados em $ENVF ($OFFICE_UID_ENV:$OFFICE_GID_ENV, $([ "$ROOTLESS" = 1 ] && echo "Docker rootless" || echo "grupo docker"))."
 fi
 # segredo que o proxy injecta (X-Office-Segredo) e o Office exige (ADR-006): só se faltar; nunca em argv nem nos logs
 if ! grep -q '^OFFICE_PROXY_SEGREDO=' "$ENVF"; then
@@ -449,8 +527,13 @@ if [ "$runner_ok" = 1 ]; then
   fi
   EU=$(id -un)
   if [ "$(loginctl show-user "$EU" -p Linger --value 2>/dev/null || true)" != yes ]; then
-    loginctl enable-linger "$EU" 2>/dev/null \
-      || aviso "sem 'linger' o runner pára quando sais da sessão; corre: sudo loginctl enable-linger $EU"
+    if ! loginctl enable-linger "$EU" 2>/dev/null; then
+      if [ "$ROOTLESS" = 1 ]; then
+        aviso "sem 'linger' o Docker rootless, o Office e o runner param quando sais da sessão; com o utilizador que tem sudo: sudo loginctl enable-linger $EU"
+      else
+        aviso "sem 'linger' o runner pára quando sais da sessão; corre: sudo loginctl enable-linger $EU"
+      fi
+    fi
   fi
 fi
 

@@ -1,9 +1,63 @@
 # Changelog
 
-## Por publicar
+## Lite 0.2.0 (2026-11-17)
 
-Só documentação e modelos para os testers da comunidade (agora também em inglês); o código do Office e do runner
-não muda.
+Docker rootless na VPS (ADR-009), documentação e modelos para os testers da comunidade (agora também em inglês) e a
+Biblioteca rápida com arquivo dos documentos antigos (ADR-010…012). Os contratos v1 existentes e o `office.yaml`
+(`versao: 1`) não mudam; há um contrato novo (a fila do arquivo, `v: 1`) e uma chave opcional nova
+(`biblioteca[].arquivo_dias`).
+
+### Biblioteca rápida e arquivo (ADR-010, ADR-011, ADR-012)
+
+- **Biblioteca rápida** (porte do Squad Office): o índice é refeito numa thread passados 60 s e os pedidos respondem
+  com o anterior (só o 1.º depois do arranque espera; o servidor começa-o ao arrancar). `/f/`, `HEAD /f/` e `/mini/`
+  nunca esperam pelo índice: sem ele, ou com ele velho, validam o caminho directamente no disco com as mesmas regras
+  (pasta a pasta com `O_NOFOLLOW`). A lista leva `ETag` fraco e `Cache-Control: private, no-cache` (antes `no-store`)
+  e responde `304` sem corpo quando nada mudou; o browser deixa de a pedir com `no-store`. Os pedidos de aprovação só
+  se relêem quando mudam e as ligações item ↔ pedido saem de um índice invertido. Corpo da lista, `/item`, `/zip` e
+  `/f/` iguais byte a byte aos da 0.1.4 sobre as mesmas fixtures (`tests/fixtures/biblioteca_0_1_4.json`).
+- **`arquivo.py`:** as regras de caminho da Biblioteca (allowlist, denylist, profundidade, varrimento) passam para um
+  módulo só com stdlib, partilhado pelo Office e pelo runner, com o contrato da fila do arquivo, o `REGISTO.tsv` e as
+  protecções.
+- **Arquivar e repor** no detalhe de um documento ou lote de uma fonte `biblioteca:` (com confirmação); chip «Ver
+  arquivados» (`GET /api/biblioteca?arquivo=1`). O Office só grava um pedido em `<dados>/arquivo-fila/` (`POST
+  /api/biblioteca/arquivo`: 202, 400, 409, 429 com 50 pendentes, 503); o runner move para `<fonte>/.arquivo/` (tudo ou
+  nada, nunca sobrescreve nem apaga), responde em `<id>.feito.json` e regista no `<fonte>/.arquivo/REGISTO.tsv`.
+  Protecções: citado por um pedido de aprovação pendente, ou alterado há menos de 48 h. O `/item` ganha `arquivo`
+  (arquivável, arquivado em/motivo, pedido pendente, motivo do último erro).
+- **Links antigos:** `/f/`, `/mini/`, `/zip` e `/item?id=` de um item arquivado abrem a partir da `.arquivo/` (mesmo
+  id), com «Arquivado em … · …»; reposto, volta a abrir pelo mesmo link.
+- **Git e push seguro:** numa fonte que é um repositório git dentro de `<dados>/biblioteca`, o arquivo vai num commit
+  próprio `chore(arquivo): N ficheiros` (caminhos por stdin, sem hooks) e só se faz push no ramo do `origin/HEAD` com 0
+  atrás e 1 à frente; senão `AVISO: sem push em <fonte>: <motivo>` no log do runner.
+- **Arquivo automático (opt-in):** `biblioteca[].arquivo_dias` (7–3650) numa fonte; no máximo 1× por dia, com as
+  protecções do manual e mais duas (citado por um pedido alterado há menos de 14 dias; já reposto alguma vez). Sem a
+  chave nada se arquiva sem pedido.
+- **Mounts e instalação:** `arquivo-fila` é a única pasta nova com escrita no contentor do Office (`biblioteca`
+  continua só de leitura); o instalador, o `configurar` e o runner criam-na e o agente não a pode editar (negação
+  `Edit`). **Modo Docker, ao actualizar da 0.1.x:** corre uma vez `docker compose run --rm configurar` (o volume novo
+  nasce do root; até lá o «Arquivar» dá 503).
+
+### Docker rootless (VPS)
+
+- **README, «Docker rootless»** (pt e en): o caminho recomendado na VPS. O grupo `docker` equivale a root; com o
+  Docker rootless o Office e as squads correm com um utilizador sem `sudo`. O que faz quem tem `sudo` (pacotes,
+  desligar o Docker de sistema, `ip_unprivileged_port_start=80`, *linger*, `ufw`) e o que faz o utilizador do Office
+  (`dockerd-rootless-setuptool.sh install`, só por `ssh`), limitações, como passar uma instalação existente e como
+  desfazer (o `uninstall` não apaga os dados: `rootlesskit rm -rf ~/.local/share/docker`). Testado numa VPS com
+  Ubuntu 26.04.1 (13/11/2026); o `get.sh` em rootless e a `ufw` activa ficam por testar. O grupo `docker`
+  continua a funcionar; o modo Docker (PC) não muda.
+- **`install.sh`:** detecta o Docker rootless; recusa sem as portas 80/443 permitidas (mostra o comando para quem tem
+  `sudo`); grava `OFFICE_UID=0`/`OFFICE_GID=0` no `.env` e troca-os ao mudar de modo (rootless ↔ grupo `docker`; um
+  valor à mão fica); activa o contexto `rootless` quando o `docker` só chega ao daemon pelo `DOCKER_HOST`; sem acesso
+  ao Docker recomenda o rootless; sem o `gh`, diz que quem tem `sudo` o instala; avisa quem está no grupo `docker`; no rootless o aviso do *linger* diz que o Office
+  também pára.
+- **`doctor`:** «Docker rootless a responder» ou «Docker a responder (grupo docker)»; no rootless verifica as portas
+  80/443 (sysctl ou `setcap` no `rootlesskit`) e `OFFICE_UID=0`; com o Docker parado diz `systemctl --user start
+  docker` ou `dockerd-rootless-setuptool.sh install`; uma linha `⚠` (não conta para o código de saída) avisa quem está
+  no grupo `docker`.
+- **Compose do modo VPS:** o serviço `office` corre com `cap_drop: ALL` e `no-new-privileges` (no rootless o
+  contentor corre como uid 0, o teu utilizador no host).
 
 ### Added
 

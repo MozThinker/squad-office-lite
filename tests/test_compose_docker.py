@@ -129,6 +129,15 @@ class ModoDocker(unittest.TestCase):
                       "OFFICE_PROXY_SEGREDO_FILE: /proxy/segredo"):
             self.assertIn(f"      {linha}\n", env)
 
+    def test_arquivo_fila_rw_e_biblioteca_ro(self):  # AC16: o Office escreve a fila; quem move é o runner
+        office = volumes(servico(self.out, "office"))
+        self.assertEqual(office["/data/arquivo-fila"], ("arquivo-fila", False))
+        self.assertEqual(office["/data/biblioteca"], ("biblioteca", True))
+        self.assertIn("      ARQUIVO_FILA_DIR: /data/arquivo-fila\n", servico(self.out, "office"))
+        runner = volumes(servico(self.out, "runner"))
+        self.assertEqual(runner["/dados/arquivo-fila"], ("arquivo-fila", False))
+        self.assertEqual(runner["/dados/biblioteca"], ("biblioteca", False))
+
     def test_volumes_do_runner(self):  # AC-c3: tudo rw salvo config e segredos (D5)
         runner = volumes(servico(self.out, "runner"))
         esperado = {f"/dados/{officecfg.SUB[o]}": (officecfg.SUB[o], False)

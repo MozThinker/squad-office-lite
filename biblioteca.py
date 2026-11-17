@@ -1,10 +1,13 @@
 """Biblioteca: material das squads (media e documentos) servido a partir de pastas só de leitura.
 
-Índice em memória (instantâneo imutável, refeito no máximo 1× por TTL_S, um varrimento de cada vez) com as regras S1–S4:
+Índice em memória (instantâneo imutável com ETag; passado o TTL_S é refeito numa thread, um varrimento de cada vez, e os
+pedidos respondem com o anterior enquanto isso; só o 1.º arranque espera) com as regras S1–S4:
 allowlist de extensões, denylist de nomes/pastas, sem symlinks, e só se serve o que está no índice (aberto com
 O_NOFOLLOW e confirmado com fstat: dev, inode e tamanho iguais ao índice). Textos saem mascarados (reader.mask),
 ≤ TEXTO_MAX.
 Única escrita: miniaturas em MINI_DIR (tmpfs), só com Pillow (import opcional; sem ele serve-se o original).
+Arquivo (ADR-011): um 2.º Indice(arquivo=True) varre as `<fonte>/.arquivo/` só quando é pedido («Ver arquivados», links
+antigos); os pedidos de arquivar/repor vão para a fila (arquivo.escrever_pedido); quem move é o runner, nunca o Office.
 Só stdlib + PIL opcional; o server.py só instancia o Indice e encaminha /api/biblioteca* para handle().
 """
 from __future__ import annotations
@@ -23,10 +26,12 @@ import unicodedata
 import warnings
 import zipfile
 from collections import Counter, namedtuple
+from functools import lru_cache
 from pathlib import Path
 from urllib.parse import parse_qs, quote, unquote
 
 import aprovacoes
+import arquivo
 import reader
 
 try:   # opcional: só na imagem Docker
@@ -37,20 +42,21 @@ except ImportError:   # pragma: no cover - depende do ambiente
 # preenchidos por configurar(cfg): ids das fontes e as que aceitam media (lotes em <fonte>/media/<lote>/)
 RAIZES: tuple = ()
 RAIZES_MEDIA: tuple = ()
-TIPOS = {"jpg": "imagem", "jpeg": "imagem", "png": "imagem", "webp": "imagem", "gif": "imagem",
-         "mp4": "video", "webm": "video", "m4v": "video",
-         "mp3": "audio", "wav": "audio", "m4a": "audio", "ogg": "audio", "opus": "audio",
-         "md": "doc", "txt": "doc", "csv": "doc", "pdf": "pdf"}
-MEDIA = ("imagem", "video", "audio")
+ARQ = arquivo.DIR            # <fonte>/.arquivo/: pasta escondida, fora do índice principal
+REGISTO_MAX = 4 * 1024 * 1024   # REGISTO.tsv maior: lê-se só a cauda (a última linha ganha)
+# regras de caminho partilhadas com o runner (arquivo.py, ADR-010): os mesmos valores, numa só fonte
+TIPOS = arquivo.TIPOS
+MEDIA = arquivo.MEDIA
 CONTENT_TYPE = {"jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png", "webp": "image/webp", "gif": "image/gif",
                 "mp4": "video/mp4", "m4v": "video/mp4", "webm": "video/webm", "mp3": "audio/mpeg", "wav": "audio/wav",
                 "m4a": "audio/mp4", "ogg": "audio/ogg", "opus": "audio/ogg", "md": "text/plain; charset=utf-8",
                 "txt": "text/plain; charset=utf-8", "csv": "text/plain; charset=utf-8", "pdf": "application/pdf"}
-PASTAS_NEGADAS = ("node_modules", "dados", "__pycache__")
-SUF_NEGADOS = (".env", ".key", ".pem", ".p12", ".pfx")
-PALAVRAS_NEGADAS = ("credential", "secret", "segredo", "password", "passwd")
+PASTAS_NEGADAS = arquivo.PASTAS_NEGADAS
+SUF_NEGADOS = arquivo.SUF_NEGADOS
+PALAVRAS_NEGADAS = arquivo.PALAVRAS_NEGADAS
 
 TTL_S = 60
+ARQ_ESPERA_S = 5   # /item e /zip de um link antigo: espera pela reconstrução do índice do arquivo velho
 NOVO_S = 48 * 3600
 CAB_BYTES = 8192
 TEXTO_MAX = 1024 * 1024
@@ -72,8 +78,8 @@ MINI_FORMATOS = ("JPEG", "PNG", "WEBP", "GIF")
 if Image is not None:
     Image.MAX_IMAGE_PIXELS = MINI_MAX_PX
 TITULO_MAX, RESUMO_MAX = 90, 140
-PROF_MAX = 8                 # componentes do caminho relativo
-ENTRADAS_MAX = 20000         # por raiz (pasta errada montada)
+PROF_MAX = arquivo.PROF_MAX            # componentes do caminho relativo
+ENTRADAS_MAX = arquivo.ENTRADAS_MAX    # por raiz (pasta errada montada)
 META_MAX = 256 * 1024
 
 NAO_ENCONTRADO = json.dumps({"error": "não encontrado"}, ensure_ascii=False).encode()
@@ -81,10 +87,10 @@ CC_FICHEIRO = "private, max-age=3600"
 CSP = "default-src 'none'; sandbox"
 
 Ficheiro = namedtuple("Ficheiro", "raiz rel abs tipo ext size mtime mtime_ns dev ino")
-Snapshot = namedtuple("Snapshot", "gerado itens por_id ficheiros ficheiro_item corpo_json corpo_gz")
+Snapshot = namedtuple("Snapshot", "gerado itens por_id ficheiros ficheiro_item corpo_json corpo_gz etag")
 
 CITACAO = re.compile(r"(?!)")   # caminhos <fonte media>/… citados; compilado em configurar
-SUFIXO = re.compile(r"\.(?:md|revisao(?:-[^.]+)?|juridico|parecer-juridico|copy)$", re.I)
+SUFIXO = arquivo.SUFIXO
 DATA = re.compile(r"^\d{4}-\d{2}-\d{2}-?")
 FOLHA = re.compile(r"^folha\s*:\s*", re.I)
 RESUMO_FORA = re.compile(r"[#|\->!`]|\*(?!\*)|\d+\.")   # «**Negrito:** …» fica; listas «* » não
@@ -107,8 +113,7 @@ def configurar(cfg: dict) -> None:
     fontes = cfg["biblioteca"]
     RAIZES = tuple(f["id"] for f in fontes)
     RAIZES_MEDIA = tuple(f["id"] for f in fontes if f["media"])
-    alt = "|".join(re.escape(r) for r in RAIZES_MEDIA)
-    CITACAO = re.compile(r"(?<![\w-])(?:\.\./)*((?:" + alt + r")/[^\s`'\"()«»|]+)" if alt else r"(?!)")
+    CITACAO = arquivo.citacao_re(RAIZES_MEDIA)
     TIPO_RAIZ = {f["id"]: f["tipo"] for f in fontes if f["tipo"]}
     PRODUTO_VALOR, kw = {}, []
     for p in cfg["projectos"]:
@@ -124,56 +129,20 @@ def dirs(cfg: dict, base: Path) -> dict[str, Path]:
     return {f["id"]: Path(base) / f["pasta"] for f in cfg["biblioteca"] if (Path(base) / f["pasta"]).is_dir()}
 
 
-def _componente_ok(c: str) -> bool:
-    return bool(c) and not c.startswith(".") and "\\" not in c and "\x00" not in c and "/" not in c and _utf8(c)
-
-
-def _utf8(c: str) -> bool:
-    # nome não-UTF-8 vem do scandir com surrogates (caf\udce9.md) e rebentaria o json.dumps/quote do índice
-    try:
-        c.encode("utf-8")
-    except UnicodeEncodeError:
-        return False
-    return True
-
-
-def _negado(c: str) -> bool:
-    cf = c.casefold()
-    return (any(w in cf for w in PALAVRAS_NEGADAS) or cf.endswith(SUF_NEGADOS)
-            or cf.startswith(("id_rsa", "id_ed25519")))
+_componente_ok = arquivo.componente_ok
+_utf8 = arquivo._utf8
+_negado = arquivo.negado
+raiz_nome = arquivo.raiz_nome   # x.md, x.copy.md, x.md.revisao.md, x.revisao-2.md… → x
 
 
 def classificar(raiz: str, partes) -> str | None:
-    # S1 (allowlist pela última extensão) + S2 (denylist por componente) → "imagem|video|audio|doc|pdf" ou None
-    if not partes or len(partes) > PROF_MAX:
-        return None
-    if any(not _componente_ok(c) or _negado(c) for c in partes):
-        return None
-    if any(c in PASTAS_NEGADAS for c in partes[:-1]):
-        return None
-    _, ponto, ext = partes[-1].lower().rpartition(".")
-    tipo = TIPOS.get(ext) if ponto else None
-    if tipo in MEDIA and raiz not in RAIZES_MEDIA:   # media só nas fontes com media: true; o resto só documentos
-        return None
-    return tipo
-
-
-def raiz_nome(nome: str) -> str:
-    # x.md, x.copy.md, x.md.revisao.md, x.revisao-2.md… → x
-    while True:
-        novo = SUFIXO.sub("", nome)
-        if novo == nome:
-            return nome
-        nome = novo
+    # S1 (allowlist) + S2 (denylist) do arquivo.py; media só nas fontes com media: true, o resto só documentos
+    return arquivo.classificar(partes, raiz in RAIZES_MEDIA)
 
 
 def citacoes(texto: str) -> list[tuple[str, str]]:
     # (linha, caminho) de cada caminho <fonte media>/… citado (também ../<fonte>/…, em crase, em ![](…), no frontmatter)
-    out = []
-    for linha in texto.split("\n"):
-        for m in CITACAO.finditer(linha):
-            out.append((linha, m.group(1).rstrip(".,;:").rstrip("/")))
-    return out
+    return arquivo.citacoes(texto, CITACAO)
 
 
 def normaliza(s: str) -> str:
@@ -251,8 +220,14 @@ def intervalo(header, size: int):
     return a, min(b, size - 1)
 
 
+@lru_cache(maxsize=8192)
+def _mascara_curta(s: str) -> str:
+    # títulos, subtítulos e datas (curtos, quase sempre iguais de um varrimento para o outro): a máscara é pura
+    return reader.mask(s)
+
+
 def _corta(s: str, n: int) -> str:
-    s = reader.mask(s)
+    s = _mascara_curta(s) if len(s) <= 512 else reader.mask(s)   # texto comprido (resumo sem frase) fora da cache
     return s if len(s) <= n else s[:n - 1] + "…"
 
 
@@ -354,6 +329,26 @@ def _ler_fd(fd: int, n: int) -> bytes:
     return b"".join(partes)
 
 
+def _ler_cauda(caminho: str, n: int) -> bytes | None:
+    # os últimos n bytes (sem a 1.ª linha, se vier partida); lê-se mais 1 byte antes para saber se a linha começa ali
+    try:
+        fd = os.open(caminho, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    except OSError:
+        return None
+    try:
+        st = os.fstat(fd)
+        if not stat.S_ISREG(st.st_mode):
+            return None
+        if st.st_size <= n:
+            return _ler_fd(fd, n)
+        os.lseek(fd, st.st_size - n - 1, os.SEEK_SET)
+        return _ler_fd(fd, n + 1).partition(b"\n")[2]
+    except OSError:
+        return None
+    finally:
+        os.close(fd)
+
+
 def _ler_inicio(caminho: str, n: int) -> bytes | None:
     try:
         fd = os.open(caminho, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
@@ -392,37 +387,10 @@ def _ficheiro(raiz: str, partes, caminho: str, st) -> Ficheiro | None:
 
 
 def varrer(raiz: str, root: Path) -> list[Ficheiro]:
-    # S3: scandir sem seguir symlinks (ficheiros e pastas symlink ignorados), profundidade ≤ PROF_MAX
-    out, n, pilha = [], 0, [(str(root), ())]
-    while pilha:
-        d, partes = pilha.pop()
-        try:
-            with os.scandir(d) as it:
-                entradas = list(it)
-        except OSError:
-            continue
-        for e in entradas:
-            n += 1
-            if n > ENTRADAS_MAX:
-                print(f"biblioteca: {raiz} com mais de {ENTRADAS_MAX} entradas, varrimento cortado", file=sys.stderr)
-                return out
-            if not _componente_ok(e.name) or _negado(e.name):
-                continue
-            p = partes + (e.name,)
-            try:
-                if e.is_symlink():
-                    continue
-                if e.is_dir(follow_symlinks=False):
-                    if len(p) < PROF_MAX and e.name not in PASTAS_NEGADAS:
-                        pilha.append((e.path, p))
-                    continue
-                st = e.stat(follow_symlinks=False)
-            except OSError:
-                continue
-            f = _ficheiro(raiz, p, e.path, st)
-            if f:
-                out.append(f)
-    return out
+    # S3 (arquivo.varrer): scandir sem seguir symlinks, profundidade ≤ PROF_MAX, ≤ ENTRADAS_MAX entradas
+    return [Ficheiro(raiz, "/".join(p), caminho, tipo, p[-1].lower().rpartition(".")[2], st.st_size, st.st_mtime,
+                     st.st_mtime_ns, st.st_dev, st.st_ino)
+            for p, caminho, st, tipo in arquivo.varrer(root, raiz in RAIZES_MEDIA, raiz)]
 
 
 def _lstat_ficheiro(raiz: str, partes, caminho: Path) -> Ficheiro | None:
@@ -451,28 +419,130 @@ def _meta(caminho: Path) -> dict:
     return d if isinstance(d, dict) else {}
 
 
+def _pedido(fonte: str, raiz: str, root: Path, nome: str) -> tuple[dict, Ficheiro] | None:
+    # lê (pelo mesmo fd validado do aprovacoes) e analisa um pedido; o dict não muda depois (partilhado entre índices)
+    lido = aprovacoes._ler(root, nome)
+    if lido is None:
+        return None
+    raw, st = lido
+    try:
+        texto = raw.decode("utf-8")
+    except UnicodeDecodeError:
+        return None
+    p = aprovacoes.parse_pedido(texto, nome)
+    if p is None:
+        return None
+    f = _ficheiro(raiz, (nome,), str(root / nome), st)
+    if f is None:
+        return None
+    return {"fonte": fonte, "ficheiro": nome, "titulo": _corta(p["titulo"], TITULO_MAX),
+            "estado": estado_pedido(p["estado"]), "criado": reader.mask(p["criado"]),
+            "produto": _front(texto)[0].get("produto", ""), "citacoes": citacoes(texto),
+            "url": _url("f", _chave(f), f.mtime)}, f
+
+
 # --- índice -------------------------------------------------------------------------------------------------------
 
 class Indice:
-    def __init__(self, raizes: dict[str, Path], tasks: Path, aprovacoes_dirs: dict[str, Path], clock=time.time):
-        self.raizes, self.tasks, self.aprovacoes, self.clock = raizes, Path(tasks), aprovacoes_dirs, clock
+    def __init__(self, raizes: dict[str, Path], tasks: Path, aprovacoes_dirs: dict[str, Path], clock=time.time,
+                 arquivo: bool = False):
+        # arquivo=True: o mesmo índice sobre as `<fonte>/.arquivo/` (mesmos ids e caminhos que antes de arquivar), sem
+        # tarefas; os pedidos de aprovação vivos entram só para as ligações (um lote arquivado com o pedido ainda vivo)
+        self.tasks, self.aprovacoes, self.clock, self.arquivo = Path(tasks), aprovacoes_dirs, clock, arquivo
+        self.fontes = dict(raizes)   # raiz de cada fonte (no modo arquivo, a `.arquivo/` desce-se com O_NOFOLLOW)
+        self.raizes = {r: Path(p) / ARQ for r, p in raizes.items()} if arquivo else raizes
+        self._reg: dict = {}   # modo arquivo: fonte → (por item, por caminho) do REGISTO.tsv, refeito em cada varrimento
         self.scans = 0
-        self._lock = threading.Lock()
+        self._lock = threading.Lock()   # só quem reconstrói o segura; os pedidos nunca esperam por ele (excepto o 1.º)
         self._snap: Snapshot | None = None
+        self._thread: threading.Thread | None = None
         self._cab: dict = {}   # (abs, mtime_ns, size, completo) → (titulo, resumo, front, citações)
+        self._ped: dict = {}   # (pasta, nome, mtime_ns, size, dev, ino, mode) → (pedido, Ficheiro) | None
+
+    def atual(self) -> Snapshot | None:
+        # o instantâneo actual, sem lock nem reconstrução (/f/ e /mini/)
+        return self._snap
 
     def get(self) -> Snapshot:
-        with self._lock:
-            agora = self.clock()
-            if self._snap is None or self._snap.gerado + TTL_S < agora:
-                try:
-                    self._snap = self._construir(agora)
-                except Exception as e:   # um ficheiro estranho não deita a Biblioteca abaixo nem re-varre a cada pedido
-                    print(f"biblioteca: varrimento falhou ({e!r}); fica o índice anterior até {TTL_S} s",
-                          file=sys.stderr)
-                    self._snap = (self._snap or _snapshot(agora, [], {}, {}, {}))._replace(gerado=agora)
-                self.scans += 1
-            return self._snap
+        # stale-while-revalidate: devolve sempre o instantâneo actual; passado o TTL_S, uma thread refá-lo
+        snap = self._snap
+        if snap is None:   # 1.º arranque: espera (e quem chegar entretanto espera pelo mesmo varrimento)
+            with self._lock:
+                if self._snap is None:
+                    self._refazer()
+                return self._snap
+        if snap.gerado + TTL_S < self.clock():
+            self._lancar()
+        return snap
+
+    def aquecer(self) -> None:
+        # no arranque do servidor: o 1.º varrimento começa logo, em fundo (quem pedir a lista entretanto espera por ele)
+        if self._snap is None:
+            self._lancar()
+
+    def direto(self, partes) -> Ficheiro | None:
+        # /f/ e /mini/ sem índice (ou com ele velho): o mesmo que o varrimento aceitaria para este caminho, sem varrer.
+        # O _abrir confirma depois dev/inode/tamanho contra este lstat (feito sem seguir symlinks)
+        raiz, sub = partes[0], tuple(partes[1:])
+        if not sub:
+            return None
+        if raiz in self.raizes:   # S1–S3: allowlist, denylist e profundidade, como no varrer()
+            if classificar(raiz, sub) is None:
+                return None
+            pastas = (ARQ, *sub[:-1]) if self.arquivo else sub[:-1]
+            r = _lstat_seguro(self.fontes[raiz], pastas, sub[-1])
+            return _ficheiro(raiz, sub, *r) if r else None
+        if raiz == "tarefas" and len(sub) == 2 and not self.arquivo:   # como o _tarefas()
+            pasta, nome = sub
+            if pasta == "inbox":
+                ok = nome.endswith(".md")
+            else:
+                ok = nome in TAREFA_DOCS and not _negado(pasta) and not pasta.startswith("decisoes")
+            r = _lstat_seguro(self.tasks, (pasta,), nome) if ok else None
+            f = _ficheiro(raiz, sub, *r) if r else None
+            return f if f and f.ext == "md" else None
+        fonte = raiz.removeprefix("aprovacoes-")
+        # como o _pedidos(); no modo arquivo não (os pedidos de aprovação nunca se arquivam)
+        if raiz.startswith("aprovacoes-") and fonte in self.aprovacoes and len(sub) == 1 and not self.arquivo:
+            nome = sub[0]
+            if not nome.endswith(".md") or classificar(raiz, sub) != "doc":
+                return None
+            lido = _pedido(fonte, raiz, self.aprovacoes[fonte], nome)   # só o que tem frontmatter de pedido
+            return lido[1] if lido else None
+        return None
+
+    def aguardar(self, timeout: float | None = None) -> None:
+        # espera pela reconstrução em curso, se houver (testes e medições)
+        t = self._thread
+        if t is not None:
+            t.join(timeout)
+
+    def _lancar(self) -> None:
+        if not self._lock.acquire(blocking=False):   # já há uma reconstrução a correr
+            return
+        try:
+            t = threading.Thread(target=self._fundo, name="biblioteca-indice", daemon=True)
+            self._thread = t
+            t.start()
+        except RuntimeError as e:   # sem threads (limite do contentor): fica o instantâneo actual, tenta no próximo pedido
+            self._lock.release()
+            print(f"biblioteca: não arrancou a reconstrução ({e!r})", file=sys.stderr)
+
+    def _fundo(self) -> None:
+        try:
+            self._refazer()
+        finally:
+            self._lock.release()
+
+    def _refazer(self) -> None:
+        # com self._lock na mão; troca o instantâneo de uma vez (os leitores vêem o antigo ou o novo, nunca a meio)
+        agora = self.clock()
+        try:
+            self._snap = self._construir(agora)
+        except Exception as e:   # um ficheiro estranho não deita a Biblioteca abaixo nem re-varre a cada pedido
+            print(f"biblioteca: varrimento falhou ({e!r}); fica o índice anterior até {TTL_S} s", file=sys.stderr)
+            self._snap = (self._snap or _snapshot(agora, [], {}, {}, {}))._replace(gerado=agora)
+        self.scans += 1
 
     # cabeçalhos dos .md (primeiros CAB_BYTES), em cache por (caminho, mtime, tamanho)
     def _cab_de(self, f: Ficheiro, novo: dict, completo: bool = False):
@@ -485,36 +555,31 @@ class Indice:
         return self._cab[k]
 
     def _pedidos(self) -> tuple[list[dict], list[Ficheiro]]:
-        out, fich = [], []
+        # cada pedido só é relido e analisado quando muda (lstat: mtime, tamanho, inode, tipo), como o _cab
+        out, fich, novo = [], [], {}
         for fonte, root in self.aprovacoes.items():
             raiz = f"aprovacoes-{fonte}"
             for e in _scandir(root):
                 nome = e.name
                 if not nome.endswith(".md") or classificar(raiz, (nome,)) != "doc":
                     continue
-                lido = aprovacoes._ler(root, nome)
-                if lido is None:
-                    continue
-                raw, st = lido
                 try:
-                    texto = raw.decode("utf-8")
-                except UnicodeDecodeError:
+                    st = e.stat(follow_symlinks=False)
+                except OSError:
                     continue
-                p = aprovacoes.parse_pedido(texto, nome)
-                if p is None:
-                    continue
-                f = _ficheiro(raiz, (nome,), str(root / nome), st)
-                fich.append(f)
-                out.append({"fonte": fonte, "ficheiro": nome, "titulo": _corta(p["titulo"], TITULO_MAX),
-                            "estado": estado_pedido(p["estado"]), "criado": reader.mask(p["criado"]),
-                            "produto": _front(texto)[0].get("produto", ""), "citacoes": citacoes(texto),
-                            "url": _url("f", _chave(f), f.mtime)})
+                k = (str(root), nome, st.st_mtime_ns, st.st_size, st.st_dev, st.st_ino, st.st_mode)
+                lido = self._ped[k] if k in self._ped else _pedido(fonte, raiz, root, nome)
+                novo[k] = lido
+                if lido is not None:
+                    out.append(lido[0])
+                    fich.append(lido[1])
+        self._ped = novo
         out.sort(key=lambda p: (p["criado"], p["ficheiro"], p["fonte"]))   # o último é o mais recente
         return out, fich
 
     def _tarefas(self) -> tuple[list[dict], list[Ficheiro]]:
         grupos, fich = [], []
-        for e in _scandir(self.tasks):
+        for e in () if self.arquivo else _scandir(self.tasks):   # tarefas nunca se arquivam
             nome = e.name
             try:
                 if e.is_symlink() or not e.is_dir(follow_symlinks=False):
@@ -543,8 +608,18 @@ class Indice:
         novo_cab: dict = {}
         ficheiros: dict[str, Ficheiro] = {}
         todos: list[Ficheiro] = []
+        reg: dict = {}
         for raiz, root in self.raizes.items():
+            if self.arquivo:   # a `.arquivo/` tem de ser uma pasta, não um symlink (a raiz da fonte pode sê-lo)
+                try:
+                    if not stat.S_ISDIR(os.lstat(root).st_mode):
+                        continue
+                except OSError:
+                    continue
+                raw = _ler_cauda(str(root / arquivo.REGISTO), REGISTO_MAX)
+                reg[raiz] = arquivo.ler_registo(raw.decode("utf-8", "replace") if raw else "")
             todos += varrer(raiz, root)
+        self._reg = reg
         pedidos, fich_ped = self._pedidos()
         tarefas, fich_tar = self._tarefas()
         for f in todos + fich_ped + fich_tar:
@@ -555,12 +630,28 @@ class Indice:
 
         # ligações: pedido mais recente por ficheiro citado (com as linhas que o citam) e pedidos por caminho citado
         cit_ficheiro: dict[str, tuple[dict, list[str]]] = {}
-        for p in pedidos:   # do mais antigo para o mais recente: o último ganha
+        # índice invertido: caminho citado → posições dos pedidos que o citam; lote → pedidos que citam algo dentro dele
+        cit_pedidos: dict[str, list[int]] = {}
+        cit_lote: dict[str, list[int]] = {}
+        for i, p in enumerate(pedidos):   # do mais antigo para o mais recente: o último ganha
             linhas: dict[str, list[str]] = {}
             for linha, c in p["citacoes"]:
                 linhas.setdefault(c, []).append(linha)
             for c, ls in linhas.items():
                 cit_ficheiro[c] = (p, ls)
+                cit_pedidos.setdefault(c, []).append(i)
+                partes = c.split("/", 3)   # «<fonte media>/media/<lote>» ou «…/<lote>/…» (prefixo exacto «<lote>/»)
+                if len(partes) >= 3 and partes[0] in RAIZES_MEDIA and partes[1] == "media" and partes[2]:
+                    lote = cit_lote.setdefault("/".join(partes[:3]), [])
+                    if not lote or lote[-1] != i:
+                        lote.append(i)
+
+        def ligados(chaves=(), lote=None) -> list[dict]:
+            # pedidos (do mais antigo para o mais recente) que citam alguma das chaves, ou algo dentro do lote
+            ii = {i for c in chaves for i in cit_pedidos.get(c, ())}
+            if lote is not None:
+                ii.update(cit_lote.get(lote, ()))
+            return [pedidos[i] for i in sorted(ii)]
 
         def poster(f: Ficheiro) -> str | None:
             pasta = f"{f.raiz}/{f.rel.rpartition('/')[0]}".rstrip("/")
@@ -605,7 +696,7 @@ class Indice:
 
         itens, por_id = [], {}
         for g in grupos:
-            it = self._item(g, ficheiros, cit_ficheiro, pedidos, poster, agora, novo_cab)
+            it = self._item(g, ficheiros, cit_ficheiro, ligados, poster, agora, novo_cab)
             if it is None:
                 continue
             por_id[g["id"]] = it
@@ -616,7 +707,7 @@ class Indice:
         itens.sort(key=lambda i: (-i["actualizado"], i["id"]))
         return _snapshot(agora, itens, por_id, ficheiros, ficheiro_item)
 
-    def _item(self, g, ficheiros, cit_ficheiro, pedidos, poster, agora, novo_cab) -> dict | None:
+    def _item(self, g, ficheiros, cit_ficheiro, ligados, poster, agora, novo_cab) -> dict | None:
         gid, genero = g["id"], g["genero"]
         raiz = gid.split("/", 1)[0]
         destaque, textos, trabalho = [], [], {}
@@ -644,13 +735,7 @@ class Indice:
                 trabalho.setdefault(_relativo(f, base).split("/")[0], []).append(f)
             destaque.sort(key=_nome)
             # pedidos ligados: lote → algum caminho citado começa por <id>/; pasta → algum ficheiro do destaque citado
-            prefixo = gid + "/"
-            for p in pedidos:
-                cs = [c for _, c in p["citacoes"]]
-                if genero == "lote" and any(c == gid or c.startswith(prefixo) for c in cs):
-                    ligados_ped.append(p)
-                elif genero == "pasta" and any(_chave(f) in cs for f in destaque):
-                    ligados_ped.append(p)
+            ligados_ped = ligados(lote=gid) if genero == "lote" else ligados([_chave(f) for f in destaque])
             # textos ligados: documentos de fontes media fora de media/ citados na folha ou nos pedidos ligados
             cit = list(self._cab_de(folha, novo_cab, completo=True)[3]) if folha else []
             for p in ligados_ped:
@@ -683,17 +768,17 @@ class Indice:
             else:
                 titulo = titulo or _nome(principal)
                 sub = f"{raiz}/{g.get('pasta', '')}".rstrip("/") if genero == "documento" else "tarefas/inbox"
-            cs = {_chave(f) for f in fs}
-            ligados_ped = [p for p in pedidos if any(c in cs for _, c in p["citacoes"])]
+            ligados_ped = ligados([_chave(f) for f in fs])
         titulo = _corta(titulo, TITULO_MAX)
 
         # estado por ficheiro do destaque (lotes/pastas com pedido)
         pedido = ligados_ped[-1] if ligados_ped else None
         estado = pedido["estado"] if pedido and genero in ("lote", "pasta") else None
         estados = {}
+        ids_ligados = {id(p) for p in ligados_ped}
         for f in destaque:
             c = cit_ficheiro.get(_chave(f))
-            if c and c[0] in ligados_ped:
+            if c and id(c[0]) in ids_ligados:
                 est = "bloqueado" if any("bloquead" in ln.casefold() for ln in c[1]) else c[0]["estado"]
             else:
                 est = "sem_aprovacao" if estado else None
@@ -787,7 +872,7 @@ class Indice:
 
         nomes_q = " ".join(_nome(f) for f in visiveis)
         publico = {
-            "id": gid, "raiz": raiz, "genero": genero, "titulo": titulo, "sub": reader.mask(sub),
+            "id": gid, "raiz": raiz, "genero": genero, "titulo": titulo, "sub": _mascara_curta(sub),
             "tipos": tipos, "produtos": prods, "actualizado": int(max(mts)), "criado": int(min(mts)),
             "novo": min(mts) >= agora - NOVO_S, "estado": estado, "resumo_estado": resumo_estado,
             "pedido": ({"fonte": pedido["fonte"], "ficheiro": pedido["ficheiro"], "url": pedido["url"]}
@@ -798,6 +883,8 @@ class Indice:
             "principal": principal, "zip": zip_info,
             "q": normaliza(f"{titulo} {sub} {nomes_q}"),
         }
+        if self.arquivo:   # «Arquivado em <data> · <motivo>»: pelo item no REGISTO, senão pelo 1.º ficheiro próprio
+            publico["arquivado"] = self._arquivado(raiz, gid, proprios)
         folha_dir = genero == "lote"
         detalhe = {
             "destaque": [entrada(f, mini_de(f), estados.get(_chave(f))) for f in destaque],
@@ -812,10 +899,23 @@ class Indice:
                 [_chave(f) for v in trabalho.values() for f in v]
         return {"publico": publico, "detalhe": detalhe, "zip": zip_fs, "donos": donos}
 
+    def _arquivado(self, raiz: str, gid: str, proprios: list[Ficheiro]) -> dict:
+        por_item, por_caminho = self._reg.get(raiz, ({}, {}))
+        e = por_item.get(gid.partition("/")[2])
+        if e is None and proprios:
+            e = por_caminho.get(proprios[0].rel)
+        if e is None or e[1] != "arquivar":   # sem registo (movido à mão) ou o último foi uma reposição
+            return {"em": None, "motivo": None}
+        return {"em": e[0], "motivo": e[2]}
+
 
 def _snapshot(agora: float, itens, por_id, ficheiros, ficheiro_item) -> Snapshot:
-    corpo = json.dumps({"gerado": int(agora), "itens": itens}, ensure_ascii=False, separators=(",", ":")).encode()
-    return Snapshot(agora, itens, por_id, ficheiros, ficheiro_item, corpo, gzip.compress(corpo, 6, mtime=0))
+    # o mesmo que json.dumps({"gerado": …, "itens": …}); o ETag é só dos itens (fraco: «gerado» muda a cada
+    # varrimento, mas um índice igual ao anterior continua a dar 304)
+    js = json.dumps(itens, ensure_ascii=False, separators=(",", ":")).encode()
+    corpo = b'{"gerado":%d,"itens":%s}' % (int(agora), js)
+    etag = hashlib.sha256(js).hexdigest()[:32]
+    return Snapshot(agora, itens, por_id, ficheiros, ficheiro_item, corpo, gzip.compress(corpo, 6, mtime=0), etag)
 
 
 def _relativo(f: Ficheiro, base: str) -> str:
@@ -852,8 +952,10 @@ def _erro(h, code: int, msg: str) -> None:
     h._json(code, json.dumps({"error": msg}, ensure_ascii=False).encode())
 
 
-def _resolver(snap: Snapshot, resto: str) -> Ficheiro | None:
-    # S4: descodificar uma vez; componentes vazios, ., .., ocultos, \ ou NUL → None; só o que está no índice
+def _resolver(snap: Snapshot | None, resto: str, indice: Indice | None = None) -> Ficheiro | None:
+    # S4: descodificar uma vez; componentes vazios, ., .., ocultos, \ ou NUL → None; só o que está no índice.
+    # Sem índice (1.º arranque) ou com ele mais velho que o TTL_S (a reconstrução ainda não acabou): directamente no
+    # disco, com as mesmas regras do varrimento — o ficheiro novo ou alterado serve-se como antes, sem esperar pelo lock
     try:
         rel = unquote(resto, errors="strict")
     except UnicodeDecodeError:
@@ -861,8 +963,30 @@ def _resolver(snap: Snapshot, resto: str) -> Ficheiro | None:
     partes = rel.split("/")
     if len(partes) < 2 or any(not _componente_ok(c) for c in partes):
         return None
-    f = snap.ficheiros.get(rel)
+    if snap is not None and (indice is None or snap.gerado + TTL_S >= indice.clock()):
+        f = snap.ficheiros.get(rel)
+    else:
+        f = indice.direto(partes) if indice is not None else None
     return None if f is None or _grande(f) else f
+
+
+def _lstat_seguro(root: Path, pastas, nome: str):
+    # desce pasta a pasta por fds com O_NOFOLLOW (nenhuma pasta abaixo da raiz pode ser symlink) → (caminho, lstat)
+    try:
+        fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY)
+    except OSError:
+        return None
+    try:
+        for c in pastas:
+            novo = os.open(c, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=fd)
+            os.close(fd)
+            fd = novo
+        st = os.stat(nome, dir_fd=fd, follow_symlinks=False)
+    except OSError:
+        return None
+    finally:
+        os.close(fd)
+    return os.path.join(str(root), *pastas, nome), st
 
 
 def _disposicao(nome: str, anexo: bool) -> str:
@@ -1110,9 +1234,15 @@ def _zinfo(arc: str, f: Ficheiro) -> zipfile.ZipInfo:
     return zi
 
 
-def _servir_zip(h, snap: Snapshot, query: str) -> None:
+def _servir_zip(h, snap: Snapshot, query: str, arq: Indice | None = None) -> None:
     ids = parse_qs(query).get("id")
     it = snap.por_id.get(ids[0]) if ids else None
+    if it is not None and arq is not None and it["donos"]:   # arquivado depois do varrimento: o zip sairia incompleto
+        f = snap.ficheiros.get(it["donos"][0])
+        if f is not None and _sumiu(f):
+            it = None
+    if it is None and ids and arq is not None:   # item arquivado (link antigo)
+        it = _snap_arq(arq, ids[0]).por_id.get(ids[0])
     if it is None or len(it["zip"]) < 2:
         _404(h)
         return
@@ -1150,12 +1280,62 @@ def _servir_zip(h, snap: Snapshot, query: str) -> None:
         ZIP_SLOTS.release()
 
 
-def handle(h, metodo: str, path: str, query: str, indice: Indice) -> None:
-    # router de /api/biblioteca*; h é o Handler do server.py (usa _json, wfile, headers e _cc para o Cache-Control)
+def _sumiu(f: Ficheiro) -> bool:
+    # o ficheiro do índice já não está no caminho (arquivado depois do varrimento): tenta-se a `.arquivo/`
     try:
-        snap = indice.get()
-        if path.startswith("/api/biblioteca/f/"):
-            f = _resolver(snap, path[len("/api/biblioteca/f/"):])
+        os.lstat(f.abs)
+    except FileNotFoundError:
+        return True
+    except OSError:
+        return False
+    return False
+
+
+def _registo_depois(arq: Indice, gerado: float) -> bool:
+    # o runner escreve no `<fonte>/.arquivo/REGISTO.tsv` depois de cada move: mais novo que o instantâneo ⇒ arquivou-se
+    # depois do varrimento. Só o lstat (sem seguir symlinks nem abrir o ficheiro)
+    for root in arq.fontes.values():
+        try:
+            if os.lstat(Path(root) / ARQ / arquivo.REGISTO).st_mtime > gerado:
+                return True
+        except OSError:
+            pass
+    return False
+
+
+def _snap_arq(arq: Indice, pedido: str) -> Snapshot:
+    # /item e /zip: o instantâneo do arquivo; sem o pedido (id ou caminho) e velho (passou o TTL_S ou é anterior ao
+    # REGISTO.tsv de alguma fonte: arquivado depois do varrimento), espera até ARQ_ESPERA_S pela reconstrução e usa o
+    # novo (nunca no /f/ e /mini/: esses sem lock)
+    snap = arq.get()
+    if pedido in snap.por_id or pedido in snap.ficheiro_item:
+        return snap
+    if snap.gerado + TTL_S >= arq.clock():   # fresco: só se o runner escreveu no REGISTO depois (o get() não relança)
+        if not _registo_depois(arq, snap.gerado):
+            return snap
+        arq._lancar()
+    arq.aguardar(ARQ_ESPERA_S)
+    return arq.atual() or snap
+
+
+def _resolver_arq(indice: Indice, arq: Indice | None, resto: str) -> Ficheiro | None:
+    # o índice principal; se lá não estiver (ou já não estiver no disco), o mesmo caminho na `.arquivo/` da mesma
+    # fonte, sempre pelo resolver directo (o índice do arquivo só se faz a pedido): link antigo, sem lock
+    f = _resolver(indice.atual(), resto, indice)
+    if f is not None and _sumiu(f):
+        f = None
+    if f is None and arq is not None:
+        f = _resolver(None, resto, arq)
+    return f
+
+
+def handle(h, metodo: str, path: str, query: str, indice: Indice, arq: Indice | None = None,
+           fila: Path | None = None) -> None:
+    # router de /api/biblioteca*; h é o Handler do server.py (usa _json, wfile, headers e _cc para o Cache-Control).
+    # arq: o índice das `.arquivo/` (ADR-011); fila: a fila do arquivo (estado do último pedido no /item)
+    try:
+        if path.startswith("/api/biblioteca/f/"):   # /f/ e /mini/ nunca reconstroem nem esperam pelo lock
+            f = _resolver_arq(indice, arq, path[len("/api/biblioteca/f/"):])
             if f is None:
                 _404(h, metodo)
             else:
@@ -1167,18 +1347,24 @@ def handle(h, metodo: str, path: str, query: str, indice: Indice) -> None:
                 _405(h)
             else:
                 _404(h, metodo)
-        elif path == "/api/biblioteca":
-            _servir_indice(h, snap)
-        elif path == "/api/biblioteca/item":
-            _servir_item(h, snap, query)
         elif path.startswith("/api/biblioteca/mini/"):
-            f = _resolver(snap, path[len("/api/biblioteca/mini/"):])
+            f = _resolver_arq(indice, arq, path[len("/api/biblioteca/mini/"):])
             if f is None or f.tipo != "imagem":
                 _404(h)
             else:
                 _servir_mini(h, f)
+        elif path == "/api/biblioteca":
+            if "1" in parse_qs(query).get("arquivo", ()):   # «Ver arquivados»: o índice das `.arquivo/`, só a pedido
+                if arq is None:
+                    _404(h)
+                else:
+                    _servir_indice(h, arq.get())
+            else:
+                _servir_indice(h, indice.get())
+        elif path == "/api/biblioteca/item":
+            _servir_item(h, indice.get(), query, arq, fila)
         elif path == "/api/biblioteca/zip":
-            _servir_zip(h, snap, query)
+            _servir_zip(h, indice.get(), query, arq)
         else:
             _404(h)
     finally:
@@ -1186,27 +1372,115 @@ def handle(h, metodo: str, path: str, query: str, indice: Indice) -> None:
 
 
 def _servir_indice(h, snap: Snapshot) -> None:
-    # ~600 KB com os dados reais (≈ 80 KB em gzip): comprimido uma vez por varrimento, só se o browser aceitar
-    if "gzip" not in h.headers.get("Accept-Encoding", ""):
-        h._json(200, snap.corpo_json)
+    # comprimido uma vez por varrimento, só se o browser aceitar. ETag fraco por variante (hash dos itens; «-gz» na
+    # comprimida) e private, no-cache: o browser guarda e revalida → 304 sem corpo
+    gz = "gzip" in h.headers.get("Accept-Encoding", "")
+    etag = f'W/"{snap.etag}-gz"' if gz else f'W/"{snap.etag}"'
+    h._cc = "private, no-cache"
+    if _etag_igual(h.headers.get("If-None-Match"), etag):
+        h.send_response(304)
+        h.send_header("ETag", etag)
+        h.send_header("Vary", "Accept-Encoding")
+        h.end_headers()
         return
+    corpo = snap.corpo_gz if gz else snap.corpo_json
     h.send_response(200)
     h.send_header("Content-Type", "application/json; charset=utf-8")
-    h.send_header("Content-Encoding", "gzip")
+    if gz:
+        h.send_header("Content-Encoding", "gzip")
     h.send_header("Vary", "Accept-Encoding")
-    h.send_header("Content-Length", str(len(snap.corpo_gz)))
+    h.send_header("ETag", etag)
+    h.send_header("Content-Length", str(len(corpo)))
     h.end_headers()
-    _escrever(h, snap.corpo_gz)
+    _escrever(h, corpo)
 
 
-def _servir_item(h, snap: Snapshot, query: str) -> None:
-    ids = parse_qs(query).get("id")
-    pedido = ids[0] if ids else ""
-    foco = None
+def _etag_igual(cabecalho_inm: str | None, etag: str) -> bool:
+    # If-None-Match: lista separada por vírgulas, «*» ou ETags (comparação fraca: W/ ignorado dos dois lados)
+    if not cabecalho_inm:
+        return False
+    etag = etag.removeprefix("W/")
+    for t in cabecalho_inm.split(","):
+        t = t.strip()
+        if t == "*" or t.removeprefix("W/") == etag:
+            return True
+    return False
+
+
+def _procura(snap: Snapshot, pedido: str) -> tuple[dict | None, str | None]:
     it = snap.por_id.get(pedido)
     if it is None and pedido in snap.ficheiro_item:
-        it, foco = snap.por_id[snap.ficheiro_item[pedido]], pedido
+        return snap.por_id[snap.ficheiro_item[pedido]], pedido
+    return it, None
+
+
+def _servir_item(h, snap: Snapshot, query: str, arq: Indice | None = None, fila: Path | None = None) -> None:
+    # sem o item no índice principal procura-se o mesmo id/caminho nas `.arquivo/` (o item vem com «arquivado»)
+    ids = parse_qs(query).get("id")
+    pedido = ids[0] if ids else ""
+    it, foco = _procura(snap, pedido)
+    presente = None   # o 1.º ficheiro do item do índice principal ainda está no sítio (None: veio do arquivo)
+    if it is not None and it["donos"]:
+        f = snap.ficheiros.get(it["donos"][0])
+        presente = f is not None and not _sumiu(f)
+    if it is None and arq is not None and pedido:
+        it, foco = _procura(_snap_arq(arq, pedido), pedido)
     if it is None:
         _404(h)
         return
-    h._json(200, json.dumps({"item": it["publico"], "foco": foco, **it["detalhe"]}, ensure_ascii=False).encode())
+    corpo = {"item": it["publico"], "foco": foco, **it["detalhe"],
+             "arquivo": estado_arquivo(it["publico"], fila, presente)}
+    h._json(200, json.dumps(corpo, ensure_ascii=False).encode())
+
+
+# --- arquivo (ADR-011): o Office só escreve pedidos na fila; quem move é o runner ----------------------------------
+
+_fila_lock = threading.Lock()   # serializa a leitura dos pendentes e a escrita (409/429 sem corridas)
+
+
+def arquivavel(pub: dict) -> bool:
+    # documentos e lotes das fontes `biblioteca:` (tarefas, planos, pedidos e pastas de media soltas não)
+    return pub["genero"] in arquivo.GENEROS and pub["raiz"] in RAIZES
+
+
+def estado_arquivo(pub: dict, fila: Path | None, presente: bool | None = None) -> dict:
+    # {"arquivavel", "arquivado": None|{em, motivo}, "pendente": None|accao, "erro": None|motivo} do último pedido.
+    # Último pedido «arquivar» feito (ok) e o item já fora do sítio (presente False): o índice principal ainda não
+    # o sabe (até TTL_S) e «Arquivar» não se oferece de novo
+    pendente = erro = None
+    arquivado_ok = False
+    if fila is not None and arquivavel(pub):
+        chave = pub["id"].partition("/")[2]
+        for _, p, feito in arquivo.ler_fila(fila, RAIZES):   # por nome: o último ganha
+            if p["fonte"] == pub["raiz"] and p["chave"] == chave:
+                pendente, erro = (p["accao"], None) if feito is None else (None, feito.get("erro"))
+                arquivado_ok = p["accao"] == "arquivar" and feito == {"ok": True}
+    oferece = arquivavel(pub) and not (arquivado_ok and presente is False and not pub.get("arquivado"))
+    return {"arquivavel": oferece, "arquivado": pub.get("arquivado"), "pendente": pendente, "erro": erro}
+
+
+def pedir_arquivo(fila: Path, indice: Indice, arq: Indice | None, data: dict, ip: str, ua: str, tz,
+                  now: float) -> tuple[int, dict]:
+    # POST /api/biblioteca/arquivo (já com _post_json): forma (400) → o item existe (arquivar: no índice principal;
+    # repor: no do arquivo) e é arquivável (400) → pedido v1 na fila (202, 409, 429, 503). Nunca move nada
+    if set(data) != {"token", "accao", "item"} or not isinstance(data["item"], str):
+        return 400, {"error": "campos inválidos"}
+    accao, item = data["accao"], data["item"]
+    if not isinstance(accao, str) or accao not in arquivo.ACCOES:
+        return 400, {"error": "acção inválida"}
+    fonte, _, chave = item.partition("/")
+    if fonte not in RAIZES:
+        return 400, {"error": "não arquivável"}
+    idx = indice if accao == "arquivar" else arq
+    it = idx.get().por_id.get(item) if idx is not None else None
+    if it is None:
+        return 400, {"error": "item inexistente"}
+    if not arquivavel(it["publico"]) or not arquivo.validar_chave(chave):
+        return 400, {"error": "não arquivável"}
+    if accao == "arquivar":   # já arquivado pelo runner, mas o índice principal ainda não o sabe (até TTL_S)
+        try:
+            os.lstat(Path(indice.raizes[fonte]) / chave)
+        except OSError:
+            return 400, {"error": "item inexistente"}
+    with _fila_lock:
+        return arquivo.escrever_pedido(fila, accao, fonte, chave, ip, ua, tz, now)

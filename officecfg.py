@@ -15,18 +15,18 @@ from pathlib import Path
 from zoneinfo import ZoneInfo, available_timezones
 
 EXEMPLO = Path(__file__).resolve().parent / "office.example.yaml"
-VERSAO = "0.1.4"   # versão do produto: única fonte (runner: estado.json e doctor); = 1.ª «## Lite X.Y.Z» do CHANGELOG
+VERSAO = "0.2.0"   # versão do produto: única fonte (runner: estado.json e doctor); = 1.ª «## Lite X.Y.Z» do CHANGELOG
 
 SUB = {"tasks": "tasks", "inbox": "tasks/inbox", "quadro": "quadro", "quadro_lancar": "quadro-lancar",
        "decisoes": "decisoes", "decisoes_fila": "decisoes-fila", "push": "push", "biblioteca": "biblioteca",
-       "squads": "squads", "runner": "runner", "runner_estado": "runner-estado"}
+       "squads": "squads", "runner": "runner", "runner_estado": "runner-estado", "arquivo_fila": "arquivo-fila"}
 MOUNTS = [  # (origem, destino no contentor, modo, variável de ambiente do servidor)
     ("tasks", "/data/tasks", "ro", "TASKS_DIR"), ("claude_projects", "/data/claude", "ro", "CLAUDE_PROJECTS_DIR"),
     ("squads", "/data/squads", "ro", "SQUADS_DIR"), ("decisoes", "/data/aprovacoes", "ro", "APROVACOES_DIR"),
     ("biblioteca", "/data/biblioteca", "ro", "BIBLIOTECA_DIR"),
     ("decisoes_fila", "/data/decisoes-fila", "rw", "DECISOES_FILA_DIR"),
     ("quadro", "/data/quadro", "rw", "QUADRO_DIR"), ("quadro_lancar", "/data/quadro-lancar", "rw", "QUADRO_LANCAR_DIR"),
-    ("push", "/data/push", "rw", "PUSH_DIR"),
+    ("push", "/data/push", "rw", "PUSH_DIR"), ("arquivo_fila", "/data/arquivo-fila", "rw", "ARQUIVO_FILA_DIR"),
     ("runner_estado", "/data/runner-estado", "ro", "RUNNER_ESTADO_DIR")]   # estado.json do runner (sem segredos)
 RAIZES = ("dados", "projectos", "claude_projects")
 COLUNAS = {"ideias": "Ideias", "a-fazer": "A fazer", "em-curso": "Em curso", "a-espera": None, "feito": "Feito"}
@@ -347,7 +347,7 @@ def _biblioteca(v):
     out = []
     for i, f in enumerate(_lista_de(v, "biblioteca", 0, 12)):
         c = f"biblioteca[{i}]"
-        _mapa_de(f, c, ("id", "rotulo", "pasta", "media", "tipo"), ("id", "rotulo", "pasta"))
+        _mapa_de(f, c, ("id", "rotulo", "pasta", "media", "tipo", "arquivo_dias"), ("id", "rotulo", "pasta"))
         fid = _padrao(f["id"], f"{c}.id", _ID_LONGO, "minúsculas, dígitos e -, 2 a 24")
         if fid == "tarefas" or fid.startswith("aprovacoes"):
             raise ConfigErro(f"{c}.id: reservado")
@@ -361,8 +361,11 @@ def _biblioteca(v):
         tipo = f.get("tipo")
         if tipo is not None and tipo not in _TIPOS_BIB:
             raise ConfigErro(f"{c}.tipo: tem de ser um de {', '.join(_TIPOS_BIB)}")
+        dias = f.get("arquivo_dias")   # arquivo automático por idade (ADR-012); ausente = desligado
+        if dias is not None:
+            _inteiro(dias, f"{c}.arquivo_dias", 7, 3650)
         out.append({"id": fid, "rotulo": _texto(f["rotulo"], f"{c}.rotulo", 1, 30), "pasta": pasta,
-                    "media": media, "tipo": tipo})
+                    "media": media, "tipo": tipo, "arquivo_dias": dias})
     _unico([f["id"] for f in out], "biblioteca")
     return out
 

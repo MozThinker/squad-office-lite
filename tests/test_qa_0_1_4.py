@@ -6,7 +6,7 @@ import re
 import unittest
 from pathlib import Path
 
-from tests.test_compose_docker import servico, volumes
+from tests.test_compose_docker import officecfg, servico, volumes
 
 ROOT = Path(__file__).resolve().parent.parent
 README = (ROOT / "README.md").read_text(encoding="utf-8")
@@ -18,8 +18,10 @@ GET = (ROOT / "get.sh").read_text(encoding="utf-8")
 COMPOSE = (ROOT / "compose.example.yaml").read_text(encoding="utf-8")
 ENV = (ROOT / "env.example").read_text(encoding="utf-8")
 CONFIGURAR = (ROOT / "runner" / "configurar.py").read_text(encoding="utf-8")
-BASE = "https://raw.githubusercontent.com/MozThinker/squad-office-lite/v0.1.4/get.sh"
-RELEASE = "https://github.com/MozThinker/squad-office-lite/releases/download/v0.1.4/"
+# endereços da versão actual (officecfg.VERSAO): o README e o get.sh seguem cada versão publicada
+V = officecfg.VERSAO
+BASE = f"https://raw.githubusercontent.com/MozThinker/squad-office-lite/v{V}/get.sh"
+RELEASE = f"https://github.com/MozThinker/squad-office-lite/releases/download/v{V}/"
 PC = "## No teu PC (Windows, macOS, Linux) com Docker Desktop"
 LICENCA = "https://docs.docker.com/subscription/desktop-license/"
 DEVCONTAINER = "https://code.claude.com/docs/en/devcontainer"
@@ -36,9 +38,9 @@ def seccao(texto: str, titulo: str) -> str:
 class Enderecos(unittest.TestCase):   # AC-g3 (o CA-12.9 da 0.1.2 e o D6 da 0.1.3, com o endereço da 0.1.4)
     def test_um_comando_e_forma_prudente(self):
         inst = seccao(README, "## Instalação")
-        um = f"curl -fsSL {BASE} | bash -s -- --versao 0.1.4"
+        um = f"curl -fsSL {BASE} | bash -s -- --versao {V}"
         self.assertIn(um, inst)
-        for x in (f"curl -fsSLO {BASE}", "less get.sh", "bash get.sh --versao 0.1.4",
+        for x in (f"curl -fsSLO {BASE}", "less get.sh", f"bash get.sh --versao {V}",
                   "gh repo clone MozThinker/squad-office-lite", "nunca como `root`",
                   "não te protege se o próprio repositório for alterado"):
             self.assertIn(x, inst)
@@ -57,7 +59,7 @@ class Enderecos(unittest.TestCase):   # AC-g3 (o CA-12.9 da 0.1.2 e o D6 da 0.1.
         self.assertNotIn("--versao 0.1.3", README)
 
     def test_atestacao_igual_ao_get_sh(self):
-        cmd = "gh attestation verify squad-office-lite-0.1.4.tar.gz --repo MozThinker/squad-office-lite"
+        cmd = f"gh attestation verify squad-office-lite-{V}.tar.gz --repo MozThinker/squad-office-lite"
         self.assertIn(cmd, GET)
         self.assertIn(cmd, seccao(README, "## Instalação"))
 

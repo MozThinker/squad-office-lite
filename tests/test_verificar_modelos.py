@@ -13,6 +13,9 @@ import verificar_modelos as vm
 
 MODELOS = RAIZ / "modelos" / "squads"
 CASA = "/ho" + "me/"   # o git grep da CI não quer o caminho literal nos testes
+# Na árvore pública o ci.yml já não tem a lista de nomes (preparar-publico.sh tira-a): estes testes só valem no -dev.
+SO_DEV = pytest.mark.skipif(vm.nomes_internos() is None,
+                            reason="árvore pública: o ci.yml não tem a lista de nomes internos")
 
 
 def test_modelos_do_repo_passam():
@@ -23,6 +26,7 @@ def test_modelos_do_repo_passam():
     assert r.returncode == 0 and r.stdout == ""
 
 
+@SO_DEV
 def test_nomes_internos_vem_do_ci():
     rx = vm.nomes_internos()
     assert rx is not None
@@ -68,6 +72,7 @@ def test_url_da_documentacao_passa(copia):
     assert vm.verificar(copia, None) == []
 
 
+@SO_DEV
 def test_nome_interno(copia):
     rx = vm.nomes_internos()
     nome = re.sub(r"\[(.)\]", r"\1", rx.pattern.split("|")[0])   # 1.º nome da lista, sem a forma nom[e]

@@ -92,12 +92,14 @@ class ConfigErro(ValueError):
 @dataclass(frozen=True)
 class Raizes:
     """Pastas do serviço: `dir` (accoes.json, livro, registo do colector, estado, folhas), `segredos` (accoes.env),
-    `entrada` (mensagens e vista, lidas pelo runner), `decisoes` e `agentes` (do runner, só leitura)."""
+    `entrada` (mensagens e vista, lidas pelo runner), `decisoes` e `agentes` (do runner, só leitura) e `saude`
+    (saude.json, lido pelo Office; ADR-022)."""
     dir: Path
     segredos: Path
     entrada: Path
     decisoes: Path
     agentes: Path
+    saude: Path
 
     @classmethod
     def do_ambiente(cls, env=None) -> Raizes:
@@ -106,7 +108,8 @@ class Raizes:
         return cls(d, Path(env.get("ACCOES_SEGREDOS") or d / "segredos"),
                    Path(env.get("ACCOES_ENTRADA") or "/dados/accoes-entrada"),
                    Path(env.get("ACCOES_DECISOES") or "/dados/decisoes"),
-                   Path(env.get("ACCOES_AGENTES") or "/dados/agentes"))
+                   Path(env.get("ACCOES_AGENTES") or "/dados/agentes"),
+                   Path(env.get("ACCOES_SAUDE") or "/dados/accoes-saude"))
 
     @property
     def config(self) -> Path:

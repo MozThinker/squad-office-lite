@@ -1,6 +1,7 @@
 """servico_accoes/colector.py (ADR-021): mensagens da caixa para `<accoes-entrada>/<squad>/mensagens/` e para o registo
 do colector, com o remetente do From (CA-12), a vista sem segredos para o runner e a purga dos 90 dias (CA-32). Caixa
 IMAP falsa, pastas temporárias, `AGORA` fixo."""
+import fcntl
 import json
 import os
 from datetime import timedelta
@@ -12,6 +13,7 @@ import accoes
 from servico_accoes import colector as col
 from servico_accoes import executor as ex
 from tests.accoes_falsos import AGORA, CaixaFalsa, Mundo
+from tests.test_accoes_executor import CAUSAS, _estragar_registo
 
 AR_BOM = "mx.padaria.test; dkim=pass header.d=exemplo.test; dmarc=pass header.from=exemplo.test"
 
@@ -208,9 +210,50 @@ def test_symlink_na_pasta_da_squad(x):
 
 
 def test_registo_ilegivel_espera(x):
-    (x.m.agentes / "squads.json").unlink()
+    (x.m.agentes / "squads.json").write_text("{")
     assert x.passar() == ["registo de squads ilegível; nada colhido nesta passagem"]
     assert x.caixa.ligacoes == 0
+
+
+def test_sem_registo_sem_aviso(x):   # CA-1: sem squads.json não há squads de negócio, nem aviso
+    (x.m.agentes / "squads.json").unlink()
+    assert x.passar() == []
+    assert x.caixa.ligacoes == 0
+    assert list(x.m.entrada.iterdir()) == []
+
+
+@pytest.mark.parametrize("causa", CAUSAS)
+def test_registo_inutilizavel_nao_colhe(x, causa):   # CA-2
+    _estragar_registo(x.m, causa)
+    assert x.passar() == ["registo de squads ilegível; nada colhido nesta passagem"]
+    assert x.caixa.ligacoes == 0
+    assert list(x.m.entrada.iterdir()) == []
+
+
+def test_lock_ocupado_devolve_none(x):   # outra passagem a correr ≠ passagem sem avisos
+    x.passar()
+    fd = os.open(x.m.r.dir / "estado/colector.lock", os.O_RDWR)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        assert x.passar() is None
+    finally:
+        os.close(fd)
+    assert x.passar() == []
+
+
+def test_saude_na_raiz_ignorado(x):   # saude.json (e o temporário) na raiz não são squads nem mensagens
+    x.passar()
+    x.caixa.entregar(mensagem("a"))
+    x.passar()
+    antes = (x.txts(), x.vista(), sorted(p.name for p in x.m.entrada.iterdir()))
+    velho = (AGORA - timedelta(days=200)).timestamp()
+    for nome in ("saude.json", ".saude.json.tmp"):
+        (x.m.entrada / nome).write_text('{"v": 1, "em": "2026-01-01T00:00:00+00:00", "avisos": []}')
+        os.utime(x.m.entrada / nome, (velho, velho))
+    assert col.purgar(x.m.r, AGORA) == 0
+    assert x.passar() == []
+    assert (x.txts(), x.vista()) == antes[:2]
+    assert sorted(p.name for p in x.m.entrada.iterdir()) == sorted(antes[2] + [".saude.json.tmp", "saude.json"])
 
 
 def test_purga_aos_90_dias(x):   # CA-32 (D14)

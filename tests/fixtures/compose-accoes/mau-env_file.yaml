@@ -33,6 +33,7 @@ services:
       AGENTES_DIR: /data/agentes
       AGENTES_RASCUNHOS_DIR: /data/agentes-rascunhos
       AGENTES_FILA_DIR: /data/agentes-fila
+      ACCOES_SAUDE_DIR: /data/accoes-saude
     # sem capacidades: um servidor HTTP do Python na porta 8080, sem root
     security_opt:
       - no-new-privileges:true
@@ -115,6 +116,12 @@ services:
       - type: volume
         source: agentes-fila
         target: /data/agentes-fila
+        volume:
+          nocopy: true
+      - type: volume
+        source: accoes-saude
+        target: /data/accoes-saude
+        read_only: true
         volume:
           nocopy: true
       - type: volume
@@ -450,6 +457,8 @@ services:
       ACCOES_ENTRADA: /dados/accoes-entrada
       ACCOES_DECISOES: /dados/decisoes
       ACCOES_AGENTES: /dados/agentes
+      # saude.json (ADR-022): o office monta este volume só de leitura
+      ACCOES_SAUDE: /dados/accoes-saude
     tmpfs:
       - /tmp:mode=1777
     volumes:
@@ -478,6 +487,11 @@ services:
         source: agentes
         target: /dados/agentes
         read_only: true
+        volume:
+          nocopy: true
+      - type: volume
+        source: accoes-saude
+        target: /dados/accoes-saude
         volume:
           nocopy: true
     networks:
@@ -534,3 +548,4 @@ volumes:
   accoes-segredos:
   accoes-estado:
   accoes-entrada:
+  accoes-saude:

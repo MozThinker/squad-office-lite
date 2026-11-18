@@ -1,4 +1,4 @@
-# Approved actions (Squad Office Lite 0.5.0)
+# Approved actions (Squad Office Lite 0.5.1)
 
 [Português](ACCOES.md) · [README](README.en.md) · decisions: ADR-020 and ADR-021 in [DECISIONS.md](DECISIONS.md) (in
 Portuguese)
@@ -48,9 +48,9 @@ reason; never body, subject, addresses or values).
 
 ## Turning it on in Docker mode
 
-The `accoes` service already comes in the generated `compose.yaml` (volumes `accoes-segredos`, `accoes-estado` and
-`accoes-entrada`, its own network). It starts as `root` only to set ownership of its folders, then immediately drops
-to `ACCOES_UID:ACCOES_GID`.
+The `accoes` service already comes in the generated `compose.yaml` (volumes `accoes-segredos`, `accoes-estado`,
+`accoes-entrada` and `accoes-saude`, its own network). It starts as `root` only to set ownership of its folders, then
+immediately drops to `ACCOES_UID:ACCOES_GID`.
 
 1. In `.env`, if you want another uid (default 10002; **it must differ from `OFFICE_UID`**, otherwise the service
    refuses to start, because the runner would be able to read the credentials):
@@ -87,13 +87,15 @@ sudo ./instalar-accoes.sh --dados ~/office-lite/dados
 
 It needs `acl` (`setfacl`), systemd and Python ≥ 3.10. It creates the system user `office-accoes` (no home, no
 shell), copies the code to `/opt/office-accoes` (owned by root), creates `/srv/office-accoes` (`accoes.json` 0644,
-`segredos/` 0700) and `<dados>/accoes-entrada`, gives the user read access by ACL on `decisoes/` and `agentes/`, and
-enables `office-accoes.timer` (one pass per minute). It is idempotent: it never rewrites `accoes.json` or
+`segredos/` 0700), `<dados>/accoes-entrada` and `<dados>/accoes-saude` (`0755`, also in the unit's `ReadWritePaths`),
+gives the user read access by ACL on `decisoes/` and `agentes/`, and enables `office-accoes.timer` (one pass per
+minute). It is idempotent: it never rewrites `accoes.json` or
 `accoes.env`. At the end it prints the next commands; the environment is the unit's:
 
 ```sh
 CMD="sudo -u office-accoes env ACCOES_PERFIL=lite ACCOES_DIR=/srv/office-accoes ACCOES_SEGREDOS=/srv/office-accoes/segredos \
-  ACCOES_ENTRADA=<dados>/accoes-entrada ACCOES_DECISOES=<dados>/decisoes ACCOES_AGENTES=<dados>/agentes \
+  ACCOES_ENTRADA=<dados>/accoes-entrada ACCOES_SAUDE=<dados>/accoes-saude ACCOES_DECISOES=<dados>/decisoes \
+  ACCOES_AGENTES=<dados>/agentes \
   python3 -I -u /opt/office-accoes/servico_accoes/servico.py"
 $CMD escrever-config < accoes.json
 $CMD escrever-segredos
@@ -104,7 +106,9 @@ $CMD verificar
 does not update itself.
 
 Messages in `<dados>/accoes-entrada` are readable by other accounts on the system if your home and data folder are:
-keep the data folder at `0750` or `0700`.
+keep the data folder at `0750` or `0700`. The `office` container does not mount it: of the service it only sees
+`<dados>/accoes-saude` (read-only, see «Service health»), which `install.sh` creates (`0755`) if missing and
+`instalar-accoes.sh` gives to `office-accoes`.
 
 ## `accoes.json`
 
@@ -168,6 +172,51 @@ do not accept the normal password). The file is `0600`, owned by the service's u
 group/others permissions, belongs to another uid or is a symlink. **Never in `claude.env`** or in files the runner can
 read. Turning connectors on and off is just editing these two files (and running `escrever-config` again).
 
+## Service health
+
+At the end of each complete pass (in Docker, each turn of the `ciclo`; on a VPS, each timer pass) the service writes
+`<dados>/accoes-saude/saude.json` (in Docker, `/dados/accoes-saude/saude.json` in the `accoes-saude` volume, variable
+`ACCOES_SAUDE`). Only the service writes to this folder:
+
+```json
+{"v":1,"em":"2026-11-18T13:23:00+00:00","avisos":[]}
+```
+
+`em` is the UTC time of the pass; `avisos` are that pass's warnings (from the collector, then the executor), without
+duplicates, at most 10 of 200 characters each, only fixed texts, squad ids, error type names and numbers (never
+addresses, servers, users, credentials or message content). With no warnings it holds `"avisos": []`: the file is
+written anyway, as proof of life. Mode `0644`, atomic write, symlinks not followed. If the pass was skipped because
+another one was running, the file does not change.
+
+**No business squads, no warning:** a missing `agentes/squads.json` is the normal case. Only a registry that exists
+and cannot be used (no permission, invalid JSON, symlink, too large or wrong format) gives the warning
+`registo de squads ilegível; nada colhido|executado nesta passagem`. With no registry, the executor neither runs nor refuses
+anything: an approved request waits for the registry to come back (within the usual 48 h).
+
+**In the log** (stderr; `journalctl -u office-accoes.service` on a VPS, `docker compose logs accoes` in Docker) only
+what changed since the previous `saude.json` is written: `aviso: <text>` on the first pass where it appears and
+`resolvido: <text>` once, when it goes away. A different text counts as a new warning. An unexpected failure of the
+collector or executor shows as `aviso: erro no colector|executor: <Type>`. If `saude.json` cannot be written, the pass
+does not fail and `aviso: saude.json não gravado (<Type>)` is written; without that file there is no memory between
+passes and the warnings repeat until it is fixed.
+
+**On the dashboard:** the `office` mounts `accoes-saude` **read-only** (the only thing of the service it sees; it does
+not mount `accoes-entrada`) and the server reads only `saude.json` (`ACCOES_SAUDE_DIR`, default `/data/accoes-saude`; it
+never lists the folder). With warnings an alert «Serviço de ações: …» appears (an unreadable squad registry reads «não
+consigo ler o registo das squads»; with several warnings, the first one and «(e mais N)»). If the last pass is more than
+10 minutes old, the alert is «Serviço de ações parado desde HH:MM» (time in the `office.yaml` time zone). The alert goes
+away by itself when the problem is gone; «Fechar» hides it while it stays the same, and it shows again if it changes or
+if the problem goes away and comes back (not kept across page reloads). It does not trigger a browser notification or
+Web Push. With no service installed (no `saude.json`) nothing appears.
+
+`saude.json` is only the state of the last pass: the on-demand check is still `accoes verificar`.
+
+**Turning the service off:** the last `saude.json` stays, and the dashboard shows «Serviço de ações parado» until it is
+deleted. On a VPS, after `sudo systemctl disable --now office-accoes.timer`, delete it too:
+`sudo rm -f <dados>/accoes-saude/saude.json`. In Docker, stopping the `accoes` service shows «parado» (as intended);
+if you remove it for good, delete the volume: `docker volume rm office-lite-pc_accoes-saude` (the project name is the
+`name:` in `compose.yaml`).
+
 ## Cancel and undo
 
 Both commands take the action's `sha`, which you see in the ledger `AAAA-MM.jsonl` (`/dados/accoes/` in Docker,
@@ -188,9 +237,12 @@ In Docker mode only the `accoes` service may see `accoes.env`. Check it without 
 python3 tools/verificar_compose_accoes.py compose.yaml
 ```
 
-Exit 0 if no other service mounts it; otherwise it prints `serviço <x> monta accoes.env (<via>)` for each finding
-(through `env_file`, `volumes`, `secrets`, `volumes_from`, host access…). Anything it cannot read (anchors,
-`extends`, flow style) fails. Run it after editing `compose.yaml` by hand.
+It also checks the service state (what `accoes` mounts at `ACCOES_DIR`, the `accoes-estado` volume): no other service
+may mount it. And `office` may not mount `accoes-entrada`, `accoes-estado` or `accoes-segredos`, nor `accoes-saude` with
+write access (one line per finding). Exit 0 with no findings; otherwise it prints `serviço <x> monta accoes.env (<via>)`
+or `serviço <x> monta o estado do accoes (volumes: <source>)` for each finding (through `env_file`, `volumes`,
+`secrets`, `volumes_from`, host access…). Anything it cannot read (anchors, `extends`, flow style) fails. Run it after
+editing `compose.yaml` by hand.
 
 ## Personal data: who is responsible
 
@@ -199,6 +251,9 @@ messages, e-mails, names and contacts in sheets). Squad Office is not a processo
 (the text does go to Anthropic through `claude`, under the terms of your account). Before connecting a mailbox:
 
 - confirm the legal basis and tell your customers that an assistant reads their messages;
+- the Office (the web process) does not read the received messages, the `vista.json` files, the credentials or the
+  service state: of the service it only mounts `accoes-saude`, read-only, and reads only `saude.json`, which holds no
+  personal data (ADR-022);
 - do not connect mailboxes with data about minors, health or other sensitive data;
 - **retention: 90 days.** Requests lose the quoted text, the sender and the subject; the `decisoes/.accoes/` record
   is removed; collector messages and records older than 90 days are deleted. The ledger holds no content. The copies

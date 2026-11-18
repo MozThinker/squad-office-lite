@@ -1,6 +1,8 @@
-"""tools/verificar_compose_accoes.py (ADR-021, CA-18c, CA-29): no compose do modo Docker só o serviço `accoes` vê o
-`accoes.env`. Fixtures em tests/fixtures/compose-accoes/ (bom.yaml = saída do gerador congelada, com `/casa/` no
-lugar da casa do contentor por causa do filtro da CI; mau-*.yaml = uma via cada); as outras variantes são substituições de texto sobre o bom.yaml. Só texto: nada aqui corre Docker."""
+"""tools/verificar_compose_accoes.py (ADR-021, CA-18c, CA-29; ADR-022, CA-24): no compose do modo Docker só o serviço
+`accoes` vê o `accoes.env` e o estado (`accoes-estado`); o `office` nunca monta o `accoes-entrada` e monta o
+`accoes-saude` só de leitura. Fixtures em tests/fixtures/compose-accoes/ (bom.yaml =
+saída do gerador congelada, com `/casa/` no lugar da casa do contentor por causa do filtro da CI; mau-*.yaml = uma
+via cada); as outras variantes são substituições de texto sobre o bom.yaml. Só texto: nada aqui corre Docker."""
 import subprocess
 import sys
 import tempfile
@@ -60,11 +62,102 @@ class VerificarCompose(unittest.TestCase):
         esperado = {"mau-volume.yaml": "serviço runner monta accoes.env (volumes: accoes-segredos)",
                     "mau-bind.yaml": "serviço office monta accoes.env (volumes: bind ./dados)",
                     "mau-env_file.yaml": "serviço runner monta accoes.env (env_file)",
-                    "mau-secrets.yaml": "serviço configurar monta accoes.env (secrets: accoes)"}
+                    "mau-secrets.yaml": "serviço configurar monta accoes.env (secrets: accoes)",
+                    "mau-estado.yaml": "serviço office monta o estado do accoes (volumes: accoes-estado)",
+                    "mau-entrada.yaml": "serviço office monta o accoes-entrada (volumes: accoes-entrada)",
+                    "mau-saude-rw.yaml": "serviço office monta o accoes-saude sem ser só de leitura "
+                                         "(volumes: accoes-saude)"}
         self.assertEqual({p.name for p in FIXTURES.glob("mau-*.yaml")}, set(esperado))
         for nome, linha in esperado.items():
             with self.subTest(nome):
                 self.assertEqual(correr_ficheiro(FIXTURES / nome), (1, linha + "\n"))
+
+    def test_office_monta_accoes_estado(self):  # CA-24 (ADR-022)
+        self.assertEqual(correr_ficheiro(FIXTURES / "mau-estado.yaml"),
+                         (1, "serviço office monta o estado do accoes (volumes: accoes-estado)\n"))
+        rc, out = self.correr(depois(FIX, "runner", "    volumes:\n", "      - accoes-estado:/e:ro\n"))
+        self.assertEqual((rc, out), (1, "serviço runner monta o estado do accoes (volumes: accoes-estado)\n"))
+        rc, out = self.correr(FIX.replace("ACCOES_DIR: /dados/accoes", "ACCOES_DIR: /nada"))
+        self.assertEqual((rc, out.strip()), (1, "o serviço accoes não monta a pasta do ACCOES_DIR"))
+
+    def test_bind_do_estado(self):  # CA-24: bind da pasta do estado ou de uma que a contém
+        t = FIX.replace("      - type: volume\n        source: accoes-estado\n",
+                        "      - type: bind\n        source: ./dados/accoes\n")
+        self.assertEqual(self.correr(t), (0, ""))
+        rc, out = self.correr(depois(t, "office", "    volumes:\n", "      - ./dados/accoes:/e:ro\n"))
+        self.assertEqual((rc, out), (1, "serviço office monta o estado do accoes (volumes: bind ./dados/accoes)\n"))
+        rc, out = self.correr(depois(t, "runner", "    volumes:\n",
+                                     "      - type: bind\n        source: ./dados\n        target: /tudo\n"))
+        self.assertEqual((rc, out), (1, "serviço runner monta o estado do accoes (volumes: bind ./dados)\n"))
+        # comparação por componente: ./dados/accoes-outra não está dentro de ./dados/accoes
+        irma = depois(t, "office", "    volumes:\n", "      - ./dados/accoes-outra:/data/outra:ro\n")
+        self.assertEqual(self.correr(irma), (0, ""))
+
+    def test_office_monta_accoes_entrada(self):  # ADR-022: mensagens dos clientes e vistas; nem só de leitura
+        entrada = "serviço office monta o accoes-entrada (volumes: accoes-entrada)\n"
+        for linha in ("      - accoes-entrada:/data/accoes-entrada:ro\n", "      - accoes-entrada:/x\n",
+                      "      - type: volume\n        source: accoes-entrada\n        target: /x\n"):
+            with self.subTest(linha):
+                self.assertEqual(self.correr(depois(FIX, "office", "    volumes:\n", linha)), (1, entrada))
+        # o runner lê as mensagens e as vistas: continua a poder montá-lo (só de leitura, como no gerador)
+        runner = FIX[FIX.index("\n  runner:\n"):FIX.index("\n  configurar:\n")]
+        self.assertIn("        source: accoes-entrada\n        target: /dados/accoes-entrada\n"
+                      "        read_only: true\n", runner)
+        # outro nome de topo para o mesmo volume do docker
+        t = FIX.replace("\n  accoes-entrada:\n", "\n  accoes-entrada:\n    name: entrada-real\n")
+        t = t.replace("\n  proxy:\n", "\n  proxy:\n  copia:\n    name: entrada-real\n")
+        self.assertEqual(self.correr(t), (0, ""))
+        self.assertEqual(self.correr(depois(t, "office", "    volumes:\n", "      - copia:/x:ro\n")),
+                         (1, "serviço office monta o accoes-entrada (volumes: copia)\n"))
+        # bind da pasta ou de uma que a contém
+        b = FIX.replace("      - type: volume\n        source: accoes-entrada\n        target: /dados/accoes-entrada\n",
+                        "      - type: bind\n        source: ./dados/accoes-entrada\n"
+                        "        target: /dados/accoes-entrada\n")
+        self.assertNotEqual(b, FIX)
+        self.assertEqual(self.correr(b), (0, ""))
+        for src in ("./dados/accoes-entrada", "./dados"):
+            with self.subTest(src):
+                self.assertEqual(self.correr(depois(b, "office", "    volumes:\n", f"      - {src}:/e:ro\n")),
+                                 (1, f"serviço office monta o accoes-entrada (volumes: bind {src})\n"))
+        rc, out = self.correr(FIX.replace("ACCOES_ENTRADA: /dados/accoes-entrada", "ACCOES_ENTRADA: /nada"))
+        self.assertEqual((rc, out.strip()), (1, "o serviço accoes não monta a pasta do ACCOES_ENTRADA"))
+
+    def test_office_monta_accoes_saude_so_de_leitura(self):  # ADR-022
+        rw = "serviço office monta o accoes-saude sem ser só de leitura (volumes: {})\n"
+        sem_ro = FIX.replace("        target: /data/accoes-saude\n        read_only: true\n",
+                             "        target: /data/accoes-saude\n")
+        self.assertEqual(self.correr(sem_ro), (1, rw.format("accoes-saude")))
+        falso = FIX.replace("        target: /data/accoes-saude\n        read_only: true\n",
+                            "        target: /data/accoes-saude\n        read_only: false\n")
+        self.assertEqual(self.correr(falso), (1, rw.format("accoes-saude")))
+        # 1.ª linha do item: read_only (forma longa noutra ordem)
+        primeiro = FIX.replace("      - type: volume\n        source: accoes-saude\n"
+                               "        target: /data/accoes-saude\n        read_only: true\n",
+                               "      - read_only: true\n        type: volume\n        source: accoes-saude\n"
+                               "        target: /data/accoes-saude\n")
+        self.assertNotEqual(primeiro, FIX)
+        self.assertEqual(self.correr(primeiro), (0, ""))
+        for linha, ok in (("      - accoes-saude:/s:ro\n", True), ("      - accoes-saude:/s:ro,nocopy\n", True),
+                          ("      - accoes-saude:/s\n", False), ("      - accoes-saude:/s:rw\n", False),
+                          ("      - accoes-saude:/s:nocopy\n", False)):
+            with self.subTest(linha):
+                self.assertEqual(self.correr(depois(FIX, "office", "    volumes:\n", linha)),
+                                 (0, "") if ok else (1, rw.format("accoes-saude")))
+        # bind da pasta (accoes com bind): só de leitura passa, sem ele falha (também a pasta mãe)
+        b = FIX.replace("      - type: volume\n        source: accoes-saude\n        target: /dados/accoes-saude\n",
+                        "      - type: bind\n        source: ./dados/accoes-saude\n"
+                        "        target: /dados/accoes-saude\n")
+        self.assertNotEqual(b, FIX)
+        self.assertEqual(self.correr(depois(b, "office", "    volumes:\n", "      - ./dados/accoes-saude:/s:ro\n")),
+                         (0, ""))
+        for src in ("./dados/accoes-saude", "./dados"):
+            with self.subTest(src):
+                self.assertEqual(self.correr(depois(b, "office", "    volumes:\n", f"      - {src}:/s\n")),
+                                 (1, rw.format(f"bind {src}")))
+        # só o office: o runner não tem esta regra (não o monta no gerador)
+        self.assertEqual(self.correr(depois(FIX, "runner", "    volumes:\n", "      - accoes-saude:/s:ro\n")), (0, ""))
+        rc, out = self.correr(FIX.replace("ACCOES_SAUDE: /dados/accoes-saude", "ACCOES_SAUDE: /nada"))
+        self.assertEqual((rc, out.strip()), (1, "o serviço accoes não monta a pasta do ACCOES_SAUDE"))
 
     def test_env_file_no_office(self):
         out = self.falha(depois(FIX, "office", "    restart: unless-stopped\n", "    env_file: accoes.env\n"), "office")
@@ -84,6 +177,10 @@ class VerificarCompose(unittest.TestCase):
         outra = depois(BIND_ACCOES, "runner", "    volumes:\n",
                        "      - type: bind\n        source: ./dados/outra\n        target: /outra\n")
         self.assertEqual(self.correr(outra), (0, ""))
+
+    def test_bind_de_uma_subpasta(self):   # uma subpasta do estado ou dos segredos também é proibida
+        sub = depois(BIND_ACCOES, "office", "    volumes:\n", "      - ./dados/accoes-segredos/x:/x:ro\n")
+        self.assertIn("monta accoes.env (volumes: bind ./dados/accoes-segredos/x)", self.falha(sub, "office"))
 
     def test_flow_style_falha(self):
         for chave, valor in (("volumes", "[accoes-segredos:/s]"), ("env_file", "accoes.env"), ("secrets", "[x]"),

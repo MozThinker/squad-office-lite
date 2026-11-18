@@ -6,8 +6,8 @@
 #
 # Cria o utilizador de sistema office-accoes (sem casa nem shell), copia accoes.py e servico_accoes/ para
 # /opt/office-accoes (do root), cria /srv/office-accoes (0750, segredos 0700, accoes.json 0644) e
-# <dados>/accoes-entrada (office-accoes, 0755), dá ao office-accoes leitura (ACL) em <dados>/decisoes e
-# <dados>/agentes e passagem (--x) nas pastas acima, e instala o timer systemd de sistema office-accoes.timer (uma
+# <dados>/accoes-entrada e <dados>/accoes-saude (office-accoes, 0755), dá ao office-accoes leitura (ACL) em
+# <dados>/decisoes e <dados>/agentes e passagem (--x) nas pastas acima, e instala o timer systemd de sistema office-accoes.timer (uma
 # passagem por minuto). O accoes.env (credenciais) fica em /srv/office-accoes/segredos, só legível pelo office-accoes.
 # Idempotente: o que já existe fica (o accoes.json e o accoes.env nunca são reescritos); as units são sempre
 # reescritas. --verificar só mostra o que faria (não precisa de root e não muda nada).
@@ -62,7 +62,9 @@ pasta "$DADOS" || erro "$DADOS não é uma pasta (corre primeiro o install.sh)"
 for p in decisoes agentes; do
   pasta "$DADOS/$p" || erro "falta a pasta $DADOS/$p (corre primeiro o install.sh)"
 done
-[ ! -L "$DADOS/accoes-entrada" ] || erro "$DADOS/accoes-entrada é um symlink: apaga-o e corre de novo"
+for p in accoes-entrada accoes-saude; do
+  [ ! -L "$DADOS/$p" ] || erro "$DADOS/$p é um symlink: apaga-o e corre de novo"
+done
 if [ ! -f "$REPO/accoes.py" ] || [ ! -f "$REPO/servico_accoes/servico.py" ]; then
   erro "corre-o a partir do repositório do Lite (faltam accoes.py ou servico_accoes/servico.py)"
 fi
@@ -98,8 +100,9 @@ else
   printf '{"v": 1, "squads": {}}\n' | escreve "$SRV/accoes.json" 0644 "$UTILIZADOR"
 fi
 
-# 4. mensagens e vista que o serviço escreve e o runner lê
+# 4. mensagens e vista que o serviço escreve e o runner lê; saude.json que o office lê (ADR-022)
 faz install -d -o "$UTILIZADOR" -g "$UTILIZADOR" -m 0755 "$DADOS/accoes-entrada"
+faz install -d -o "$UTILIZADOR" -g "$UTILIZADOR" -m 0755 "$DADOS/accoes-saude"
 
 # 5. leitura de decisoes/ e agentes/ (também o que for criado depois: ACL por omissão), sem seguir symlinks
 for p in decisoes agentes; do
@@ -128,10 +131,11 @@ Environment=ACCOES_SEGREDOS=$SRV/segredos
 Environment=ACCOES_ENTRADA=$DADOS/accoes-entrada
 Environment=ACCOES_DECISOES=$DADOS/decisoes
 Environment=ACCOES_AGENTES=$DADOS/agentes
+Environment=ACCOES_SAUDE=$DADOS/accoes-saude
 ExecStart=$PY -I -u $OPT/servico_accoes/servico.py passagem
 NoNewPrivileges=yes
 ProtectSystem=strict
-ReadWritePaths=$SRV $DADOS/accoes-entrada
+ReadWritePaths=$SRV $DADOS/accoes-entrada $DADOS/accoes-saude
 PrivateTmp=yes
 EOF
 escreve "$UNITS/office-accoes.timer" 0644 root <<'EOF'
@@ -152,6 +156,7 @@ faz systemctl enable --now office-accoes.timer
 # o mesmo ambiente da unit, para os subcomandos à mão
 CMD="sudo -u $UTILIZADOR env ACCOES_PERFIL=lite ACCOES_DIR=$SRV ACCOES_SEGREDOS=$SRV/segredos"
 CMD="$CMD ACCOES_ENTRADA=$DADOS/accoes-entrada ACCOES_DECISOES=$DADOS/decisoes ACCOES_AGENTES=$DADOS/agentes"
+CMD="$CMD ACCOES_SAUDE=$DADOS/accoes-saude"
 CMD="$CMD $PY -I -u $OPT/servico_accoes/servico.py"
 info "pronto. Configuração: $SRV/accoes.json (ou: … escrever-config < accoes.json)."
 info "Credenciais (pelo teclado, sem eco) e verificação das ligações:"

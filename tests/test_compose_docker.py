@@ -121,9 +121,15 @@ class ModoDocker(unittest.TestCase):
         office = volumes(servico(self.out, "office"))
         esperado = {destino: ("claude-projects" if o == "claude_projects" else officecfg.SUB[o], modo == "ro")
                     for o, destino, modo, _ in officecfg.MOUNTS}
-        esperado |= {"/config": ("config", True), "/proxy": ("proxy", True)}
+        esperado |= {"/config": ("config", True), "/proxy": ("proxy", True),
+                     "/data/accoes-saude": ("accoes-saude", True)}   # CA-23 (ADR-022)
         self.assertEqual(office, esperado)
+        self.assertIn(("accoes-saude", "/data/accoes-saude", True, True),
+                      itens_volumes(servico(self.out, "office")))
         env = servico(self.out, "office")
+        self.assertIn("      ACCOES_SAUDE_DIR: /data/accoes-saude\n", env)
+        self.assertNotIn("accoes-entrada", env)
+        self.assertNotIn("ACCOES_ENTRADA", env)
         for _, destino, _, var in officecfg.MOUNTS:
             self.assertIn(f"      {var}: {destino}\n", env)
         for linha in ("OFFICE_MODO: docker", "OFFICE_CONFIG: /config/office.yaml",

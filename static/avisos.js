@@ -67,9 +67,33 @@ export function infos(prev, s) {
 // aviso); as tarefas que morreram e as que terminam já notificam pelo index.html (mesma tag), por isso aqui não
 export const notificar = (a, escondido, ligadas) => !!(escondido && ligadas && a?.tipo === "alerta" && a.item?.tipo !== "tarefa");
 
+// serviço de ações (state.accoes, CA-17…19): um estado, não um evento; aparece também na 1.ª carga (D10). Os avisos do
+// registo de squads (colector e executor) contam como um só, na posição do primeiro
+export const ACCOES_REGISTO = "registo de squads ilegível";
+export function accoesAlerta(s) {
+  const a = s?.accoes;
+  if (!a) return null;
+  if (a.parado) return { chave: "accoes:parado", texto: `Serviço de ações parado desde ${a.desde ?? "?"}` };
+  const l = [];
+  for (const x of Array.isArray(a.avisos) ? a.avisos : []) {
+    const t = String(x).startsWith(ACCOES_REGISTO) ? "não consigo ler o registo das squads" : String(x);
+    if (!l.includes(t)) l.push(t);
+  }
+  if (!l.length) return null;
+  return { chave: "accoes:" + l[0], texto: `Serviço de ações: ${l[0]}${l.length > 1 ? ` (e mais ${l.length - 1})` : ""}` };
+}
+// ant = alerta no ecrã (ou null), act = accoesAlerta deste poll, fechada = chave fechada pelo utilizador
+export function accoesPasso(ant, act, fechada) {
+  if (!act) return { op: ant ? "tirar" : "nada", fechada: null };
+  if (act.chave === fechada) return { op: "nada", fechada };
+  if (!ant || ant.chave !== act.chave) return { op: "mostrar", fechada: null };
+  return { op: ant.texto === act.texto ? "manter" : "actualizar", fechada };
+}
+export const accoesHtml = (a, esc) => `<p>${esc(a.texto)}</p><button type="button" data-a="fechar">Fechar</button>`;
+
 // ---- DOM
 
-let A = null, box = null, F = [], tm = 0;
+let A = null, box = null, F = [], tm = 0, accAnt = null, accFechada = null;
 const esc = (s) => A.esc(s);
 
 // api = { esc, ir(item), notificar?(titulo, corpo) → só chamado quando notificar() deixa }
@@ -98,11 +122,25 @@ export function poll(prev, s) {
     if (A.notificar && notificar(a, document.hidden, A.ligadas?.())) A.notificar(`${a.item.quem} precisa de ti`, corpoNotif(a.item));
   }
 }
+// alerta do serviço de ações (sem notificação do browser nem Web Push, CA-20); fechado ou tirado pelo tecto conta como fechado
+export function accoes(s) {
+  if (!box) return;
+  if (accAnt && !F.some((x) => x.chave === accAnt.chave)) { accFechada = accAnt.chave; accAnt = null; }
+  const act = accoesAlerta(s), p = accoesPasso(accAnt, act, accFechada);
+  accFechada = p.fechada;
+  if (p.op === "nada") return;
+  if (p.op === "mostrar") F = fila(F.filter((x) => x.chave !== accAnt?.chave), { tipo: "alerta", accoes: true, ...act }, Date.now());
+  else if (p.op === "actualizar") F = F.map((x) => (x.chave === act.chave ? { ...x, texto: act.texto } : x));
+  else if (p.op === "tirar") F = F.filter((x) => x.chave !== accAnt.chave);
+  accAnt = p.op === "tirar" ? null : act;
+  pinta();
+}
 // corpo da notificação do sistema (ecrã bloqueado): nunca o título de uma aprovação, só o tipo (como o Web Push, ADR-004)
 export const corpoNotif = (it) => (it?.tipo === "aprovacao" ? "Aprovação à tua espera" : String(it?.oque ?? ""));
 
 const html = (a) => {
   const n = a.n > 1 ? ` <span class="av-n">×${a.n}</span>` : "";
+  if (a.accoes) return accoesHtml(a, esc);
   if (a.tipo === "info") return `<p>${esc(a.texto)}${n}</p><button type="button" data-a="fechar">Fechar</button>`;
   const it = a.item, url = it.tipo === "pr" && PR_URL.test(it.pr_url ?? "") ? it.pr_url : null;
   const acc = url ? `<a class="av-r" href="${esc(url)}" target="_blank" rel="noopener" data-a="fechar">Responder</a>`

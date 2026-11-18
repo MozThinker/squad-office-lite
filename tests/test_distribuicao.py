@@ -158,6 +158,9 @@ class PropostasCI(unittest.TestCase):
         self.assertEqual(r.count("platforms: linux/amd64,linux/arm64\n"), 2)
         self.assertEqual(r.count("push: true\n"), 2)
         self.assertIn("file: Dockerfile\n", r)
+        # a contagem das linhas do runner vem do compose.example.yaml: a 0.5.0 (serviço accoes) partiu o «= 2» fixo
+        self.assertIn('dist/compose.yaml)" = "$(grep -cxF "    image: $IMAGEM_RUNNER:$VERSAO" compose.example.yaml)"', r)
+        self.assertNotRegex(r, r'dist/compose\.yaml\)" = \d')
         self.assertIn("file: Dockerfile.runner\n", r)
         for nome, imagem in (("office", "IMAGEM_OFFICE"), ("runner", "IMAGEM_RUNNER")):
             self.assertIn(f"subject-name: ${{{{ env.{imagem} }}}}\n          subject-digest: "

@@ -199,7 +199,7 @@ class _Sessao:
 # --- mundo temporário --------------------------------------------------------------------------------------------------
 class Mundo:
     """O runner (office.yaml de teste, `<dados>/agentes/squads.json`, `<dados>/decisoes`) e o serviço (pasta própria,
-    configuração 0644, credenciais 0600, `<dados>/accoes-entrada`) numa pasta temporária."""
+    configuração 0644, credenciais 0600, `<dados>/accoes-entrada`, `<dados>/accoes-saude`) numa pasta temporária."""
 
     def __init__(self, tmp: Path, sqs: dict[str, str] | None = None):
         self.dir = Path(tmp)
@@ -210,12 +210,14 @@ class Mundo:
         self.agentes = dados / "agentes"
         self.entrada = dados / "accoes-entrada"
         self.entrada.mkdir(mode=0o755)
+        self.saude = dados / "accoes-saude"
+        self.saude.mkdir(mode=0o755)
         servico = self.dir / "accoes"
         for p in ("mensagens", "estado", "folhas"):
             (servico / p).mkdir(parents=True)
         os.chmod(servico, 0o755)
         (servico / "segredos").mkdir(mode=0o700)
-        self.r = accoes.Raizes(servico, servico / "segredos", self.entrada, self.decisoes, self.agentes)
+        self.r = accoes.Raizes(servico, servico / "segredos", self.entrada, self.decisoes, self.agentes, self.saude)
         self.registo()
 
     def registo(self, sqs: dict[str, str] | None = None) -> None:

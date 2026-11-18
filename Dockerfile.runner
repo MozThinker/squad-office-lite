@@ -47,7 +47,7 @@ RUN groupadd -g 10001 office \
  && install -d -o root -g root -m 0755 /dados /dados/tasks /dados/squads /dados/decisoes /dados/biblioteca \
       /dados/runner-estado /dados/decisoes-fila /dados/quadro /dados/quadro-lancar /dados/runner /dados/push \
       /dados/arquivo-fila /dados/agentes /dados/agentes-rascunhos /dados/agentes-fila /dados/accoes \
-      /dados/accoes-entrada /segredos-accoes \
+      /dados/accoes-entrada /dados/accoes-saude /segredos-accoes \
       /home/office /home/office/.claude /home/office/.claude/projects /config /projectos /segredos /proxy
 WORKDIR /app
 COPY officecfg.py arquivo.py agentes.py conversa.py accoes.py office.example.yaml ./

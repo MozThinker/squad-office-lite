@@ -37,7 +37,8 @@ class Ctx:
                    "TELEGRAM_TOKEN=123:token-falso\n")
         m.vista()
         self.env = {"ACCOES_DIR": str(m.r.dir), "ACCOES_SEGREDOS": str(m.r.segredos), "ACCOES_ENTRADA": str(m.entrada),
-                    "ACCOES_DECISOES": str(m.decisoes), "ACCOES_AGENTES": str(m.agentes), "ACCOES_PERFIL": "lite"}
+                    "ACCOES_DECISOES": str(m.decisoes), "ACCOES_AGENTES": str(m.agentes), "ACCOES_SAUDE": str(m.saude),
+                    "ACCOES_PERFIL": "lite"}
         for k, v in self.env.items():
             monkeypatch.setenv(k, v)
         monkeypatch.setattr(ex, "IMAP", self.caixa)
@@ -53,7 +54,12 @@ class Ctx:
         self.mp.setattr(sys, "stdin", io.TextIOWrapper(io.BytesIO(stdin)))
         self.mp.setattr(sys, "stdout", out)
         self.mp.setattr(sys, "stderr", err)
-        rc = servico.main(list(args))
+        umask = os.umask(0o022)   # o main põe o umask 077 do serviço no processo: repõe-se para os testes seguintes
+        os.umask(umask)
+        try:
+            rc = servico.main(list(args))
+        finally:
+            os.umask(umask)
         return rc, out.getvalue(), err.getvalue()
 
     def livro(self) -> list[dict]:

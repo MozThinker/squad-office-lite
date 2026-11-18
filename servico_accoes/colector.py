@@ -286,8 +286,8 @@ def _squad(r: accoes.Raizes, cfg: dict, seg: dict, sid: str, efd: int, agora: da
     return avisos
 
 
-def passagem(r: accoes.Raizes, agora: datetime, perfil: str = accoes.PERFIL) -> list[str]:
-    """Uma passagem do colector; devolve avisos (sem valores) para o stderr."""
+def passagem(r: accoes.Raizes, agora: datetime, perfil: str = accoes.PERFIL) -> list[str] | None:
+    """Uma passagem do colector; devolve avisos (sem valores) para o stderr, ou None se outra passagem está a correr."""
     for p in ("estado", "mensagens"):
         (r.dir / p).mkdir(mode=0o700, exist_ok=True)
     fd = os.open(r.dir / "estado/colector.lock", os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_CLOEXEC, 0o600)
@@ -295,7 +295,7 @@ def passagem(r: accoes.Raizes, agora: datetime, perfil: str = accoes.PERFIL) -> 
         fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except BlockingIOError:
         os.close(fd)
-        return []
+        return None
     avisos = []
     try:
         squads = executor.ler_squads(r)

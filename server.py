@@ -59,6 +59,9 @@ Squads e agentes (agentes.py, ADR-017…019): GET /api/agentes lê AGENTES_DIR e
 frontmatter permitido, caminhos relativos e sha256, nunca o corpo dos .md) e GET /api/agentes/candidato devolve um
 candidato inteiro a pedido. POST /api/agentes/pedido (mesmas verificações do /api/decisao) grava um pedido v1 em
 AGENTES_FILA_DIR: 6.ª pasta em que o serviço escreve. Quem escreve agentes, rascunhos, registos e rotinas é o runner do host.
+
+Saúde do serviço accoes (ADR-022): /api/state leva "accoes" (opcional) lido só de ACCOES_SAUDE_DIR/saude.json (só
+leitura, nome fixo, sem listar a pasta; inválido ou ausente ⇒ sem a chave).
 """
 from __future__ import annotations
 
@@ -243,6 +246,13 @@ RUNNER_ESTADO_MAX = 4096
 RUNNER_ENUM = {"claude": ("ok", "falta"), "credencial": ("ok", "falta", "modo"), "gh": ("ok", "sem sessão")}
 RUNNER_CHAVES = ("v", "em", "versao", "claude", "credencial", "gh")
 RUNNER_VERSAO = re.compile(r"\d+\.\d+\.\d+")
+# ADR-022: saúde do serviço accoes (só leitura; só o saude.json, nunca se lista a pasta); inválido ⇒ sem "accoes"
+ACCOES_SAUDE_DIR = Path(os.environ.get("ACCOES_SAUDE_DIR") or "/data/accoes-saude")
+ACCOES_SAUDE_MAX = 8192
+ACCOES_PARADO_S = 600
+ACCOES_AVISOS_MAX = 10
+ACCOES_AVISO_MAX = 200
+ACCOES_CONTROLO = re.compile(r"[\x00-\x1f\x7f-\x9f]")
 
 
 def _ler_segredo(caminho: str) -> str:
@@ -1287,7 +1297,7 @@ def build_state(now: float | None = None) -> dict:
     today_sum["intervalos"] = sorted(ivs, key=lambda iv: _aware(iv["ini"]))[-INTERVALOS_N:]
     _aux = {"metas": aux_metas, "result": aux_result, "titulo": aux_titulo}
     aprov = aprovacoes.listar(APROVACOES, FILA, LOCAL_TZ, now)
-    return {"now": _iso_ts(now), "tasks": running + rest, "totals": totals,
+    estado = {"now": _iso_ts(now), "tasks": running + rest, "totals": totals,
             "waiting": [w[2] for w in waiting], "usage": _usage,
             "feed": sorted(({k: v for k, v in e.items() if k != "_pr"} for e in reversed(_feed)),
                            key=lambda e: e["at"], reverse=True),
@@ -1296,6 +1306,10 @@ def build_state(now: float | None = None) -> dict:
             "runner": runner_estado(), "tarefa_entregue": entregue,
             "espera": _espera(aprov, [w[2] for w in waiting if not w[3]]),
             "falhas_exec": [f for _, f in sorted(falhas, key=lambda f: f[0], reverse=True)]}
+    acc = accoes_saude(now)
+    if acc is not None:
+        estado["accoes"] = acc
+    return estado
 
 
 def runner_estado() -> dict | None:
@@ -1329,6 +1343,45 @@ def runner_estado() -> dict | None:
     except (TypeError, ValueError):
         return None
     return {k: d[k] for k in RUNNER_CHAVES}
+
+
+def accoes_saude(now: float) -> dict | None:
+    # <ACCOES_SAUDE_DIR>/saude.json do serviço accoes: ficheiro regular (sem symlink), <= 8 KB, chaves exactas
+    # v/em/avisos, v == 1, em ISO com fuso, <= 10 avisos de <= 200 caracteres sem controlo; qualquer falha ⇒ None
+    try:
+        fd = os.open(ACCOES_SAUDE_DIR / "saude.json", os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC)
+    except OSError:
+        return None
+    try:
+        if not stat.S_ISREG(os.fstat(fd).st_mode):
+            return None
+        raw = os.read(fd, ACCOES_SAUDE_MAX + 1)
+    except OSError:
+        return None
+    finally:
+        os.close(fd)
+    try:
+        d = json.loads(raw.decode("utf-8")) if len(raw) <= ACCOES_SAUDE_MAX else None
+    except ValueError:
+        return None
+    if not isinstance(d, dict) or sorted(d) != ["avisos", "em", "v"] or type(d["v"]) is not int or d["v"] != 1:
+        return None
+    avisos = d["avisos"]
+    if not isinstance(avisos, list) or len(avisos) > ACCOES_AVISOS_MAX or not all(
+            isinstance(a, str) and len(a) <= ACCOES_AVISO_MAX and not ACCOES_CONTROLO.search(a) for a in avisos):
+        return None
+    try:
+        em = datetime.fromisoformat(d["em"])
+    except (TypeError, ValueError):
+        return None
+    if em.tzinfo is None:
+        return None
+    try:   # um `em` nos limites do calendário (ano 1 ou 9999 com fuso) levanta OverflowError: ignora-se
+        parado = now - em.timestamp() > ACCOES_PARADO_S
+        desde = em.astimezone(LOCAL_TZ).strftime("%H:%M")
+    except (OverflowError, OSError, ValueError):
+        return None
+    return {"avisos": [] if parado else list(avisos), "em": d["em"], "parado": parado, "desde": desde}
 
 
 def _log_delivery(path: Path) -> str | None:

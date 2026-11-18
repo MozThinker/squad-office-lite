@@ -380,11 +380,12 @@ def test_arranque_configuracao_e_codigo(arr):
 
 def test_raizes_do_ambiente():
     r = accoes.Raizes.do_ambiente({"ACCOES_DIR": "/a", "ACCOES_ENTRADA": "/e", "ACCOES_DECISOES": "/d",
-                                   "ACCOES_AGENTES": "/g"})
-    assert (r.dir, r.segredos, r.entrada, r.decisoes, r.agentes) == tuple(map(Path, ("/a", "/a/segredos", "/e", "/d",
-                                                                                    "/g")))
+                                   "ACCOES_AGENTES": "/g", "ACCOES_SAUDE": "/s"})
+    assert (r.dir, r.segredos, r.entrada, r.decisoes, r.agentes, r.saude) == tuple(map(Path, (
+        "/a", "/a/segredos", "/e", "/d", "/g", "/s")))
     assert (r.config, r.env) == (Path("/a/accoes.json"), Path("/a/segredos/accoes.env"))
     assert accoes.Raizes.do_ambiente({}).dir == Path("/dados/accoes")
+    assert accoes.Raizes.do_ambiente({}).saude == Path("/dados/accoes-saude")
 
 
 def test_links_ronda2():   # porta sem barra, separadores, TLD misto, U+3002 sozinho; «Palavra.Palavra» não é host

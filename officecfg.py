@@ -15,7 +15,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo, available_timezones
 
 EXEMPLO = Path(__file__).resolve().parent / "office.example.yaml"
-VERSAO = "0.5.0"   # versão do produto: única fonte (runner: estado.json e doctor); = 1.ª «## Lite X.Y.Z» do CHANGELOG
+VERSAO = "0.5.1"   # versão do produto: única fonte (runner: estado.json e doctor); = 1.ª «## Lite X.Y.Z» do CHANGELOG
 
 SUB = {"tasks": "tasks", "inbox": "tasks/inbox", "quadro": "quadro", "quadro_lancar": "quadro-lancar",
        "decisoes": "decisoes", "decisoes_fila": "decisoes-fila", "push": "push", "biblioteca": "biblioteca",

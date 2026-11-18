@@ -30,6 +30,7 @@ services:
       AGENTES_DIR: /data/agentes
       AGENTES_RASCUNHOS_DIR: /data/agentes-rascunhos
       AGENTES_FILA_DIR: /data/agentes-fila
+      ACCOES_SAUDE_DIR: /data/accoes-saude
     volumes:
       - type: bind
         source: "/home/utilizador/office-lite/dados/tasks"
@@ -87,6 +88,10 @@ services:
         source: "/home/utilizador/office-lite/dados/agentes-fila"
         target: /data/agentes-fila
         read_only: false
+      - type: bind
+        source: "/home/utilizador/office-lite/dados/accoes-saude"
+        target: /data/accoes-saude
+        read_only: true
       - type: bind
         source: "/home/utilizador/office-lite/office.yaml"
         target: /config/office.yaml

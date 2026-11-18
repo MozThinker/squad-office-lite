@@ -14,18 +14,19 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from tests.test_compose_docker import docker, servico, volumes
+from tests.test_compose import CASA_EXEMPLO, binds, exemplo
+from tests.test_compose_docker import docker, itens_volumes, servico, volumes
 
 ROOT = Path(__file__).resolve().parent.parent
 _spec = importlib.util.spec_from_file_location("arranque", ROOT / "servico_accoes" / "arranque.py")
 arranque = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(arranque)
 
-# docker-compose.example.yml (modo VPS) de 0.4.0: não muda um byte com o serviço accoes (CA-30)
-VPS_SHA256 = "2e25d1729870b36df9c4953a05af31a132a1f41462afc7c195281d37d061eb80"
+# docker-compose.example.yml (modo VPS): o de 0.4.0 só com o bind ro do accoes-saude e a variável (CA-25, ADR-022)
+VPS_SHA256 = "7d72e74faf63319de5099d41c4db0fa91082848fa2478b8e72d0abdf4606051c"
 ACCOES_VOLUMES = {"/segredos-accoes": ("accoes-segredos", False), "/dados/accoes": ("accoes-estado", False),
                   "/dados/accoes-entrada": ("accoes-entrada", False), "/dados/decisoes": ("decisoes", True),
-                  "/dados/agentes": ("agentes", True)}
+                  "/dados/agentes": ("agentes", True), "/dados/accoes-saude": ("accoes-saude", False)}
 
 
 class ComposeAccoes(unittest.TestCase):
@@ -48,31 +49,52 @@ class ComposeAccoes(unittest.TestCase):
         self.assertEqual(volumes(a), ACCOES_VOLUMES)
         for var, destino in (("ACCOES_DIR", "/dados/accoes"), ("ACCOES_SEGREDOS", "/segredos-accoes"),
                              ("ACCOES_ENTRADA", "/dados/accoes-entrada"), ("ACCOES_DECISOES", "/dados/decisoes"),
-                             ("ACCOES_AGENTES", "/dados/agentes")):
+                             ("ACCOES_AGENTES", "/dados/agentes"), ("ACCOES_SAUDE", "/dados/accoes-saude")):
             self.assertIn(f"      {var}: {destino}\n", a)
             self.assertIn(destino, volumes(a))
         for proibido in ("ports:", "profiles:", "/proxy", "/segredos\n", "/config", "/projectos", "runner-home"):
             self.assertNotIn(proibido, a)
 
-    def test_so_o_accoes_ve_os_seus_volumes(self):  # CA-27: accoes-segredos e accoes-estado só nele
+    def test_so_o_accoes_ve_os_seus_volumes(self):  # CA-27, CA-23: accoes-segredos e accoes-estado só nele
         quem = {}
         for s in self.servicos():
             for v, ro in volumes(servico(self.out, s)).values():
                 if v.startswith("accoes-"):
                     quem.setdefault(v, set()).add((s, ro))
         self.assertEqual(quem, {"accoes-segredos": {("accoes", False)}, "accoes-estado": {("accoes", False)},
-                                "accoes-entrada": {("accoes", False), ("runner", True)}})
+                                "accoes-entrada": {("accoes", False), ("runner", True)},
+                                "accoes-saude": {("accoes", False), ("office", True)}})
         self.assertNotIn("accoes", servico(self.out, "configurar"))   # D9: o accoes faz o próprio chown
-        for v in ("accoes-segredos", "accoes-estado", "accoes-entrada"):
+        for v in ("accoes-segredos", "accoes-estado", "accoes-entrada", "accoes-saude"):
             self.assertIn(f"\n  {v}:\n", self.out[self.out.index("\nvolumes:\n"):] + "\n")
 
     def test_configurar_sem_mudanca(self):  # D9: o configurar não monta nem prepara nada do accoes
         self.assertNotIn("accoes", (ROOT / "runner" / "configurar.py").read_text(encoding="utf-8").lower())
 
-    def test_vps_igual_a_0_4_0(self):  # CA-30 (o test_compose.py garante que é a saída do gerador)
+    def test_vps_so_ganha_o_accoes_saude(self):  # CA-25/CA-30 (o test_compose.py garante que é a saída do gerador)
         raw = (ROOT / "docker-compose.example.yml").read_bytes()
         self.assertEqual(hashlib.sha256(raw).hexdigest(), VPS_SHA256)
-        self.assertNotIn(b"accoes", raw)
+        linhas = [x for x in raw.decode("utf-8").splitlines() if "accoes" in x]
+        self.assertEqual(linhas, ["      ACCOES_SAUDE_DIR: /data/accoes-saude",
+                                  f'        source: "{CASA_EXEMPLO}/dados/accoes-saude"',
+                                  "        target: /data/accoes-saude"])
+        bloco = raw.decode("utf-8").split("        target: /data/accoes-saude\n", 1)[1]
+        self.assertTrue(bloco.startswith("        read_only: true\n"))
+
+    def test_office_nunca_monta_o_accoes_entrada(self):  # ADR-022: só o accoes-saude, só de leitura, nos dois modos
+        vps, doc = exemplo(), self.out
+        for nome, texto in (("vps", vps), ("docker", doc), ("compose.example.yaml",
+                                                            (ROOT / "compose.example.yaml").read_text("utf-8"))):
+            with self.subTest(nome):
+                office = servico(texto, "office")
+                self.assertNotIn("accoes-entrada", office)
+                self.assertNotIn("ACCOES_ENTRADA", office)
+                self.assertNotIn("accoes-estado", office)
+                self.assertNotIn("accoes-segredos", office)
+        self.assertEqual([b for b in binds(vps) if "accoes" in b[0] + b[1]],
+                         [(f"{CASA_EXEMPLO}/dados/accoes-saude", "/data/accoes-saude", True)])
+        self.assertEqual([v for v in itens_volumes(servico(doc, "office")) if v[0].startswith("accoes-")],
+                         [("accoes-saude", "/data/accoes-saude", True, True)])
 
 
 class _Simulado:
@@ -103,11 +125,11 @@ class Arranque(unittest.TestCase):  # CA-28
         t = tempfile.TemporaryDirectory()
         self.addCleanup(t.cleanup)
         self.t = Path(t.name).resolve()
-        self.raizes = [self.t / "segredos", self.t / "estado", self.t / "entrada"]
+        self.raizes = [self.t / "segredos", self.t / "estado", self.t / "entrada", self.t / "saude"]
         for p in self.raizes:
             p.mkdir(mode=0o755)
         self.env = {"ACCOES_UID": "10002", "ACCOES_GID": "10002", "OFFICE_UID": "10001", "OFFICE_GID": "10001",
-                    "ACCOES_ENTRADA": str(self.t / "entrada")}
+                    "ACCOES_ENTRADA": str(self.t / "entrada"), "ACCOES_SAUDE": str(self.t / "saude")}
 
     def correr(self, env, sim=None, raizes=None):
         sim = sim or _Simulado()
@@ -126,7 +148,13 @@ class Arranque(unittest.TestCase):  # CA-28
         chamadas = self.correr(self.env)
         self.assertEqual(chamadas, [("fchown", str(p), 10002, 10002) for p in self.raizes]
                          + [("setgroups", [10001]), ("setgid", 10002), ("setuid", 10002)])
-        self.assertEqual([oct(p.stat().st_mode & 0o777) for p in self.raizes], ["0o700", "0o700", "0o755"])
+        self.assertEqual([oct(p.stat().st_mode & 0o777) for p in self.raizes], ["0o700", "0o700", "0o755", "0o755"])
+
+    def test_sem_accoes_saude_no_ambiente_fica_0700(self):  # só as pastas das duas variáveis ficam 0755
+        env = {k: v for k, v in self.env.items() if k != "ACCOES_SAUDE"}
+        with mock.patch.dict(os.environ, {"ACCOES_SAUDE": ""}):
+            self.correr(env)
+        self.assertEqual([oct(p.stat().st_mode & 0o777) for p in self.raizes], ["0o700", "0o700", "0o755", "0o700"])
 
     def test_omissoes(self):
         chamadas = self.correr({k: "" for k in ("ACCOES_UID", "ACCOES_GID", "OFFICE_UID", "OFFICE_GID")})
@@ -200,11 +228,11 @@ class ArranqueRoot(unittest.TestCase):  # CA-28 a sério: chown, setuid e modos 
     def test_root_larga_para_accoes_uid(self):
         with tempfile.TemporaryDirectory() as t:
             os.chmod(t, 0o755)
-            raizes = [Path(t, n) for n in ("segredos", "estado", "entrada")]
+            raizes = [Path(t, n) for n in ("segredos", "estado", "entrada", "saude")]
             for p in raizes:
                 p.mkdir(mode=0o755)
             env = dict(os.environ, ACCOES_UID="10002", ACCOES_GID="10002", OFFICE_UID="10001", OFFICE_GID="10001",
-                       ACCOES_ENTRADA=str(raizes[2]))
+                       ACCOES_ENTRADA=str(raizes[2]), ACCOES_SAUDE=str(raizes[3]))
             fich = str(ROOT / "servico_accoes" / "arranque.py")
             prog = (f"import importlib.util, os, sys\n"
                     f"s = importlib.util.spec_from_file_location('a', {fich!r})\n"
@@ -216,7 +244,8 @@ class ArranqueRoot(unittest.TestCase):  # CA-28 a sério: chown, setuid e modos 
             self.assertEqual(r.returncode, 0, r.stderr)
             self.assertEqual(r.stdout.split(), ["10002", "10002", "10002", "[10001]"])
             self.assertEqual([(p.stat().st_uid, p.stat().st_gid, p.stat().st_mode & 0o777) for p in raizes],
-                             [(10002, 10002, 0o700), (10002, 10002, 0o700), (10002, 10002, 0o755)])
+                             [(10002, 10002, 0o700), (10002, 10002, 0o700), (10002, 10002, 0o755),
+                              (10002, 10002, 0o755)])
             r = subprocess.run([sys.executable, "-I", "-c", prog], env=env | {"ACCOES_UID": "10001"},
                                capture_output=True, text=True, timeout=30, check=False)
             self.assertNotEqual(r.returncode, 0)

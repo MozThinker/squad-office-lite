@@ -51,17 +51,17 @@ O Lite instala-se de duas formas:
    depois de instalar (o instalador não o pede nem o guarda; ver [Credenciais do Claude](#credenciais-do-claude)).
    O `gh` instala-se pelas [instruções oficiais para Ubuntu](https://github.com/cli/cli/blob/trunk/docs/install_linux.md);
    no `gh auth login` usa de preferência um [token só para os repositórios do Office](#token-do-github).
-3. **Descarrega e instala o Office.** O endereço fica fixado à versão (`v0.5.0`), para leres sempre o mesmo script
+3. **Descarrega e instala o Office.** O endereço fica fixado à versão (`v0.5.1`), para leres sempre o mesmo script
    que o livro e este README descrevem.
    **Forma prudente** (recomendada: lês o script antes de o correr):
    ```bash
-   curl -fsSLO https://raw.githubusercontent.com/MozThinker/squad-office-lite/v0.5.0/get.sh
+   curl -fsSLO https://raw.githubusercontent.com/MozThinker/squad-office-lite/v0.5.1/get.sh
    less get.sh
-   bash get.sh --versao 0.5.0
+   bash get.sh --versao 0.5.1
    ```
    **Com um comando:**
    ```bash
-   curl -fsSL https://raw.githubusercontent.com/MozThinker/squad-office-lite/v0.5.0/get.sh | bash -s -- --versao 0.5.0
+   curl -fsSL https://raw.githubusercontent.com/MozThinker/squad-office-lite/v0.5.1/get.sh | bash -s -- --versao 0.5.1
    ```
    > Este comando descarrega um script da internet e corre-o no teu servidor, com o teu utilizador. Só o faças com
    > endereços em que confias, e de preferência lê-o primeiro. O `get.sh` confere o sha256 do pacote: isso apanha uma
@@ -74,14 +74,14 @@ O Lite instala-se de duas formas:
    prudente. Opções (depois de `bash -s --` no comando de uma linha, ou de `bash get.sh`):
    - `--sem-perguntas`: as respostas vêm do ambiente (ver o cabeçalho do `install.sh`; `OFFICE_GIT_NOME` e
      `OFFICE_GIT_EMAIL` para a identidade do git; sem elas, e sem identidade no git, só avisa). Ex.:
-     `curl -fsSL …/get.sh | bash -s -- --versao 0.5.0 --sem-perguntas`;
-   - `--versao X.Y.Z`: instala essa versão em vez da última (`… | bash -s -- --versao 0.5.0`);
+     `curl -fsSL …/get.sh | bash -s -- --versao 0.5.1 --sem-perguntas`;
+   - `--versao X.Y.Z`: instala essa versão em vez da última (`… | bash -s -- --versao 0.5.1`);
    - as outras opções passam ao `install.sh` (ex.: `--proxy traefik --rede <rede>`).
 
    **Verificação opcional da origem.** O sha256 só confirma que o pacote não se estragou. Para confirmar que foi
    construído pelo repositório público (atestação do GitHub; precisa do `gh` com sessão), descarrega o pacote à mão e:
    ```bash
-   gh attestation verify squad-office-lite-0.5.0.tar.gz --repo MozThinker/squad-office-lite
+   gh attestation verify squad-office-lite-0.5.1.tar.gz --repo MozThinker/squad-office-lite
    ```
    Só as versões publicadas com atestação passam. Uma falha aqui é motivo para não instalar e reportar (ver
    [`SECURITY.md`](SECURITY.md)).
@@ -121,7 +121,7 @@ de reinício. Se mudaste as `raizes`, corre outra vez `./install.sh` (não volta
 
 O mesmo `get.sh`, sem `--versao` (instala a última versão publicada; lê o aviso em «Instalação»):
 ```bash
-curl -fsSL https://raw.githubusercontent.com/MozThinker/squad-office-lite/v0.5.0/get.sh | bash
+curl -fsSL https://raw.githubusercontent.com/MozThinker/squad-office-lite/v0.5.1/get.sh | bash
 ```
 A versão instalada passa para `~/squad-office-lite.anterior-<data>` e a nova fica em `~/squad-office-lite`.
 `~/office-lite` (config, `.env`, credenciais e dados) não é tocada pelo `get.sh`; o `install.sh` só volta a
@@ -430,17 +430,17 @@ só neste PC. A squad só trabalha enquanto o PC está ligado e o Docker Desktop
    ```bash
    mkdir -p ~/office && cd ~/office
    ```
-3. **Descarrega o `compose.yaml`** da versão 0.5.0. As imagens do Office e do runner vêm fixadas por digest: o que
+3. **Descarrega o `compose.yaml`** da versão 0.5.1. As imagens do Office e do runner vêm fixadas por digest: o que
    corre é sempre o que foi publicado com esta versão.
    No PowerShell (é `curl.exe`, não `curl`):
    ```powershell
-   curl.exe -fsSLO https://github.com/MozThinker/squad-office-lite/releases/download/v0.5.0/compose.yaml
+   curl.exe -fsSLO https://github.com/MozThinker/squad-office-lite/releases/download/v0.5.1/compose.yaml
    ```
    No Terminal:
    ```bash
-   curl -fsSLO https://github.com/MozThinker/squad-office-lite/releases/download/v0.5.0/compose.yaml
+   curl -fsSLO https://github.com/MozThinker/squad-office-lite/releases/download/v0.5.1/compose.yaml
    ```
-   Também o podes descarregar pelo browser, na página da release `v0.5.0`, e guardá-lo nesta pasta com o nome
+   Também o podes descarregar pelo browser, na página da release `v0.5.1`, e guardá-lo nesta pasta com o nome
    `compose.yaml`. Para mudar a porta ou a pasta dos projectos, ver
    [Mudar a porta, o endereço ou a pasta dos projectos](#mudar-a-porta-o-endereço-ou-a-pasta-dos-projectos) (opcional).
    **No Linux**, cria já o `.env` com o teu utilizador e grupo, antes do passo 4, para os ficheiros dos projectos
@@ -517,7 +517,7 @@ Sem `.env` valem as omissões. Para mudar, descarrega o `env.example` da release
 `compose.yaml`, tira o `#` das linhas que queres mudar e corre `docker compose up -d` (no Linux já tens um `.env` do
 passo 3: não o substituas, acrescenta-lhe as linhas):
 ```powershell
-curl.exe -fsSLo .env https://github.com/MozThinker/squad-office-lite/releases/download/v0.5.0/env.example
+curl.exe -fsSLo .env https://github.com/MozThinker/squad-office-lite/releases/download/v0.5.1/env.example
 ```
 (no Terminal, `curl` em vez de `curl.exe`). O anexo chama-se `env.example` porque o GitHub muda o nome dos anexos que
 começam por ponto.
@@ -745,9 +745,10 @@ comercial automático: usa uma chave de API da Anthropic (`ANTHROPIC_API_KEY` no
 de consumidor. O `doctor` avisa se for o caso.
 
 **Modo Docker:** o serviço `accoes` (imagem do runner, outro uid: `ACCOES_UID`/`ACCOES_GID` no `.env`, omissão 10002,
-nunca igual ao `OFFICE_UID`) e três volumes novos (`accoes-segredos`, `accoes-estado`, `accoes-entrada`) vêm no compose
-gerado. **VPS:** `sudo ./instalar-accoes.sh --dados <dados>` instala-o como utilizador de sistema `office-accoes` e
-timer systemd; o `install.sh` não muda e continua sem `sudo`.
+nunca igual ao `OFFICE_UID`) e três volumes novos (`accoes-segredos`, `accoes-estado`, `accoes-entrada`; na 0.5.1 um
+quarto, `accoes-saude`, o único que o office monta, só de leitura) vêm no compose gerado. **VPS:**
+`sudo ./instalar-accoes.sh --dados <dados>` instala-o como utilizador de sistema `office-accoes` e timer systemd; o
+`install.sh` não muda e continua sem `sudo`.
 
 ---
 
@@ -810,6 +811,8 @@ Lançáveis = cada squad `worktree` × cada projecto.
     agentes-rascunhos/squads/<id>/conversa.json  conversa de montagem (só o runner escreve; apagada às 24 h)
     accoes-entrada/<squad>/     mensagens recebidas (mensagens/m<16 hex>.txt) e vista.json (sem segredos); só o
                                 serviço accoes escreve (ver ACCOES.md)
+    accoes-saude/saude.json     saúde da última passagem do serviço accoes (avisos, hora); só o serviço accoes
+                                escreve; o office monta accoes-saude só de leitura e lê só este ficheiro
     decisoes/.accoes/           registo de cada pedido de acções (definições canónicas e sha); só o runner escreve
     push/                       chaves e subscrições Web Push (0700)
     biblioteca/<pasta>/         fontes da Biblioteca
@@ -1442,7 +1445,8 @@ Para reportar uma falha, ver [`SECURITY.md`](SECURITY.md) (reporte privado no Gi
 Postas pelo compose gerado: `OFFICE_CONFIG` (omissão `/config/office.yaml`), `TASKS_DIR`, `CLAUDE_PROJECTS_DIR`,
 `SQUADS_DIR`, `APROVACOES_DIR`, `BIBLIOTECA_DIR`, `DECISOES_FILA_DIR`, `QUADRO_DIR`, `QUADRO_LANCAR_DIR`, `PUSH_DIR`,
 `ARQUIVO_FILA_DIR` (omissão `/data/arquivo-fila`), `RUNNER_ESTADO_DIR` (omissão `/data/runner-estado`), `AGENTES_DIR`, `AGENTES_RASCUNHOS_DIR` e `AGENTES_FILA_DIR`
-(omissões `/data/agentes`, `/data/agentes-rascunhos` e `/data/agentes-fila`), `PUSH_CONTACTO` (opcional) e
+(omissões `/data/agentes`, `/data/agentes-rascunhos` e `/data/agentes-fila`), `ACCOES_SAUDE_DIR` (omissão
+`/data/accoes-saude`, só de leitura; o servidor lê só o `saude.json`), `PUSH_CONTACTO` (opcional) e
 `BIBLIOTECA_MINI_DIR` (omissão `/tmp/miniaturas`); `PORT` (8080). No modo Docker também `OFFICE_MODO=docker`
 (`GET /api/config` ganha `"modo": "docker"`, senão `"vps"`; os «Primeiros passos» mostram os comandos
 `docker compose …`) e `OFFICE_PROXY_SEGREDO_FILE=/proxy/segredo` em vez de `OFFICE_PROXY_SEGREDO`: o segredo vem desse

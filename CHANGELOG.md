@@ -1,5 +1,39 @@
 # Changelog
 
+## Lite 0.5.1 (2026-11-18)
+
+Serviço de ações sem aviso repetido e com alerta no dashboard (ADR-022). `versao: 1` sem chaves novas no
+`office.yaml`; os contratos v1 não mudam. Volume novo `accoes-saude` com o ficheiro `saude.json` (`v: 1`) e chave
+opcional `accoes` no `/api/state` (ausente sem esse ficheiro).
+
+- **Sem squads de negócio, sem avisos:** um `agentes/squads.json` que não existe (ou sem a pasta `agentes/`) passa a
+  ser «sem squads» e já não enche o registo com «registo de squads ilegível» a cada minuto. Um registo que existe e
+  não se usa (sem permissão, JSON inválido, symlink, grande demais ou formato errado) continua a parar o colector e o
+  executor, com o aviso de sempre. Sem registo, o executor não executa nem recusa nada (os aprovados esperam).
+- **Registo sem repetições:** o serviço `accoes` grava no fim de cada passagem completa `accoes-saude/saude.json`
+  (hora e até 10 avisos de 200 caracteres, só textos fixos; `0644`, atómico, sem seguir symlinks) e só escreve no
+  stderr o que muda: `aviso: <texto>` uma vez e `resolvido: <texto>` quando passa. As linhas `erro no
+  colector|executor: <Tipo>` passam a sair como `aviso: erro no …`. Com o lock ocupado não grava nem resolve.
+- **Alerta no dashboard:** o `office` monta o `accoes-saude` só de leitura (`ACCOES_SAUDE_DIR`, omissão
+  `/data/accoes-saude`) e o servidor lê só o `saude.json`. Um problema do serviço aparece como alerta «Serviço de
+  ações: …», ou «Serviço de ações parado desde HH:MM» se a última passagem tem mais de 10 minutos; sai sozinho quando
+  passa, «Fechar» esconde-o enquanto for o mesmo, e não gera notificação do browser nem Web Push.
+- **Volume novo `accoes-saude`:** só o serviço `accoes` o escreve (`/dados/accoes-saude`, variável `ACCOES_SAUDE`; no
+  Docker faz o `chown` da raiz ao arrancar, `0755`); o `office` monta-o só de leitura em `/data/accoes-saude`; o runner
+  não o monta. No VPS é a pasta `<dados>/accoes-saude`: o `install.sh` cria-a (`0755`) se faltar e o compose faz bind
+  só de leitura dela; o `instalar-accoes.sh` dá-a ao `office-accoes` e junta-a ao `ReadWritePaths` da unit.
+- **O office não monta o `accoes-entrada`:** as mensagens recebidas dos clientes e as `vista.json` ficam fora do
+  alcance do office; do serviço, só vê o `saude.json` (ADR-022).
+- **Verificador mais estrito:** `tools/verificar_compose_accoes.py` passa a falhar se outro serviço montar o estado do
+  `accoes` (`accoes-estado`) e se o `office` montar `accoes-entrada`, `accoes-estado` ou `accoes-segredos`, ou o
+  `accoes-saude` com escrita.
+- **Fica de fora** (e porquê): notificação do browser, Web Push ou Telegram para estes avisos (o alerta no dashboard
+  chega para um estado); botões para reiniciar ou verificar o serviço (continua `accoes verificar`); alerta para
+  «serviço não instalado» (sem `saude.json` não aparece nada).
+- **Actualizar:** no modo Docker, descarregar o `compose.yaml` novo, `docker compose pull` e `docker compose up -d`
+  (o volume `accoes-saude` nasce e o `accoes` dá-lhe o dono); no VPS, `git pull`, `./install.sh` (regenera o compose
+  e cria a pasta) e, com as acções ligadas, `sudo ./instalar-accoes.sh --dados …` de novo.
+
 ## Lite 0.5.0 (2026-11-18)
 
 Squads de negócio e acções aprovadas (porte do Squad Office #40 e #42; ADR-020 e ADR-021). `versao: 1` sem chaves

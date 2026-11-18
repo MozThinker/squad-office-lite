@@ -83,7 +83,7 @@ class ComposeGerado(unittest.TestCase):
         out = self.caddy()
         b = binds(out)
         office = [x for x in b if x[1] != "/etc/caddy/Caddyfile"]
-        self.assertEqual(len(office), 15)
+        self.assertEqual(len(office), 16)
         for s, alvo, _ in office:
             dentro = s == str(self.cfg) or any(s == str(self.t / r) or s.startswith(str(self.t / r) + "/")
                                                for r in ("dados", "claude"))
@@ -95,6 +95,14 @@ class ComposeGerado(unittest.TestCase):
         self.assertIn((str(self.t / "dados" / "arquivo-fila"), "/data/arquivo-fila", False), office)
         self.assertIn((str(self.t / "dados" / "biblioteca"), "/data/biblioteca", True), office)
         self.assertIn("      ARQUIVO_FILA_DIR: /data/arquivo-fila\n", servico(out, "office"))
+
+    def test_accoes_saude_so_leitura(self):  # CA-25 (ADR-022): saúde do serviço accoes, bind ro e variável
+        out = self.caddy()
+        self.assertIn((str(self.t / "dados" / "accoes-saude"), "/data/accoes-saude", True), binds(out))
+        self.assertIn("      ACCOES_SAUDE_DIR: /data/accoes-saude\n", servico(out, "office"))
+        self.assertEqual(sum(a == "/data/accoes-saude" for _, a, _ in binds(out)), 1)
+        self.assertNotIn("accoes-entrada", out)   # mensagens dos clientes e vistas: nunca no office
+        self.assertNotIn("ACCOES_ENTRADA", out)
 
     def test_agentes(self):  # CA-11: agentes e candidatos só de leitura, fila dos agentes em escrita
         out = self.caddy()
@@ -205,6 +213,16 @@ class ComposeGerado(unittest.TestCase):
         ok.write_text(CONFIG.format(t=self.t).replace(f"dados: {self.t}/dados", f"dados: {self.t}"), encoding="utf-8")
         self.assertEqual(gerar(ok).returncode, 0)
 
+    def test_raiz_que_montaria_o_accoes_entrada_recusada(self):   # ADR-022: só a saúde do accoes entra no office
+        for raiz in ("dados", "dados/accoes-entrada", "dados/accoes-entrada/loja"):
+            with self.subTest(raiz=raiz):
+                mau = self.t / "mau.yaml"
+                mau.write_text(CONFIG.format(t=self.t).replace(f"claude_projects: {self.t}/claude",
+                                                               f"claude_projects: {self.t}/{raiz}"), encoding="utf-8")
+                r = gerar(mau)
+                self.assertEqual((r.returncode, r.stdout), (1, ""))
+                self.assertIn("accoes-entrada", r.stderr)
+
     def test_erros(self):
         self.assertEqual(gerar(self.cfg, "--proxy", "traefik").returncode, 2)
         self.assertEqual(gerar(self.cfg, "--dominio", "nao valido").returncode, 2)
@@ -279,6 +297,17 @@ class InstaladorEstatico(unittest.TestCase):
         cria = min(self.s.index(x) for x in ("install -d", "mv ", "> \"$"))
         self.assertLess(verif, cria)
         self.assertLess(self.s.index('[ "$falta" = 0 ] || exit 1'), cria)
+
+    def test_install_cria_accoes_saude_se_faltar(self):  # CA-25: 0755, só se faltar, fora do officecfg.pastas
+        self.assertIn('SAUDE="$(python3 "$REPO/officecfg.py" raiz "$YAML" dados)/accoes-saude"\n'
+                      '[ -d "$SAUDE" ] || install -d -m 0755 "$SAUDE"\n', self.s)
+        self.assertNotIn("accoes-entrada", self.s)   # é do instalar-accoes.sh (só com o serviço)
+        ciclo = re.search(r'(?ms)^while read -r modo pasta; do\n.*?^done < <\(python3 "\$REPO/officecfg.py" pastas '
+                          r'"\$YAML"\)\n', self.s)
+        self.assertIsNotNone(ciclo)
+        self.assertNotIn("accoes", ciclo.group(0))
+        self.assertGreater(self.s.index('install -d -m 0755 "$SAUDE"'), ciclo.end() - 1)
+        self.assertNotIn("accoes", (ROOT / "officecfg.py").read_text(encoding="utf-8"))
 
     def test_segredos(self):  # AC-d2, AC-d6
         self.assertIn("read -rsp", self.s)

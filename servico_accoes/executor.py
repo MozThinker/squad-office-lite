@@ -253,14 +253,35 @@ def motivo_erro(e: Exception) -> str:
 
 # --- passagem ----------------------------------------------------------------------------------------------------------
 def ler_squads(r: accoes.Raizes) -> dict[str, str] | None:
-    """{id: modelo} das squads de negócio do registo do runner; None se ilegível (sem permissões: espera)."""
-    raw = accoes.ler_bytes(r.agentes / "squads.json", accoes.REGISTO_MAX)
+    """{id: modelo} das squads de negócio do registo do runner; {} sem registo (ficheiro ou `agentes/` em falta: sem
+    squads de negócio); None se existe mas é inutilizável (permissões, symlink, grande, JSON ou formato inválido)."""
+    return ler_registo(r)[1]
+
+
+def ler_registo(r: accoes.Raizes) -> tuple[bool, dict[str, str] | None]:
+    """(existe, ler_squads) decidido por um só lstat: quem distingue «sem registo» de «registo sem squads de negócio»
+    não volta a olhar para o disco (o runner pode criar o ficheiro entre as duas)."""
+    p = r.agentes / "squads.json"
+    try:
+        os.lstat(p)
+    except FileNotFoundError:
+        return False, {}
+    except OSError:
+        return True, None
+    return True, _ler_squads_existente(p)
+
+
+def _ler_squads_existente(p: Path) -> dict[str, str] | None:
+    raw = accoes.ler_bytes(p, accoes.REGISTO_MAX)
     if raw is None:
         return None
     try:
-        return accoes.squads_negocio(json.loads(raw.decode("utf-8")))
+        d = json.loads(raw.decode("utf-8"))
     except ValueError:
         return None
+    if not (isinstance(d, dict) and d.get("v") == 1 and isinstance(d.get("squads"), list)):
+        return None
+    return accoes.squads_negocio(d)
 
 
 def _pedidos(r: accoes.Raizes, agora: datetime):
@@ -412,15 +433,17 @@ def _executar(ctx: dict, rp: dict, tz: ZoneInfo, acc: dict, aprovado: str | None
     return fim("executada", ident=ident)
 
 
-def passagem(r: accoes.Raizes, agora: datetime, perfil: str = accoes.PERFIL) -> list[str]:
-    """Uma passagem do executor; devolve avisos (sem valores) para o stderr."""
+def passagem(r: accoes.Raizes, agora: datetime, perfil: str = accoes.PERFIL) -> list[str] | None:
+    """Uma passagem do executor; devolve avisos (sem valores) para o stderr, ou None se outra passagem está a correr."""
     fd = trancar(r, bloquear=False)
     if fd is None:   # outra passagem a correr
-        return []
+        return None
     try:
-        squads = ler_squads(r)
+        existe, squads = ler_registo(r)
         if squads is None:   # sem permissões ou a meio de uma escrita: não se recusa nada, espera
             return ["registo de squads ilegível; nada executado nesta passagem"]
+        if not existe:   # sem registo: nada a fazer, sem aviso e
+            return []   # sem recusar (uma cópia a repor não recusa os aprovados; um registo vazio continua a recusar)
         ctx = {"r": r, "agora": agora, "cfg": accoes.ler_config(r.config), "seg": accoes.ler_segredos(r.env),
                "livro": ler_livro(r), "squads": squads, "perfil": perfil}
         for rp, tz, md in _pedidos(r, agora):

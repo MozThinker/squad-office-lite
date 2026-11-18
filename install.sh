@@ -465,6 +465,10 @@ fi
 while read -r modo pasta; do
   [ -d "$pasta" ] || install -d -m "$modo" "$pasta"
 done < <(python3 "$REPO/officecfg.py" pastas "$YAML")
+# ADR-022: o office monta <dados>/accoes-saude só de leitura (saude.json do serviço accoes); criada aqui, fora das
+# pastas do officecfg, para o bind não falhar sem o serviço instalado (o instalar-accoes.sh dá-lhe o dono)
+SAUDE="$(python3 "$REPO/officecfg.py" raiz "$YAML" dados)/accoes-saude"
+[ -d "$SAUDE" ] || install -d -m 0755 "$SAUDE"
 PROJECTOS=$(python3 "$REPO/officecfg.py" raiz "$YAML" projectos)
 if [ ! -e "$PROJECTOS/exemplo" ]; then
   install -d -m 0750 "$PROJECTOS/exemplo"

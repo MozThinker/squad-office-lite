@@ -33,6 +33,9 @@ CADDY_IMAGEM = "caddy:2.11.9-alpine@sha256:0bbb055bda6793c999bde78b1b5ce3e89f829
 _NOME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")
 # o proxy põe-no no cabeçalho X-Office-Segredo depois do basic auth e o Office exige-o (ADR-006)
 SEGREDO = "${OFFICE_PROXY_SEGREDO:?falta no .env, corre o install.sh}"
+# ADR-022: o office lê só o saude.json do serviço accoes nesta pasta (só de leitura, nos dois modos); nunca monta o
+# accoes-entrada (mensagens dos clientes e vistas)
+ACCOES_SAUDE_OFFICE = "/data/accoes-saude"
 _DOMINIO = re.compile(r"^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$")
 
 
@@ -44,6 +47,11 @@ def _q(s):
 def _bind(origem, destino, so_leitura):
     return ["      - type: bind", f"        source: {_q(origem)}", f"        target: {destino}",
             f"        read_only: {'true' if so_leitura else 'false'}"]
+
+
+def _accoes_host(cfg):   # pastas do serviço accoes no VPS que o office nunca monta (ADR-021/022)
+    return (("accoes-entrada", officecfg.raiz(cfg, "dados") / "accoes-entrada"),
+            ("estado do accoes", Path("/srv/office-accoes")))
 
 
 def gerar(cfg, config, proxy="caddy", rede=None, certresolver="letsencrypt", dominio=None, repo=REPO):
@@ -58,6 +66,7 @@ def gerar(cfg, config, proxy="caddy", rede=None, certresolver="letsencrypt", dom
            *_endurecer(), "    environment:",
            "      OFFICE_CONFIG: /config/office.yaml", f"      OFFICE_PROXY_SEGREDO: {SEGREDO}"]
     out += [f"      {var}: {destino}" for _, destino, _, var in officecfg.MOUNTS]
+    out.append(f"      ACCOES_SAUDE_DIR: {ACCOES_SAUDE_OFFICE}")
     if push:
         out.append(f"      PUSH_CONTACTO: {_q(push)}")
     out.append("    volumes:")
@@ -66,7 +75,16 @@ def gerar(cfg, config, proxy="caddy", rede=None, certresolver="letsencrypt", dom
         p = officecfg.raiz(cfg, origem) if origem in officecfg.RAIZES else officecfg.caminho(cfg, origem)
         if p == cred or p in cred.parents:   # as credenciais do claude nunca entram no contentor
             raise officecfg.ConfigErro(f"raizes: a pasta montada em {destino} contém o {officecfg.CLAUDE_ENV}")
+        for nome, pasta in _accoes_host(cfg):   # ADR-022: nada do serviço accoes além da saúde (ex. claude_projects)
+            if p == pasta or p in pasta.parents or pasta in p.parents:
+                raise officecfg.ConfigErro(f"raizes: a pasta montada em {destino} dá acesso ao {nome}")
         out += _bind(p, destino, modo == "ro")
+    # ADR-022: saúde do serviço accoes (saude.json), só de leitura; fora do SUB (o install.sh cria-a se faltar)
+    saude = officecfg.raiz(cfg, "dados") / "accoes-saude"
+    if saude == cred or saude in cred.parents:
+        raise officecfg.ConfigErro(f"raizes: a pasta montada em {ACCOES_SAUDE_OFFICE} contém o "
+                                   f"{officecfg.CLAUDE_ENV}")
+    out += _bind(saude, ACCOES_SAUDE_OFFICE, True)
     out += _bind(Path(os.path.abspath(config)), "/config/office.yaml", True)
     out += ["    tmpfs:", "      - /tmp/miniaturas:size=128m,uid=${OFFICE_UID},gid=${OFFICE_GID},mode=0700"]
     if proxy == "traefik":
@@ -161,12 +179,12 @@ def _endurecer(*capacidades):
 
 ACCOES_UID = "${ACCOES_UID:-10002}"
 ACCOES_GID = "${ACCOES_GID:-10002}"
-ACCOES_VOLUMES = ("accoes-segredos", "accoes-estado", "accoes-entrada")
+ACCOES_VOLUMES = ("accoes-segredos", "accoes-estado", "accoes-entrada", "accoes-saude")
 
 
 def _accoes(imagem_runner):
     """Serviço accoes (ADR-021): colector e executor das acções aprovadas, o único que monta o accoes-segredos.
-    Root só para o chown das raízes dos 3 volumes dele (servico_accoes/arranque.py), depois ACCOES_UID:ACCOES_GID."""
+    Root só para o chown das raízes dos 4 volumes dele (servico_accoes/arranque.py), depois ACCOES_UID:ACCOES_GID."""
     out = ["  accoes:", f"    image: {imagem_runner}", "    restart: unless-stopped",
            "    read_only: true", '    entrypoint: ["accoes"]', '    user: "0:0"',
            "    # outro uid (nunca o OFFICE_UID): o office e o runner (as squads) nunca lêem o accoes.env;",
@@ -181,10 +199,11 @@ def _accoes(imagem_runner):
             f'      OFFICE_GID: "{GID}"', "      ACCOES_DIR: /dados/accoes",
             "      ACCOES_SEGREDOS: /segredos-accoes", "      ACCOES_ENTRADA: /dados/accoes-entrada",
             "      ACCOES_DECISOES: /dados/decisoes", "      ACCOES_AGENTES: /dados/agentes",
-            "    tmpfs:", "      - /tmp:mode=1777", "    volumes:"]
+            "      # saude.json (ADR-022): o office monta este volume só de leitura",
+            "      ACCOES_SAUDE: /dados/accoes-saude", "    tmpfs:", "      - /tmp:mode=1777", "    volumes:"]
     out += (_volume("accoes-segredos", "/segredos-accoes") + _volume("accoes-estado", "/dados/accoes")
             + _volume("accoes-entrada", "/dados/accoes-entrada") + _volume("decisoes", "/dados/decisoes", True)
-            + _volume("agentes", "/dados/agentes", True))
+            + _volume("agentes", "/dados/agentes", True) + _volume("accoes-saude", "/dados/accoes-saude"))
     # rede própria: fala com IMAP/SMTP/Telegram lá fora, nunca com o office nem com o runner
     out += ["    networks:", "      - accoes"]
     return out
@@ -210,11 +229,13 @@ def gerar_docker(imagem_office=IMAGEM_OFFICE, imagem_runner=IMAGEM_RUNNER):
            "      # escrito pelo configurar; em falta o Office responde 503 a tudo excepto /healthz",
            "      OFFICE_PROXY_SEGREDO_FILE: /proxy/segredo"]
     out += [f"      {var}: {destino}" for _, destino, _, var in officecfg.MOUNTS]
+    out.append(f"      ACCOES_SAUDE_DIR: {ACCOES_SAUDE_OFFICE}")
     out.append("    # sem capacidades: um servidor HTTP do Python na porta 8080, sem root")
     out += _endurecer()
     out.append("    volumes:")
     for o, destino, modo, _ in officecfg.MOUNTS:
         out += _volume(_vol(o), destino, modo == "ro")
+    out += _volume("accoes-saude", ACCOES_SAUDE_OFFICE, True)
     out += _volume("config", "/config", True) + _volume("proxy", "/proxy", True)
     out += ["    tmpfs:", f"      - /tmp/miniaturas:size=128m,uid={UID},gid={GID},mode=0700",
             "    networks:", "      - office"]

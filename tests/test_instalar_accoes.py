@@ -77,6 +77,7 @@ class InstalarAccoes(unittest.TestCase):
                       "+ install -d -o office-accoes -g office-accoes -m 0750 /srv/office-accoes",
                       "+ install -d -o office-accoes -g office-accoes -m 0700 /srv/office-accoes/segredos",
                       f"+ install -d -o office-accoes -g office-accoes -m 0755 {d}/accoes-entrada",
+                      f"+ install -d -o office-accoes -g office-accoes -m 0755 {d}/accoes-saude",
                       f"+ setfacl -R -P -m u:office-accoes:rX {d}/decisoes",
                       f"+ setfacl -R -P -d -m u:office-accoes:rX {d}/decisoes",
                       f"+ setfacl -R -P -m u:office-accoes:rX {d}/agentes",
@@ -121,10 +122,13 @@ class InstalarAccoes(unittest.TestCase):
         self.assertIn("falta a pasta", r.stderr)
 
     def test_symlinks_recusados(self):
-        (self.dados / "accoes-entrada").symlink_to("/etc")
-        r = self.correr("--dados", str(self.dados), "--verificar")
-        self.assertEqual(r.returncode, 1)
-        self.assertIn("symlink", r.stderr)
+        for p in ("accoes-entrada", "accoes-saude"):
+            with self.subTest(p):
+                (self.dados / p).symlink_to("/etc")
+                r = self.correr("--dados", str(self.dados), "--verificar")
+                self.assertEqual(r.returncode, 1)
+                self.assertIn(f"{self.dados}/{p} é um symlink", r.stderr)
+                (self.dados / p).unlink()
         os.symlink(self.dados, self.t / "ligacao")
         r = self.correr("--dados", str(self.t / "ligacao"), "--verificar")
         self.assertEqual(r.returncode, 1)
@@ -142,10 +146,13 @@ class InstalarAccoes(unittest.TestCase):
                       "Environment=ACCOES_SEGREDOS=$SRV/segredos", "Environment=ACCOES_ENTRADA=$DADOS/accoes-entrada",
                       "Environment=ACCOES_DECISOES=$DADOS/decisoes", "Environment=ACCOES_AGENTES=$DADOS/agentes",
                       "ExecStart=$PY -I -u $OPT/servico_accoes/servico.py passagem", "NoNewPrivileges=yes",
-                      "ProtectSystem=strict", "ReadWritePaths=$SRV $DADOS/accoes-entrada",
+                      "Environment=ACCOES_SAUDE=$DADOS/accoes-saude",
+                      "ProtectSystem=strict", "ReadWritePaths=$SRV $DADOS/accoes-entrada $DADOS/accoes-saude",
                       "OnCalendar=*-*-* *:*:00", "WantedBy=timers.target", "UTILIZADOR=office-accoes"):
             self.assertIn(f"\n{linha}\n", TEXTO)
         self.assertNotIn("accoes.env", TEXTO.split("\n# 6.")[1].split("\nfaz systemctl")[0])   # nada no ambiente
+        # o comando à mão leva o mesmo ambiente da unit (também o ACCOES_SAUDE)
+        self.assertIn('\nCMD="$CMD ACCOES_SAUDE=$DADOS/accoes-saude"\n', TEXTO)
 
     @unittest.skipUnless(shutil.which("shellcheck"), "sem shellcheck (corre na CI)")
     def test_shellcheck(self):

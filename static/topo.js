@@ -76,7 +76,7 @@ export function iniciar(api) {
 
 export function render(s) {
   if (!barra || !s) return;
-  if (s !== ultimo) { if (ultimo) av.poll(ultimo, s); ultimo = s; okEm = Date.now(); ligacao(true); }
+  if (s !== ultimo) { if (ultimo) av.poll(ultimo, s); av.accoes(s); ultimo = s; okEm = Date.now(); ligacao(true); }
   const c = contadores(s, A.sq), parado = !maisRecente(s);
   for (const b of barra.querySelectorAll("button")) {
     const k = b.dataset.k, n = c[k], rot = ROTULOS.find((r) => r[0] === k)[1];

@@ -1,4 +1,4 @@
-# Acções aprovadas (Squad Office Lite 0.5.0)
+# Acções aprovadas (Squad Office Lite 0.5.1)
 
 [English](ACCOES.en.md) · [README](README.md) · decisões: ADR-020 e ADR-021 em [DECISIONS.md](DECISIONS.md)
 
@@ -42,8 +42,9 @@ nunca corpo, assunto, endereços nem valores).
 
 ## Ligar no modo Docker
 
-O serviço `accoes` já vem no `compose.yaml` gerado (volumes `accoes-segredos`, `accoes-estado` e `accoes-entrada`, rede
-própria). Arranca como `root` só para dar o dono às pastas dele e passa logo a `ACCOES_UID:ACCOES_GID`.
+O serviço `accoes` já vem no `compose.yaml` gerado (volumes `accoes-segredos`, `accoes-estado`, `accoes-entrada` e
+`accoes-saude`, rede própria). Arranca como `root` só para dar o dono às pastas dele e passa logo a
+`ACCOES_UID:ACCOES_GID`.
 
 1. No `.env`, se quiseres outro uid (omissão 10002; **tem de ser diferente do `OFFICE_UID`**, senão o serviço recusa
    arrancar, porque o runner leria as credenciais):
@@ -79,13 +80,14 @@ sudo ./instalar-accoes.sh --dados ~/office-lite/dados
 
 Precisa de `acl` (`setfacl`), systemd e Python ≥ 3.10. Cria o utilizador de sistema `office-accoes` (sem casa nem
 shell), copia o código para `/opt/office-accoes` (do root), cria `/srv/office-accoes` (`accoes.json` 0644, `segredos/`
-0700) e `<dados>/accoes-entrada`, dá-lhe leitura por ACL em `decisoes/` e `agentes/` e liga o timer
-`office-accoes.timer` (uma passagem por minuto). É idempotente: nunca reescreve o `accoes.json` nem o `accoes.env`. Ao
-fim mostra os comandos seguintes; o ambiente é o da unit:
+0700), `<dados>/accoes-entrada` e `<dados>/accoes-saude` (`0755`, também no `ReadWritePaths` da unit), dá-lhe leitura
+por ACL em `decisoes/` e `agentes/` e liga o timer `office-accoes.timer` (uma passagem por minuto). É idempotente: nunca
+reescreve o `accoes.json` nem o `accoes.env`. Ao fim mostra os comandos seguintes; o ambiente é o da unit:
 
 ```sh
 CMD="sudo -u office-accoes env ACCOES_PERFIL=lite ACCOES_DIR=/srv/office-accoes ACCOES_SEGREDOS=/srv/office-accoes/segredos \
-  ACCOES_ENTRADA=<dados>/accoes-entrada ACCOES_DECISOES=<dados>/decisoes ACCOES_AGENTES=<dados>/agentes \
+  ACCOES_ENTRADA=<dados>/accoes-entrada ACCOES_SAUDE=<dados>/accoes-saude ACCOES_DECISOES=<dados>/decisoes \
+  ACCOES_AGENTES=<dados>/agentes \
   python3 -I -u /opt/office-accoes/servico_accoes/servico.py"
 $CMD escrever-config < accoes.json
 $CMD escrever-segredos
@@ -96,7 +98,9 @@ $CMD verificar
 `/opt` não se actualiza sozinha.
 
 As mensagens em `<dados>/accoes-entrada` ficam legíveis para outras contas do sistema se a tua casa e a pasta de dados
-o forem: mantém a pasta de dados a `0750` ou `0700`.
+o forem: mantém a pasta de dados a `0750` ou `0700`. O contentor `office` não a monta: do serviço só vê
+`<dados>/accoes-saude` (só de leitura, ver «Saúde do serviço»), que o `install.sh` cria (`0755`) se faltar e o
+`instalar-accoes.sh` dá ao `office-accoes`.
 
 ## `accoes.json`
 
@@ -158,6 +162,51 @@ aceitam a senha normal). É `0600`, do uid do serviço, e vive no volume `accoes
 for um symlink. **Nunca no `claude.env`** nem em ficheiros que o runner leia. Ligar e desligar conectores é só editar
 estes dois ficheiros (e `escrever-config` de novo).
 
+## Saúde do serviço
+
+No fim de cada passagem completa (no Docker, cada volta do `ciclo`; no VPS, cada passagem do timer) o serviço grava
+`<dados>/accoes-saude/saude.json` (no Docker, `/dados/accoes-saude/saude.json` no volume `accoes-saude`, variável
+`ACCOES_SAUDE`). Só o serviço escreve nesta pasta:
+
+```json
+{"v":1,"em":"2026-11-18T13:23:00+00:00","avisos":[]}
+```
+
+`em` é a hora UTC da passagem; `avisos` são os avisos dessa passagem (do colector e depois do executor), sem repetidos,
+no máximo 10 de 200 caracteres cada, só com textos fixos, ids de squad, nomes de tipos de erro e números (nunca
+endereços, servidores, utilizadores, credenciais nem conteúdo de mensagens). Sem avisos fica `"avisos": []`: o
+ficheiro escreve-se na mesma, é a prova de vida. Modo `0644`, escrita atómica, sem seguir symlinks. Se a passagem foi
+saltada porque outra estava a correr, o ficheiro não muda.
+
+**Sem squads de negócio não há aviso:** um `agentes/squads.json` que não existe é o caso normal. Só um registo que
+existe e não se consegue usar (sem permissão, JSON inválido, symlink, grande demais ou formato errado) dá o aviso
+`registo de squads ilegível; nada colhido|executado nesta passagem`. Sem registo, o executor não executa nem recusa
+nada: um pedido aprovado espera que o registo volte (até às 48 h de sempre).
+
+**No registo** (stderr; `journalctl -u office-accoes.service` no VPS, `docker compose logs accoes` no Docker) só sai
+o que muda em relação ao `saude.json` anterior: `aviso: <texto>` na primeira passagem em que aparece e
+`resolvido: <texto>` uma vez, quando deixa de aparecer. Um texto diferente conta como aviso novo. Uma falha inesperada
+do colector ou do executor sai como `aviso: erro no colector|executor: <Tipo>`. Se o `saude.json` não se puder gravar,
+a passagem não falha e sai `aviso: saude.json não gravado (<Tipo>)`; sem esse ficheiro não há memória entre passagens
+e os avisos repetem-se até se resolver.
+
+**No dashboard:** o `office` monta o `accoes-saude` **só de leitura** (é a única coisa do serviço que vê; não monta o
+`accoes-entrada`) e o servidor lê só o `saude.json` (`ACCOES_SAUDE_DIR`, omissão `/data/accoes-saude`; nunca lista a
+pasta). Com avisos aparece um alerta «Serviço de ações: …» (o registo das squads ilegível lê-se «não consigo ler o
+registo das squads»; com vários avisos, o primeiro e «(e mais N)»). Se a última passagem tem mais de 10 minutos, o
+alerta é «Serviço de ações parado desde HH:MM» (hora no fuso do `office.yaml`). O alerta sai sozinho quando o problema
+passa; «Fechar» esconde-o enquanto for o mesmo e volta a aparecer se mudar ou se o problema sair e voltar (não fica
+guardado entre recargas). Não gera notificação do browser nem Web Push. Sem serviço instalado (sem `saude.json`) não
+aparece nada.
+
+O `saude.json` é só o estado da última passagem: a verificação a pedido continua a ser `accoes verificar`.
+
+**Desligar o serviço:** o último `saude.json` fica, e o dashboard mostra «Serviço de ações parado» até ser apagado.
+No VPS, depois de `sudo systemctl disable --now office-accoes.timer`, apaga-o também:
+`sudo rm -f <dados>/accoes-saude/saude.json`. No Docker, parar o serviço `accoes` mostra «parado» (é o pretendido);
+se o tirares de vez, apaga o volume: `docker volume rm office-lite-pc_accoes-saude` (o nome do projecto é o `name:` do
+`compose.yaml`).
+
 ## Anular e desfazer
 
 Os comandos levam o `sha` da acção, que vês no livro `AAAA-MM.jsonl` (`/dados/accoes/` no Docker,
@@ -178,8 +227,11 @@ No modo Docker, só o serviço `accoes` pode ver o `accoes.env`. Verifica-o sem 
 python3 tools/verificar_compose_accoes.py compose.yaml
 ```
 
-Sai 0 se nenhum outro serviço o monta; senão imprime `serviço <x> monta accoes.env (<via>)` por cada achado (por
-`env_file`, `volumes`, `secrets`, `volumes_from`, acesso ao host…). O que não souber ler (âncoras, `extends`, flow
+Verifica também o estado do serviço (o que o `accoes` monta em `ACCOES_DIR`, o volume `accoes-estado`): nenhum outro
+serviço o pode montar. E o `office` não pode montar `accoes-entrada`, `accoes-estado` nem `accoes-segredos`, nem o
+`accoes-saude` com escrita (falha com uma linha por achado). Sai 0 sem achados; senão imprime
+`serviço <x> monta accoes.env (<via>)` ou `serviço <x> monta o estado do accoes (volumes: <origem>)` por cada achado
+(por `env_file`, `volumes`, `secrets`, `volumes_from`, acesso ao host…). O que não souber ler (âncoras, `extends`, flow
 style) falha. Corre-o depois de mexer à mão no `compose.yaml`.
 
 ## Dados pessoais: quem é o responsável
@@ -190,6 +242,8 @@ corre na tua máquina (o texto vai, porém, para a Anthropic pelo `claude`, nos 
 caixa:
 
 - confirma a base legal e informa os teus clientes de que as mensagens são lidas por um assistente;
+- o Office (o processo web) não lê as mensagens recebidas, as `vista.json`, as credenciais nem o estado do serviço:
+  do serviço só monta o `accoes-saude`, só de leitura, e lê só o `saude.json`, sem dados pessoais (ADR-022);
 - não ligues caixas com dados de menores, de saúde ou outros dados sensíveis;
 - **retenção: 90 dias.** Os pedidos perdem o texto citado, o remetente e o assunto; o registo `decisoes/.accoes/` sai;
   as mensagens e os registos do colector com mais de 90 dias apagam-se. O livro não guarda conteúdo. As cópias das

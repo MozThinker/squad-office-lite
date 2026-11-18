@@ -297,6 +297,19 @@ jobs:
           # uma passagem pela unit (ProtectSystem=strict, User=office-accoes)
           sudo systemctl start office-accoes.service
           test "$(systemctl show -p Result --value office-accoes.service)" = success
+          # CA-26: sem squads, nenhuma linha aviso: (nem repetida) em duas passagens; a 1.ª grava o saude.json
+          test -f "$d/accoes-saude/saude.json"
+          sudo systemctl start office-accoes.service
+          test "$(systemctl show -p Result --value office-accoes.service)" = success
+          test -z "$(sudo journalctl -u office-accoes.service -o cat --no-pager | grep '^aviso:')"
+          test "$(stat -c '%U %a' "$d/accoes-saude")" = "office-accoes 755"
+          test "$(stat -c '%U %a' "$d/accoes-saude/saude.json")" = "office-accoes 644"
+          # ADR-022: o office lê-o pelo bind só de leitura e não monta o accoes-entrada
+          docker compose -f ~/office-lite/docker-compose.yml exec -T office test -r /data/accoes-saude/saude.json
+          if docker compose -f ~/office-lite/docker-compose.yml exec -T office touch /data/accoes-saude/x; then
+            echo "::error::o office escreveu no accoes-saude"; exit 1
+          fi
+          docker compose -f ~/office-lite/docker-compose.yml exec -T office test ! -e /data/accoes-entrada
       - name: Modo Traefik (compose gerado válido)
         run: |
           docker network create t
@@ -544,6 +557,19 @@ jobs:
           if docker compose exec -T runner touch /dados/accoes-entrada/x; then
             echo "::error::o runner escreveu no accoes-entrada"; exit 1
           fi
+          # ADR-022: volume próprio da saúde; o office lê o saude.json (só de leitura) depois da 1.ª volta do accoes,
+          # sem avisos (sem squads); não monta o accoes-entrada; o runner não monta o accoes-saude
+          for _ in $(seq 45); do docker compose exec -T accoes test -f /dados/accoes-saude/saude.json && break; sleep 2; done
+          test "$(docker compose exec -T accoes stat -c '%u:%g %a' /dados/accoes-saude)" = "10002:10002 755"
+          docker compose exec -T office test -r /data/accoes-saude/saude.json
+          docker compose exec -T office python3 -I -c 'import json,sys; d=json.load(open(sys.argv[1])); assert d["v"] == 1 and d["avisos"] == [], d' /data/accoes-saude/saude.json
+          if docker compose exec -T office touch /data/accoes-saude/x; then
+            echo "::error::o office escreveu no accoes-saude"; exit 1
+          fi
+          docker compose exec -T office test ! -e /data/accoes-entrada
+          # a imagem do runner (a mesma do accoes) traz a pasta vazia; o que conta é não ver o ficheiro (o inspect prova o mount)
+          docker compose exec -T runner test ! -e /dados/accoes-saude/saude.json
+          test -z "$(docker compose logs --no-color --no-log-prefix accoes | grep '^aviso:')"
           # ACCOES_UID = OFFICE_UID: o serviço recusa arrancar
           if docker compose run --rm -T -e ACCOES_UID="$OFFICE_UID" accoes verificar; then
             echo "::error::o accoes arrancou com o uid do runner"; exit 1
@@ -649,10 +675,14 @@ jobs:
                   assert hc.get("ReadonlyRootfs") is True, svc
               # accoes-segredos e accoes-estado só no accoes (CA-27)
               if svc == "accoes":
-                  assert vol == {"accoes-segredos", "accoes-estado", "accoes-entrada", "decisoes", "agentes"}, vol
+                  assert vol == {"accoes-segredos", "accoes-estado", "accoes-entrada", "accoes-saude", "decisoes",
+                                 "agentes"}, vol
                   assert hc.get("ReadonlyRootfs") is True and not hc.get("Init"), svc
               else:
                   assert not vol & {"accoes-segredos", "accoes-estado"}, (svc, vol)
+                  # ADR-022: o office vê só o accoes-saude (só de leitura); o runner não o monta
+                  assert not (svc == "office" and "accoes-entrada" in vol), (svc, vol)
+                  assert not (svc == "runner" and "accoes-saude" in vol), (svc, vol)
           assert vistos == {"office", "caddy", "runner", "accoes"}, vistos
           EOF
           # nem a palavra-passe nem a credencial no ambiente ou no argv de algum contentor

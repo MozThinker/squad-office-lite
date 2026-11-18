@@ -3,6 +3,7 @@ pedido), só para o remetente registado, com espera anulável no envio; revalida
 desfazer (CA-12…CA-16, CA-19, CA-20, CA-22, CA-26). SMTP e Telegram locais em 127.0.0.1, IMAP falso, CSV em pasta
 temporária, `AGORA` fixo."""
 import json
+import os
 import threading
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
@@ -266,12 +267,81 @@ def test_registo_de_squads_ilegivel_espera(x):
     x.m.aprovar(a)
     reg = x.m.agentes / "squads.json"
     guardado = reg.read_text()
-    reg.unlink()
+    reg.write_text("{")
     assert ex.passagem(x.m.r, AGORA) == ["registo de squads ilegível; nada executado nesta passagem"]
     assert (x.ligacoes(), x.livro()) == (0, [])
     reg.write_text(guardado)
     x.passar()
     assert x.estados() == [("executada", None)]
+
+
+def _estragar_registo(m, causa: str) -> None:
+    """Deixa `agentes/squads.json` presente mas inutilizável (CA-2)."""
+    reg = m.agentes / "squads.json"
+    if causa == "sem_permissao":
+        os.chmod(reg, 0)
+    elif causa == "json_invalido":
+        reg.write_text("{", encoding="utf-8")
+    elif causa == "symlink":
+        real = m.agentes / "real.json"
+        reg.rename(real)
+        reg.symlink_to(real)
+    elif causa == "grande":
+        reg.write_text(json.dumps({"v": 1, "squads": [], "x": "y" * accoes.REGISTO_MAX}), encoding="utf-8")
+    elif causa == "formato":
+        reg.write_text(json.dumps({"squads": [{"id": "loja", "modelo": "atendimento"}]}), encoding="utf-8")
+
+
+CAUSAS = [pytest.param("sem_permissao", marks=pytest.mark.skipif(os.geteuid() == 0, reason="root lê sem permissões")),
+          "json_invalido", "symlink", "grande", "formato"]
+
+
+def test_sem_registo_executa_sem_aviso(x):   # CA-1: sem squads.json = sem squads de negócio, não «ilegível»
+    a = x.pedir(aviso("um"))
+    x.m.aprovar(a)
+    (x.m.agentes / "squads.json").unlink()
+    assert ex.ler_squads(x.m.r) == {}
+    guardado = x.m.agentes / "squads.json"
+    assert ex.passagem(x.m.r, AGORA) == []
+    assert (x.ligacoes(), x.livro()) == (0, [])   # nada a fazer: o aprovado não é recusado
+    x.m.registo()
+    assert guardado.exists()
+    x.passar()
+    assert x.estados() == [("executada", None)]
+
+
+def test_registo_sem_squads_de_negocio_recusa(x):   # ≠ sem registo: um registo vazio continua a recusar
+    a = x.pedir(aviso("um"))
+    x.m.aprovar(a)
+    x.m.registo({"loja": "desenvolvimento"})
+    assert ex.ler_registo(x.m.r) == (True, {})
+    x.passar()
+    assert x.estados(x.m.sha(a)) == [("recusada", accoes.M_INACTIVA)]
+
+
+def test_sem_pasta_agentes_sem_aviso(x):   # CA-3: ENOENT noutro componente do caminho também é «sem registo»
+    x.m.agentes.rename(x.m.agentes.with_name("agentes-fora"))
+    assert ex.ler_squads(x.m.r) == {}
+    x.passar()
+
+
+@pytest.mark.parametrize("causa", CAUSAS)
+def test_registo_inutilizavel_espera(x, causa):   # CA-2
+    a = x.pedir(aviso("um"))
+    x.m.aprovar(a)
+    _estragar_registo(x.m, causa)
+    assert ex.ler_squads(x.m.r) is None
+    assert ex.passagem(x.m.r, AGORA) == ["registo de squads ilegível; nada executado nesta passagem"]
+    assert (x.ligacoes(), x.livro()) == (0, [])
+
+
+def test_lock_ocupado_devolve_none(x):   # outra passagem a correr ≠ passagem sem avisos
+    fd = ex.trancar(x.m.r, bloquear=True)
+    try:
+        assert ex.passagem(x.m.r, AGORA) is None
+    finally:
+        os.close(fd)
+    x.passar()
 
 
 def test_perfil_lite_responder_nao_ligada(x):   # CA-22

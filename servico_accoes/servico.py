@@ -12,12 +12,17 @@ do runner (modo Docker) ou `python3 -I /opt/office-accoes/servico_accoes/servico
                                                      (0600); nunca imprime valores
 
 Ambiente: ACCOES_PERFIL (só `lite`, a omissão), ACCOES_DIR, ACCOES_SEGREDOS, ACCOES_ENTRADA, ACCOES_DECISOES,
-ACCOES_AGENTES. No arranque: `arranque.preparar` (com root: chown das raízes e largar privilégios; sem root, nada) e
-recusa (exit 1) com `accoes.env` ou `accoes.json` com permissões largas, de outro uid ou symlink.
+ACCOES_AGENTES, ACCOES_SAUDE. No arranque: `arranque.preparar` (com root: chown das raízes e largar privilégios; sem
+root, nada) e recusa (exit 1) com `accoes.env` ou `accoes.json` com permissões largas, de outro uid ou symlink.
+
+Saúde (ADR-022): cada passagem completa grava `<ACCOES_SAUDE>/saude.json` = {"v": 1, "em": ISO UTC, "avisos": […]}
+(0644, atómico; o Office lê-o) e o stderr só leva `aviso: <texto>` dos avisos novos e `resolvido: <texto>` dos que
+saíram, comparando com o `saude.json` anterior (no modo VPS cada passagem é um processo).
 """
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import signal
 import sys
@@ -31,6 +36,7 @@ import accoes
 from servico_accoes import colector, executor
 
 CODIGO = Path(__file__).resolve().parent.parent
+SAUDE, SAUDE_MAX, AVISOS_MAX, AVISO_MAX = "saude.json", 8192, 10, 200
 COMANDOS = ("ciclo", "passagem", "verificar", "anular", "desfazer", "escrever-config", "escrever-segredos")
 _parar = False
 
@@ -45,7 +51,7 @@ def _agora() -> datetime:
 
 def preparar(r: accoes.Raizes) -> None:
     from servico_accoes import arranque
-    arranque.preparar([r.segredos, r.dir, r.entrada])
+    arranque.preparar([r.segredos, r.dir, r.entrada, r.saude])
 
 
 def erro_arranque(r: accoes.Raizes) -> str | None:
@@ -59,13 +65,56 @@ def erro_arranque(r: accoes.Raizes) -> str | None:
     return e
 
 
+def normalizar(avisos: list[str]) -> list[str]:
+    """Não imprimíveis → espaço, cortados a AVISO_MAX, sem repetidos (1.ª ocorrência), no máximo AVISOS_MAX."""
+    out = []
+    for a in avisos:
+        a = "".join(c if c.isprintable() else " " for c in a)[:AVISO_MAX]
+        if a not in out:
+            out.append(a)
+    return out[:AVISOS_MAX]
+
+
+def avisos_anteriores(r: accoes.Raizes) -> list[str]:
+    """Os avisos do `saude.json` anterior; [] se faltar ou for inválido."""
+    d = accoes.ler_json(r.saude / SAUDE, SAUDE_MAX)
+    if isinstance(d, dict) and d.get("v") == 1 and isinstance(d.get("avisos"), list) \
+            and all(isinstance(a, str) for a in d["avisos"]):
+        return d["avisos"]
+    return []
+
+
+def gravar_saude(r: accoes.Raizes, em: datetime, avisos: list[str]) -> None:
+    """Grava o `saude.json` (0644, atómico, um symlink no lugar é substituído); levanta OSError."""
+    em = em.astimezone(timezone.utc)   # noqa: UP017 — datetime.UTC só desde o 3.11 (VPS: 3.10)
+    dados = json.dumps({"v": 1, "em": em.isoformat(timespec="seconds"), "avisos": avisos}, ensure_ascii=False)
+    accoes.escrever_atomico(r.saude / SAUDE, dados.encode("utf-8"), 0o644)
+
+
 def passagem(r: accoes.Raizes, perfil: str) -> None:
+    avisos, saltou = [], False
     for nome, f in (("colector", colector.passagem), ("executor", executor.passagem)):
         try:
-            for aviso in f(r, _agora(), perfil):
-                _erro(f"aviso: {aviso}")
+            res = f(r, _agora(), perfil)
         except Exception as e:   # noqa: BLE001 — uma passagem falhada não pára o serviço
-            _erro(f"erro no {nome}: {type(e).__name__}")
+            res = [f"erro no {nome}: {type(e).__name__}"]
+        if res is None:   # lock ocupado: outra passagem está a correr
+            saltou = True
+        else:
+            avisos += res
+    if saltou:   # passagem incompleta: nem aviso: nem resolvido: nem saude.json (a próxima completa compara e
+        return   # escreve; senão o mesmo aviso saía aqui e outra vez nela)
+    avisos, antes = normalizar(avisos), avisos_anteriores(r)
+    for a in avisos:
+        if a not in antes:
+            _erro(f"aviso: {a}")
+    for a in antes:
+        if a not in avisos:
+            _erro(f"resolvido: {a}")
+    try:
+        gravar_saude(r, _agora(), avisos)
+    except (OSError, ValueError) as e:
+        _erro(f"aviso: saude.json não gravado ({type(e).__name__})")
 
 
 def ciclo(r: accoes.Raizes, perfil: str, intervalo: float, passagens: int | None) -> int:

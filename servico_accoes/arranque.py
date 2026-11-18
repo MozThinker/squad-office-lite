@@ -1,11 +1,12 @@
-"""Arranque do serviço `accoes` (stdlib): root só para o chown das raízes dos 3 volumes, depois ACCOES_UID:ACCOES_GID.
+"""Arranque do serviço `accoes` (stdlib): root só para o chown das raízes dos 4 volumes, depois ACCOES_UID:ACCOES_GID.
 
 No modo Docker o serviço arranca com `user: "0:0"` e só as capacidades CHOWN, SETUID e SETGID: muda o dono das
 raízes (lista fixa, não recursivo, sem seguir symlinks) e larga os privilégios para ACCOES_UID:ACCOES_GID (omissão
 10002), que nunca pode ser root nem o OFFICE_UID (omissão 10001) do office e do runner. Fica com o OFFICE_GID
 (omissão 10001) como grupo suplementar, só para ler os volumes decisoes e agentes (montados só de leitura; raízes
-0750 do configurar). Já sem root dá o modo: 0700 em todas, salvo a pasta do ACCOES_ENTRADA (0755: o runner lê as
-mensagens e a vista). No modo VPS o serviço já corre com o utilizador próprio (instalar-accoes.sh): não faz nada.
+0750 do configurar). Já sem root dá o modo: 0700 em todas, salvo as pastas do ACCOES_ENTRADA (0755: o runner lê as
+mensagens e a vista) e do ACCOES_SAUDE (0755: o office lê o saude.json). No modo VPS o serviço já corre com o
+utilizador próprio (instalar-accoes.sh): não faz nada.
 """
 from __future__ import annotations
 
@@ -90,8 +91,8 @@ def _largar(uid: int, gid: int, grupos: list[int]) -> None:
 
 
 def preparar(raizes: list[Path]) -> None:
-    """Com root: chown das raízes, largar para ACCOES_UID:ACCOES_GID e modos (0700; 0755 na do ACCOES_ENTRADA).
-    Sem root: nada (modo VPS). Qualquer falha sai ≠ 0 (SystemExit com a mensagem)."""
+    """Com root: chown das raízes, largar para ACCOES_UID:ACCOES_GID e modos (0700; 0755 nas do ACCOES_ENTRADA e do
+    ACCOES_SAUDE). Sem root: nada (modo VPS). Qualquer falha sai ≠ 0 (SystemExit com a mensagem)."""
     if os.geteuid() != 0:
         return
     uid, gid, office_gid = alvo()
@@ -99,9 +100,9 @@ def preparar(raizes: list[Path]) -> None:
     for p in raizes:
         _chown(p, uid, gid)
     _largar(uid, gid, [] if office_gid == gid else [office_gid])
-    entrada = os.environ.get("ACCOES_ENTRADA")
+    abertas = {Path(v) for v in (os.environ.get("ACCOES_ENTRADA"), os.environ.get("ACCOES_SAUDE")) if v}
     for p in raizes:
         try:
-            _modo(p, 0o755 if entrada and Path(entrada) == p else 0o700)
+            _modo(p, 0o755 if p in abertas else 0o700)
         except OSError as e:
             raise SystemExit(f"accoes: não consegui dar o modo a {p} ({type(e).__name__})") from None

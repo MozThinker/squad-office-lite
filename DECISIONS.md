@@ -2,7 +2,7 @@
 
 Os ADR-001…005 vêm do Squad Office em que o Lite se baseia, reescritos para o Lite; o ADR-006 é a passagem a produto
 instalável, o ADR-007 a distribuição pública e o ADR-008 o modo Docker (no PC, com imagens publicadas); o ADR-009
-é o Docker rootless na VPS; os ADR-010…012 são a Biblioteca rápida e o arquivo dos documentos antigos. «Proxy» = o Caddy do compose (omissão) ou um Traefik existente (`--proxy traefik`).
+é o Docker rootless na VPS; os ADR-010…012 são a Biblioteca rápida e o arquivo dos documentos antigos. O ADR-022 é o Office a ler a saúde do serviço `accoes` (só de leitura). «Proxy» = o Caddy do compose (omissão) ou um Traefik existente (`--proxy traefik`).
 
 ## ADR-001 · O Office passa a escrever decisões numa fila JSON (2026-10-31)
 **Contexto:** o Office era só leitura; os pedidos de decisão (`.md` com frontmatter e uma secção `## Decisões`) eram
@@ -640,7 +640,8 @@ rascunho à mão. O ADR-020 fixou que nenhuma squad escreve ficheiros nem corre 
   colector, de mensagens autenticadas (`authserv_id` + `dmarc=pass` ou `dkim=pass` alinhados), espera 2 min com «anular».
   Rascunho e linha de folha desfazem-se. Folhas só CSV em `<dir>/folhas/`, valores com fórmulas neutralizadas.
 - **Docker:** o serviço arranca `root` só para fazer `chown` das raízes dos 3 volumes (`accoes-segredos`,
-  `accoes-estado`, `accoes-entrada`) com `CHOWN`, `SETUID` e `SETGID`, e larga os privilégios para `ACCOES_UID:ACCOES_GID`
+  `accoes-estado`, `accoes-entrada`; um 4.º, `accoes-saude`, desde o ADR-022) com `CHOWN`, `SETUID` e `SETGID`, e
+  larga os privilégios para `ACCOES_UID:ACCOES_GID`
   (omissão 10002; recusa arrancar se for o `OFFICE_UID`). `setgroups` só com o `OFFICE_GID`, para ler `decisoes` e
   `agentes` (só de leitura). Sem `init`: o `tini` ficaria root a vida toda. Rede própria. `tools/verificar_compose_accoes.py`
   falha na CI se outro serviço ver o `accoes.env`.
@@ -679,3 +680,33 @@ re-render (ambíguo); estado num ficheiro único com contadores (o marcador `O_E
 serviço e um uid novos (modo Docker: `ACCOES_UID/GID` no `.env`), e `acl` no VPS; no VPS, a cópia em `/opt/office-accoes`
 tem de acompanhar cada `git pull` (voltar a correr o `instalar-accoes.sh`). **Reverter:** parar o serviço (nada mais
 sai; no VPS `systemctl disable --now office-accoes.timer`); os pedidos e o livro ficam como registo.
+
+## ADR-022 · A saúde do serviço `accoes` num volume próprio, `accoes-saude`, só de leitura no Office (2026-11-18)
+**Contexto:** o serviço `accoes` (ADR-021) só falava pelo registo; um problema real (registo das squads ilegível,
+falha de um conector) não chegava ao dono, que usa o Office no telemóvel, e o caso normal (sem squads de negócio)
+enchia o registo de avisos.
+
+**Decisão:** no fim de cada passagem completa o serviço grava `<accoes-saude>/saude.json` (`v: 1`, hora, ≤ 10 avisos
+de ≤ 200 caracteres, só textos fixos; `0644`, atómico, sem seguir symlinks) e só escreve no stderr quando os avisos
+mudam (`aviso:`/`resolvido:`), comparando com esse ficheiro. Um `squads.json` que não existe passa a ser «sem squads»,
+sem aviso. O `accoes-saude` é um **volume próprio**, que só o serviço escreve: Docker, volume `accoes-saude` montado
+no `accoes` em `/dados/accoes-saude` (`ACCOES_SAUDE`) e no `office` em `/data/accoes-saude` **só de leitura**; VPS,
+pasta `<dados>/accoes-saude` (o `install.sh` cria-a `0755` se faltar e o compose faz bind só de leitura dela; o
+`instalar-accoes.sh` dá-a ao `office-accoes` e junta-a ao `ReadWritePaths` da unit). O runner não o monta. É a
+**única** coisa do serviço que o office vê: não monta `accoes-entrada`, `accoes-estado` nem `accoes-segredos`, e a
+fronteira do ADR-021 mantém-se (o office não vê mensagens, vistas nem segredos). O servidor lê **só** `saude.json`
+(`ACCOES_SAUDE_DIR`, omissão `/data/accoes-saude`; `O_NOFOLLOW`, ≤ 8 KB, chaves exactas), publicando `state.accoes`
+com «parado» aos 10 min. O dashboard mostra um alerta com ciclo de vida próprio (sai sozinho; sem notificação do
+browser nem Web Push). `tools/verificar_compose_accoes.py` passa a falhar se o `office` montar `accoes-entrada`,
+`accoes-estado` ou `accoes-segredos`, ou o `accoes-saude` com escrita.
+
+**Alternativas recusadas:** o `office` a montar o `accoes-entrada` só de leitura (sem volume novo, mas as mensagens
+recebidas dos clientes e as `vista.json` de cada squad ficariam ao alcance de um RCE no office); estado do stderr em
+memória (no VPS cada passagem é um processo); o runner a reencaminhar a saúde (mistura o uid do serviço com o das
+squads).
+
+**Consequências:** um 4.º volume no Docker (e uma pasta a mais no VPS), cuja raiz o `accoes` também passa para o seu
+uid (`chown` ao arrancar, `0755`). Se o `saude.json` não se puder gravar, os avisos voltam a repetir-se a cada
+passagem e o alerta não aparece. Tirar o serviço deixa o último `saude.json`, e o dashboard mostra «Serviço de ações
+parado» até se apagar (ver `ACCOES.md`). **Reverter:** tirar o mount e a variável do office no `gerar_compose.py` (o
+servidor sem ficheiro não mostra nada); o serviço pode continuar a gravar o ficheiro.

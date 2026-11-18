@@ -39,15 +39,20 @@ SEGURAS = {
 class EntradaTest(unittest.TestCase):
     def test_botao_no_header_a_seguir_a_biblioteca(self):
         h = SRC[SRC.index("<header>"):SRC.index("</header>")]
-        self.assertIn('<button id="quad-b" type="button" aria-pressed="false">▦ Quadro</button>', h)
+        self.assertIn('<button id="quad-b" type="button" aria-pressed="false" aria-label="Quadro">▦<span class="lg"> Quadro</span></button>', h)
         self.assertLess(h.index('id="bib-b"'), h.index('id="quad-b"'))
-        self.assertLess(h.index('id="quad-b"'), h.index('id="bell"'))
-        self.assertRegex(SRC, r"#quad-b, #bib-b \{[^}]*min-height:\s*44px")   # mesmo estilo e alvo que a Biblioteca
+        self.assertLess(h.index('id="quad-b"'), h.index('id="def-b"'))
+        OCSS = (ROOT / "static" / "office.css").read_text(encoding="utf-8")   # CSS de componentes (v3); os tokens ficam no <style>
+        self.assertRegex(OCSS, r"#quad-b, #bib-b, #def-b \{[^}]*min-height:\s*44px")   # mesmo estilo e alvo que a Biblioteca
+        # v3 CA-1: contorno; preenchido a --accent só com aria-pressed="true"
+        self.assertRegex(OCSS, r"#quad-b, #bib-b, #def-b \{[^}]*background: var\(--panel\); color: var\(--text\); border: 1px solid var\(--ctl\)")
+        self.assertIn('#quad-b[aria-pressed="true"], #bib-b[aria-pressed="true"] { background: var(--accent);', OCSS)
         self.assertIn('$("#quad-b").setAttribute("aria-pressed", on);', SRC)
 
     def test_seccao_esconde_o_escritorio_e_as_aprovacoes(self):
         self.assertIn('<section id="quadro" aria-labelledby="q-h" hidden></section>', SRC)
-        self.assertIn('body[data-view="quadro"] :is(#aprovacoes, #rooms, #filt, #tabs, #totals, main, #fabrica) { display: none; }', SRC)
+        self.assertIn('body[data-view="quadro"] :is(#aprovacoes, #barra, #rooms, #filt, #tabs, main, #fabrica) { display: none; }',
+                      (ROOT / "static" / "office.css").read_text(encoding="utf-8"))
         self.assertIn('id="q-h"', Q)
 
     def test_modulo_e_css_so_a_pedido(self):
@@ -76,7 +81,7 @@ class EntradaTest(unittest.TestCase):
     def test_index_cresce_pouco(self):
         # CA-27 do Quadro: ≤ 3 KB sobre 101 021 B. Tecto subido para 111 000 B (tech lead, 5/11/2026: Aprovações no fim e
         # recolhíveis, 4 paletas de tema, script do <head> e selector); é guarda de regressão, não requisito de produto
-        self.assertLessEqual(len(HTML.read_bytes()), 111_000)
+        self.assertLessEqual(len(HTML.read_bytes()), 95_106)   # v3 (CA-50, D-9): o tamanho da 0.2.0; o código novo vai para módulos
 
 
 @unittest.skipUnless(shutil.which("node"), "sem node")

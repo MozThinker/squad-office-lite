@@ -1,5 +1,6 @@
 """v2: «O meu dia», histórico de 30 dias e retenção de 30 dias (AC-28..30)."""
 import json
+import time
 import unittest
 from datetime import datetime, timedelta, timezone
 
@@ -77,8 +78,10 @@ class HistoryTest(unittest.TestCase):
         self.assertIsNone(today["timeline"][3]["end"])   # a correr
 
     def test_empty(self):
-        st = server.build_state()
-        self.assertEqual(st["today"], {"cost_usd": 0, "done": 0, "hours": 0, "top": None, "timeline": []})
+        now = time.time()
+        st = server.build_state(now)
+        self.assertEqual(st["today"], {"cost_usd": 0, "done": 0, "hours": 0, "top": None, "timeline": [],
+                                       "inicio": server._windows(now)[0].isoformat(), "intervalos": []})
         self.assertEqual(len(st["history"]), 30)
         self.assertTrue(all(h[sq] == {"cost_usd": 0, "done": 0, "hours": 0} for h in st["history"] for sq in server.SQUADS))
 

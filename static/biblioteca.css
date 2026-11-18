@@ -63,7 +63,7 @@
 .bib-minis img, .bib-minis .bib-tile { width: 56px; height: auto; aspect-ratio: 9 / 16; object-fit: cover; background: var(--imgbg); }
 .bib-maisn { color: var(--muted); font-size: 12px; padding-left: 4px; }
 .bib-acts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: auto; }
-.bib-novo { display: inline-block; padding: 0 5px; font-size: 11px; font-weight: 600; background: var(--accent); color: var(--on-accent); }
+.bib-novo { display: inline-block; padding: 0 5px; font-size: 12px; font-weight: 600; background: var(--accent); color: var(--on-accent); }
 /* arquivo: aviso, estado (fila/erro) e botão a toda a largura a 360 px */
 .bib-arqb { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
 .bib-arqb:empty { display: none; }
@@ -76,7 +76,7 @@
 .bib-zerr { flex-basis: 100%; margin: 4px 0 0; color: var(--bad); }
 .bib-e-ok { color: var(--ok); } .bib-e-warn { color: var(--warn); } .bib-e-bad { color: var(--bad); }
 .bib-e-mut { color: var(--muted); } .bib-e-rec { color: var(--muted); border: 1px solid currentColor; padding: 0 4px; }
-.bib-peq { font-size: 11px; font-weight: 400; }
+.bib-peq { font-size: 12px; font-weight: 400; }
 .bib-tile { display: flex; align-items: center; justify-content: center; color: #e8eaf2; background: #0d0f15;
   background-image: linear-gradient(45deg, #1b1f2b 25%, transparent 25%, transparent 75%, #1b1f2b 75%);
   background-size: 8px 8px; font-size: 13px; image-rendering: pixelated; }
@@ -102,7 +102,7 @@
 .bib-th img { display: block; width: 100%; height: 100%; object-fit: cover; }
 .bib-th .bib-tile { position: absolute; inset: auto 0 0; height: 36px; background-color: #000a; background-image: none; }
 .bib-th .bib-tile:only-child, .bib-th .bib-tile.bib-imgx { inset: 0; height: auto; background-color: #0d0f15; }
-.bib-ver { position: absolute; top: 4px; right: 4px; padding: 0 5px; font-size: 11px; font-weight: 600; background: #000c; color: #fff; }
+.bib-ver { position: absolute; top: 4px; right: 4px; padding: 0 5px; font-size: 12px; font-weight: 600; background: #000c; color: #fff; }
 .bib-grid .bib-est { display: inline-block; margin-top: 4px; }
 .bib-cap { margin: 2px 0 0; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .bib-row { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin: 0; flex-wrap: wrap; }
@@ -111,7 +111,7 @@
 .bib-secs h4 { font-size: 12px; color: var(--muted); margin: 10px 0 2px; overflow-wrap: anywhere; }
 .bib-doc { padding: 8px 0 !important; border-top: 1px solid var(--line) !important; overflow-wrap: anywhere; }
 .bib-doc p { margin: 0; }
-.bib-rot { display: inline-block; padding: 0 5px; font-size: 11px; border: 1px solid var(--line); color: var(--muted); }
+.bib-rot { display: inline-block; padding: 0 5px; font-size: 12px; border: 1px solid var(--line); color: var(--muted); }
 .bib-nm { font-size: 13px; }
 .bib-doc .bib-acts { margin-left: auto; flex-wrap: nowrap; }
 

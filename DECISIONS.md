@@ -435,3 +435,62 @@ não do Lite); mínimo abaixo de 7 dias (arquivos por engano).
 
 **Consequências:** reversível pela chave e pelo «Repor»; a 1.ª passagem numa fonte antiga pode mover muito (o README
 manda experimentar numa fonte de teste). O que já saiu só volta pelo «Repor» (o REGISTO diz o quê e quando).
+
+## ADR-013 · Como acabou a execução: o servidor lê o `fim` do `claude.log` (2026-11-17)
+**Contexto:** uma tarefa pode acabar «concluída» com ferramentas recusadas, ou com um erro da API, e o escritório só
+mostrava o estado da meta. O Squad Office resolveu isto lendo a última linha `result` do `claude.log`.
+
+**Decisão:** na mesma leitura do fim de `<tasks>/<id>/claude.log` que já dá custo e turnos, o servidor tira da última
+linha `result` um `fim` com 5 chaves fixas (`recusas`, `ferramentas` por regex e no máximo 5, `motivo`, `erro`,
+`http`), só para tarefas `worktree` terminadas há ≤ 3 dias; `falhas_exec` junta-as às tarefas com estado em falha
+(onde `interrompida` passa a contar). Só ficheiros regulares, sem symlinks e sem bloquear; nada mais da linha sai.
+
+**Alternativas recusadas:** o runner gravar o `fim` na meta (mexe no runner e no formato da meta e não serve as
+tarefas anteriores à 0.3.0).
+
+**Consequências:** o runner e os contratos v1 não mudam; o `claude.log` já estava montado só de leitura nos dois
+modos. Reverter = tirar `fim`/`falhas_exec` (o cliente mostra «—»).
+
+## ADR-014 · Entregas: `GET /api/entregas`, segunda saída de conteúdo, só a pedido (2026-11-17)
+**Contexto:** quem chega ao escritório quer ver o que ficou pronto sem abrir o leitor tarefa a tarefa.
+
+**Decisão:** rota só de leitura com manchete (≤ 160) e resumo (≤ 600) de `meta.result` ou do fim do `claude.log`,
+mascarados por `reader.delivery` antes do corte; até 40 entregas de 7 dias; metas só dentro das raízes da config;
+ligações à Biblioteca pelo índice já pronto (nunca o constrói). O cliente só a pede ao abrir o separador «Entregas»;
+as «lidas» ficam no `localStorage` do browser.
+
+**Alternativas recusadas:** os resumos no `/api/state` (texto a cada 8 s para todos); só o leitor, uma a uma.
+
+**Consequências:** a segunda saída de conteúdo além do leitor, com a mesma máscara; as «lidas» não passam entre
+dispositivos. Reverter = tirar a rota e o separador.
+
+## ADR-015 · Replay do dia reconstruído das metas e dos transcripts, sem escrita nova (2026-11-17)
+**Contexto:** ver como correu o dia sem gravar fotografias do estado (escrita nova, volume novo, mais um mount).
+
+**Decisão:** `GET /api/replay?dia=AAAA-MM-DD` (hoje e os 6 dias anteriores no `fuso`) reconstrói o escritório só das
+metas, dos transcripts e do `mtime` dos `SPEC/PLAN/QA.md`, com a mesma regra do ao vivo (`_live_line`) sobre estado
+próprio: quadro completo a cada 5 min e diferenças (≤ 1/s), allowlist de chaves, tecto de 4 MiB (`truncado`), cache
+por transcript e das respostas (uma por dia, até 3; o fim de hoje desce ao minuto para a cache acertar), em `replay.py`. Tectos
+contados enquanto se constrói: no máximo 12 subagentes por tarefa (os maiores), 8 MiB lidos por transcript (o fim) e
+4 MiB de resposta. Sem escrita, sem thread nova, sem mount.
+
+**Alternativas recusadas:** gravar fotografias do `/api/state`; replay no cliente a partir do `feed` (30 eventos não
+chegam).
+
+**Consequências:** o replay só mostra o que os transcripts guardam (sem as subagentes antigas que já não existam);
+uma tarefa retomada pelo runner depois de uma paragem longa conta como «a trabalhar» desde o `started_at` original
+(o runner não o reescreve na retoma), no replay e em «O meu dia»;
+custo limitado por teste de CPU (`tests/test_r4.py`). Reverter = tirar a rota e o botão.
+
+## ADR-016 · Interface em módulos: `index.html` com tecto e módulos a pedido (2026-11-17)
+**Contexto:** o `index.html` da 0.2.0 tinha 95 106 B e a v3 traz mais do dobro de código de interface.
+
+**Decisão:** o `index.html` não pode passar os 95 106 B (teste); o código novo vive em módulos estáticos, sem build
+nem bibliotecas: no arranque `topo.js`, `avisos.js`, `lateral.js`, `act.js`, `fabrica.js`, `ambiente.js`, `office.css`
+e `lateral.css`; por `import()`, quando são precisos, `paineis.js`, `entregas.js`, `tabelas.js`, `replay.js` e
+`demo.js` (só com `?demo=1`). A letra Pixelify Sans (SIL OFL 1.1, `static/fonts/OFL.txt`) só nos títulos.
+
+**Alternativas recusadas:** um bundler (dependência e passo de build novos); tudo no `index.html` (já no limite).
+
+**Consequências:** o telemóvel só descarrega o que usa e cada função pura testa-se em node. Reverter é caro (muitos
+ficheiros e testes), por isso fica registado.

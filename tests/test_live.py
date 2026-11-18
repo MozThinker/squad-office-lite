@@ -98,8 +98,10 @@ class ActTest(LiveBase):
             with self.subTest(name=name, inp=inp):
                 self.reset()
                 self.task(lines=fake.tool_use("u0", "WebSearch", age=9) + fake.tool_use("u1", name, inp, age=5))
+                # Bash sem resultado (1.º plano) é a última ferramenta: o act ganha desde (CA-20)
+                desde = {"desde": iso(5)} if name == "Bash" else {}
                 self.assertEqual(self.get()["lead"]["act"],
-                                 {"kind": kind, "tool": name, "error": False, "at": iso(5)})
+                                 {"kind": kind, "tool": name, "error": False, "at": iso(5), **desde})
 
     def test_invalid_tool_name(self):
         for name in ("nome com espaço", "a" * 41, 5, None, "x/y"):
@@ -137,7 +139,8 @@ class ActTest(LiveBase):
         self.task(lines=fake.tool_use("u1", "Agent"))
         self.sub("T1", "a1", fake.tool_use("s1", "Edit"))
         t = self.get()
-        self.assertEqual(t["lead"], {"role": "tech-lead", "stuck": False, "act": t["lead"]["act"]})
+        self.assertEqual(t["lead"], {"role": "tech-lead", "stuck": False, "act": t["lead"]["act"], "tarefas": None,
+                                     "linhas": None, "modelo": None, "ramo": None})
         self.assertEqual(t["lead"]["act"]["kind"], "delegar")
         self.assertEqual([(a["role"], a["act"]["kind"]) for a in t["agents"]], [("backend-engineer", "editar")])
 
@@ -247,9 +250,12 @@ class FeedTest(LiveBase):
 
 class StuckDeadTest(LiveBase):
     def test_stuck_pending_tool(self):
-        # AC-19: Bash pendurado (sem resultado) e transcript parado > 10 min
-        self.task(lines=fake.tool_use("u1", "Bash", {"command": "sleep 9999"}), age=11 * 60)
-        self.assertTrue(self.get()["lead"]["stuck"])
+        # AC-19: ferramenta pendurada (sem resultado) e transcript parado > 10 min; Bash em 1.º plano só aos 25 min
+        for name, inp, age in (("Read", {}, 11 * 60), ("Bash", {"command": "sleep 9999"}, 26 * 60)):
+            with self.subTest(name=name):
+                self.reset()
+                self.task(lines=fake.tool_use("u1", name, inp), age=age)
+                self.assertTrue(self.get()["lead"]["stuck"])
 
     def test_not_stuck(self):
         for lines, age in ((fake.tool_use("u1", "Bash") + fake.tool_result("u1"), 11 * 60),

@@ -57,9 +57,19 @@ class EdgeTest(unittest.TestCase):
 
     # --- CA5: claude.log ---
     def test_claude_log_result_line_bigger_than_tail(self):
-        # linha result > 64 KB: o fim lido é JSON cortado → null, e nada do texto sai
+        # linha result > 64 KB: relê-se com 1 MiB (ADR-013), só se a tarefa já não corre (a correr, o log cresce a
+        # cada build: só os 64 KB); > 1 MiB → null; nada do texto sai
         tid = self.dev_task()
         self.dev_log(tid, self.result(result="SEGREDO-X" * 10000))
+        st = server.build_state()
+        self.assertEqual((st["tasks"][0]["cost_usd"], st["tasks"][0]["turns"]), (None, None))
+        meta = self.tasks / tid / "meta.json"
+        write_json(meta, {**json.loads(meta.read_text()), "status": "concluída",
+                          "finished_at": "2026-10-23T10:00:00"}, age_s=600)
+        st = server.build_state()
+        self.assertEqual((st["tasks"][0]["cost_usd"], st["tasks"][0]["turns"]), (1.5, 2))
+        self.assertNotIn("SEGREDO", json.dumps(st))
+        self.dev_log(tid, self.result(result="SEGREDO-X" * 130000))
         st = server.build_state()
         self.assertEqual((st["tasks"][0]["cost_usd"], st["tasks"][0]["turns"]), (None, None))
         self.assertNotIn("SEGREDO", json.dumps(st))
@@ -67,7 +77,7 @@ class EdgeTest(unittest.TestCase):
     def test_claude_log_reads_only_tail(self):
         tid = self.dev_task()
         self.dev_log(tid, self.result(), junk_kb=300)
-        log, calls, real_open = self.tasks / tid / "claude.log", [], Path.open
+        log, calls, real_fdopen = self.tasks / tid / "claude.log", [], os.fdopen
 
         class Spy:
             def __init__(self, f):
@@ -83,10 +93,13 @@ class EdgeTest(unittest.TestCase):
                 calls.append(("seek", n))
                 return self.f.seek(n)
 
+            def fileno(self):
+                return self.f.fileno()
+
             def read(self, n=-1):
                 calls.append(("read", n))
                 return self.f.read(n)
-        with mock.patch.object(Path, "open", lambda p, *a, **kw: Spy(real_open(p, *a, **kw))):
+        with mock.patch.object(server.os, "fdopen", lambda fd, *a, **kw: Spy(real_fdopen(fd, *a, **kw))):
             self.assertEqual(server._log_result(log), (1.5, 2, 3.0))
         self.assertEqual(calls, [("seek", log.stat().st_size - server.LOG_TAIL), ("read", server.LOG_TAIL)])
 

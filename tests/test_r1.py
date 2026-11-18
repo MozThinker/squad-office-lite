@@ -434,7 +434,8 @@ class LiveR1Test(LiveBase):
 
     def test_subagent_alive_by_tool_use_id(self):
         self.task("T1", fake.tool_use("tA", "Agent") + fake.tool_use("tB", "Agent") + fake.tool_result("tB"))
-        self.subm("T1", "S0", "a1", fake.tool_use("b1", "Bash"), age=11 * 60, toolUseId="tA")   # à espera: vivo
+        # Read: um Bash em 1.º plano só fica «preso?» aos 25 min (CA-20)
+        self.subm("T1", "S0", "a1", fake.tool_use("b1", "Read"), age=11 * 60, toolUseId="tA")   # à espera: vivo
         self.subm("T1", "S0", "a2", fake.tool_use("b2", "Bash"), age=11 * 60, toolUseId="tB")   # já respondeu
         self.subm("T1", "S0", "a3", fake.tool_use("b3", "Bash"), age=11 * 60, toolUseId="tX")   # desconhecido
         self.beat()
@@ -461,7 +462,7 @@ class LiveR1Test(LiveBase):
         self.assertFalse(self.get()["lead"]["stuck"])
         self.reset()
         self.task("T1", fake.tool_use("u1", "Read", age=3000) + fake.tool_result("u1", age=3000)
-                  + fake.tool_use("u2", "Bash", age=1200), age=1200)
+                  + fake.tool_use("u2", "Grep", age=1200), age=1200)   # Bash em 1.º plano: só aos 25 min (CA-20)
         self.assertTrue(self.get()["lead"]["stuck"])
         self.reset()
         self.task("T1", fake.tool_use("u2", "Bash", age=1200) + fake.thinking(age=1200), age=1200)

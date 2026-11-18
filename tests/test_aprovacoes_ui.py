@@ -16,6 +16,7 @@ from pathlib import Path
 
 HTML = Path(__file__).resolve().parent.parent / "static" / "index.html"
 SRC = HTML.read_text(encoding="utf-8")
+OCSS = (HTML.parent / "office.css").read_text(encoding="utf-8")   # v3: o CSS dos componentes saiu do index.html
 INICIO, FIM = "// ---- aprovações", "// ---- fim aprovações"
 
 # interpolações sem esc() aceites num template HTML do bloco, e porquê
@@ -131,8 +132,8 @@ class BlocoTest(unittest.TestCase):
         self.assertIn('maxlength="2000"', b)   # CA19
         self.assertIn("escreve o motivo", b)   # CA20
         self.assertIn("Recebido · a aplicar", b)   # CA19
-        self.assertRegex(SRC, r"\.apr button[^{]*\{[^}]*min-height:\s*44px")   # CA26
-        self.assertRegex(SRC, r"\.md \.tw\s*\{[^}]*overflow-x:\s*auto")   # CA26: scroll só no bloco da tabela
+        self.assertRegex(OCSS, r"\.apr button[^{]*\{[^}]*min-height:\s*44px")   # CA26
+        self.assertRegex(OCSS, r"\.md \.tw\s*\{[^}]*overflow-x:\s*auto")   # CA26: scroll só no bloco da tabela
 
     def test_seccao_no_fim_da_pagina(self):
         # CA1/CA4 (substitui o CA18 antigo): <section id="aprovacoes" hidden> depois da Fábrica, do escritório, da Biblioteca e
@@ -141,7 +142,7 @@ class BlocoTest(unittest.TestCase):
         for antes in ('<section id="fabrica"', "<main>", 'id="bib"', 'id="quadro"'):
             with self.subTest(antes=antes):
                 self.assertGreater(i, SRC.index(antes))
-        self.assertLess(i, SRC.index('id="banner"'))
+        self.assertNotIn('id="banner"', SRC)   # v3 CA-14: os avisos (avisos.js) substituem o #banner
         self.assertRegex(SRC[i:SRC.index(">", i)], r"\bhidden\b")
         self.assertIn('<details id="apr-d" open><summary><h2 id="apr-h">', SRC[i:])
 
@@ -311,7 +312,7 @@ class SecaoTest(unittest.TestCase):
         # CA5: <summary> com o <h2 id="apr-h"> e o <span id="apr-n"> (M); alvo de toque de 44 px
         self.assertIn('<details id="apr-d" open><summary><h2 id="apr-h">Aprovações</h2> <span id="apr-n"></span></summary>'
                       '<div id="apr-list"></div></details></section>', SRC)
-        self.assertRegex(SRC, r"#apr-d > summary\s*\{[^}]*min-height:\s*44px")
+        self.assertRegex(OCSS, r"#apr-d > summary\s*\{[^}]*min-height:\s*44px")
         r = funcao("renderApr")
         self.assertIn('setHtml($("#apr-h"), esc(`Aprovações (${list.length})`));', r)
         self.assertIn('setHtml($("#apr-n"), esc(`· ${m} ${m === 1 ? "decisão em aberto" : "decisões em aberto"}`));', r)

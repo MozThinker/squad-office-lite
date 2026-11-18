@@ -1,0 +1,8 @@
+{"topo": ["alerts", "aprovacoes", "espera", "falhas_exec", "feed", "history", "now", "runner", "tarefa_entregue",
+          "tasks", "today", "token", "totals", "usage", "waiting"],
+ "tarefa": ["agents", "auto_resumes", "branch", "cost_usd", "duration_s", "fim", "finished", "gh", "id", "issues",
+            "last_activity", "lead", "mode", "phases", "pr", "progress", "project", "resultado", "running", "squad",
+            "started", "status", "titulo", "turns", "working"],
+ "agente": ["act", "active", "desc", "end", "finished", "last", "linhas", "modelo", "ramo", "role", "start", "stuck",
+            "tarefas"],
+ "lider": ["act", "linhas", "modelo", "ramo", "role", "stuck", "tarefas"]}

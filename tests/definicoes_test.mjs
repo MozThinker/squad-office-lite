@@ -165,3 +165,16 @@ test("CA26: preencher usa prefsCompletas; guardar inclui as f-* desactivadas (o 
   assert.match(g, /FASES/);
   assert.match(g, /\.disabled\)/);
 });
+
+// v3 (CA-1, 2, 39): música, volume, tema, notificações e «Dia e noite» no ⚙, com as mesmas chaves de localStorage
+test("v3: secções Música, Tema, Escritório e Notificações neste browser", async () => {
+  const D = await import("../static/definicoes.js"), src = readFileSync(new URL("../static/definicoes.js", import.meta.url), "utf8");
+  assert.deepEqual(D.TEMAS.map(([v]) => v), ["auto", "escuro", "claro", "sepia", "contraste"]);
+  assert.deepEqual(D.AMB, [["diaNoite", "Dia e noite no escritório"]]);
+  assert.deepEqual(Object.keys(D.MSG_NB).sort(), ["bloqueado", "ios", "off", "on", "sem-suporte"]);
+  assert.equal(D.MSG_NB.on, "");
+  for (const id of ["def-mus", "def-vol", "def-tema", "def-nb"]) assert.match(src, new RegExp(`id="${id}"`), id);
+  assert.match(src, /\$\("#def-vr"\)\.hidden = !m\.on\(\);/);   // o volume só com a música ligada (CA-2)
+  assert.match(src, /for \(const \[k\] of \[\.\.\.VIS, \.\.\.AMB\]\)/);   // «diaNoite» lido e gravado como as preferências da barra
+  assert.doesNotMatch(src, /localStorage\.setItem\("(music|musicVol|tema|notify)"/);   // essas chaves continuam no index.html
+});

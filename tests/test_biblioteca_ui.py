@@ -43,21 +43,23 @@ TERNARIO_HTML = re.compile(r"^[\w.?]+(?: [<>=]+ \d+)?\s*\?\s*(?:\w+H|\"[^\"]*\"|
 
 
 class EntradaTest(unittest.TestCase):
-    def test_botao_no_header_antes_das_notificacoes(self):
+    def test_botao_no_header_antes_das_definicoes(self):
+        # v3 CA-1: cabeçalho numa linha; a ≤ 520 px o botão mostra só o ícone (aria-label dá o nome)
         h = SRC[SRC.index("<header>"):SRC.index("</header>")]
-        self.assertIn('<button id="bib-b" type="button" aria-pressed="false">▤ Biblioteca</button>', h)
-        self.assertLess(h.index('id="bib-b"'), h.index('id="bell"'))
+        OCSS = (ROOT / "static" / "office.css").read_text(encoding="utf-8")
+        self.assertIn('<button id="bib-b" type="button" aria-pressed="false" aria-label="Biblioteca">▤<span class="lg"> Biblioteca</span></button>', h)
+        self.assertLess(h.index('id="bib-b"'), h.index('id="def-b"'))
         self.assertLess(h.index("<h1>"), h.index('id="bib-b"'))
-        self.assertRegex(SRC, r"#bib-b \{[^}]*min-height:\s*44px")
-        # em ecrã estreito o resto do header desce para a 2.ª linha (o botão fica ao lado do título)
-        self.assertRegex(SRC, r"header > :not\(h1, #bib-b\) \{ order: 2; \}")
+        self.assertRegex(OCSS, r"#quad-b, #bib-b, #def-b \{[^}]*min-height:\s*44px")
+        self.assertRegex(OCSS, r"@media \(max-width: 520px\) \{[^\n]*header \.lg \{ display: none; \}")
 
     def test_seccao_escondida_e_escritorio_escondido_na_biblioteca(self):
         i = SRC.index('<section id="bib"')
         self.assertRegex(SRC[i:SRC.index(">", i)], r'\bhidden\b.*|aria-labelledby="bib-h"')
         self.assertLess(i, SRC.index('<section id="aprovacoes"'))   # Aprovações por baixo (fim da página)
         self.assertLess(i, SRC.index('<nav id="rooms"'))
-        self.assertIn('body[data-view="biblioteca"] :is(#rooms, #filt, #tabs, #totals, main, #fabrica) { display: none; }', SRC)
+        self.assertIn('body[data-view="biblioteca"] :is(#barra, #rooms, #filt, #tabs, main, #fabrica) { display: none; }',
+                      (ROOT / "static" / "office.css").read_text(encoding="utf-8"))
 
     def test_modulo_e_css_so_a_pedido(self):
         self.assertIn('import("./biblioteca.js")', SRC)
@@ -171,7 +173,7 @@ class BibliotecaJsTest(unittest.TestCase):
         self.assertIn("if (zipRecente(zip.dataset.ok, Date.now())) return;", BIB)
 
     def test_microcopy_e_acessibilidade(self):
-        for s in ("▤ Biblioteca", "‹ Escritório", "‹ Biblioteca", "↻ Actualizar", "Mostrar mais (", "Limpar filtros", "Limpar pesquisa",
+        for s in ("▤<span class=\"lg\"> Biblioteca", "‹ Escritório", "‹ Biblioteca", "↻ Actualizar", "Mostrar mais (", "Limpar filtros", "Limpar pesquisa",
                   "pesquisar na biblioteca", "Pesquisar na biblioteca por título, nome do ficheiro ou produto", "Abrir lote",
                   "⤓ Descarregar tudo (zip)", "A preparar…", "Peças finais (", "Textos e legendas (", "Revisão e parecer jurídico (",
                   "Folha do lote", "Ficheiros de trabalho (", "✕ Fechar", "‹ Anterior", "Seguinte ›", "Copiar texto", "✓ Copiado",

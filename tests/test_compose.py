@@ -218,7 +218,7 @@ class Ficheiros(unittest.TestCase):
         self.assertIn("tzdata", d)
         copy = re.search(r"(?m)^COPY (.*\.py.*) \./$", d).group(1).split()
         for f in ("server.py", "reader.py", "aprovacoes.py", "biblioteca.py", "quadro.py", "push.py", "progresso.py",
-                  "lancar.py", "officecfg.py", "arquivo.py", "office.example.yaml"):
+                  "lancar.py", "officecfg.py", "arquivo.py", "entregas.py", "replay.py", "office.example.yaml"):
             self.assertIn(f, copy)
 
     def test_caddyfile(self):  # AC-d3

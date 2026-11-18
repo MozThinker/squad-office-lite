@@ -332,7 +332,7 @@ class UiSmokeTest(unittest.TestCase):
 
     def test_title_and_default_filter(self):
         # AC-22/32 (estático): título "(N) " + texto actual; filtro por omissão 7d guardado em localStorage
-        self.assertIn('document.title = (n > 0 ? `(${n}) ` : "") + cfg.marca', self.html)
+        self.assertIn('document.title = (demo ? "[demo] " : "") + (n > 0 ? `(${n}) ` : "") + cfg.marca', self.html)   # v3: «[demo] » no modo demonstração
         self.assertIn("<title>Squad Office</title>", self.html)
         self.assertRegex(self.html, r'localStorage\.getItem\("periodo"\).*: "7d"')
 

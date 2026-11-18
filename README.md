@@ -51,17 +51,17 @@ O Lite instala-se de duas formas:
    depois de instalar (o instalador não o pede nem o guarda; ver [Credenciais do Claude](#credenciais-do-claude)).
    O `gh` instala-se pelas [instruções oficiais para Ubuntu](https://github.com/cli/cli/blob/trunk/docs/install_linux.md);
    no `gh auth login` usa de preferência um [token só para os repositórios do Office](#token-do-github).
-3. **Descarrega e instala o Office.** O endereço fica fixado à versão (`v0.2.0`), para leres sempre o mesmo script
+3. **Descarrega e instala o Office.** O endereço fica fixado à versão (`v0.3.0`), para leres sempre o mesmo script
    que o livro e este README descrevem.
    **Forma prudente** (recomendada: lês o script antes de o correr):
    ```bash
-   curl -fsSLO https://raw.githubusercontent.com/MozThinker/squad-office-lite/v0.2.0/get.sh
+   curl -fsSLO https://raw.githubusercontent.com/MozThinker/squad-office-lite/v0.3.0/get.sh
    less get.sh
-   bash get.sh --versao 0.2.0
+   bash get.sh --versao 0.3.0
    ```
    **Com um comando:**
    ```bash
-   curl -fsSL https://raw.githubusercontent.com/MozThinker/squad-office-lite/v0.2.0/get.sh | bash -s -- --versao 0.2.0
+   curl -fsSL https://raw.githubusercontent.com/MozThinker/squad-office-lite/v0.3.0/get.sh | bash -s -- --versao 0.3.0
    ```
    > Este comando descarrega um script da internet e corre-o no teu servidor, com o teu utilizador. Só o faças com
    > endereços em que confias, e de preferência lê-o primeiro. O `get.sh` confere o sha256 do pacote: isso apanha uma
@@ -74,14 +74,14 @@ O Lite instala-se de duas formas:
    prudente. Opções (depois de `bash -s --` no comando de uma linha, ou de `bash get.sh`):
    - `--sem-perguntas`: as respostas vêm do ambiente (ver o cabeçalho do `install.sh`; `OFFICE_GIT_NOME` e
      `OFFICE_GIT_EMAIL` para a identidade do git; sem elas, e sem identidade no git, só avisa). Ex.:
-     `curl -fsSL …/get.sh | bash -s -- --versao 0.2.0 --sem-perguntas`;
-   - `--versao X.Y.Z`: instala essa versão em vez da última (`… | bash -s -- --versao 0.2.0`);
+     `curl -fsSL …/get.sh | bash -s -- --versao 0.3.0 --sem-perguntas`;
+   - `--versao X.Y.Z`: instala essa versão em vez da última (`… | bash -s -- --versao 0.3.0`);
    - as outras opções passam ao `install.sh` (ex.: `--proxy traefik --rede <rede>`).
 
    **Verificação opcional da origem.** O sha256 só confirma que o pacote não se estragou. Para confirmar que foi
    construído pelo repositório público (atestação do GitHub; precisa do `gh` com sessão), descarrega o pacote à mão e:
    ```bash
-   gh attestation verify squad-office-lite-0.2.0.tar.gz --repo MozThinker/squad-office-lite
+   gh attestation verify squad-office-lite-0.3.0.tar.gz --repo MozThinker/squad-office-lite
    ```
    Só as versões publicadas com atestação passam. Uma falha aqui é motivo para não instalar e reportar (ver
    [`SECURITY.md`](SECURITY.md)).
@@ -121,7 +121,7 @@ de reinício. Se mudaste as `raizes`, corre outra vez `./install.sh` (não volta
 
 O mesmo `get.sh`, sem `--versao` (instala a última versão publicada; lê o aviso em «Instalação»):
 ```bash
-curl -fsSL https://raw.githubusercontent.com/MozThinker/squad-office-lite/v0.2.0/get.sh | bash
+curl -fsSL https://raw.githubusercontent.com/MozThinker/squad-office-lite/v0.3.0/get.sh | bash
 ```
 A versão instalada passa para `~/squad-office-lite.anterior-<data>` e a nova fica em `~/squad-office-lite`.
 `~/office-lite` (config, `.env`, credenciais e dados) não é tocada pelo `get.sh`; o `install.sh` só volta a
@@ -430,17 +430,17 @@ só neste PC. A squad só trabalha enquanto o PC está ligado e o Docker Desktop
    ```bash
    mkdir -p ~/office && cd ~/office
    ```
-3. **Descarrega o `compose.yaml`** da versão 0.2.0. As imagens do Office e do runner vêm fixadas por digest: o que
+3. **Descarrega o `compose.yaml`** da versão 0.3.0. As imagens do Office e do runner vêm fixadas por digest: o que
    corre é sempre o que foi publicado com esta versão.
    No PowerShell (é `curl.exe`, não `curl`):
    ```powershell
-   curl.exe -fsSLO https://github.com/MozThinker/squad-office-lite/releases/download/v0.2.0/compose.yaml
+   curl.exe -fsSLO https://github.com/MozThinker/squad-office-lite/releases/download/v0.3.0/compose.yaml
    ```
    No Terminal:
    ```bash
-   curl -fsSLO https://github.com/MozThinker/squad-office-lite/releases/download/v0.2.0/compose.yaml
+   curl -fsSLO https://github.com/MozThinker/squad-office-lite/releases/download/v0.3.0/compose.yaml
    ```
-   Também o podes descarregar pelo browser, na página da release `v0.2.0`, e guardá-lo nesta pasta com o nome
+   Também o podes descarregar pelo browser, na página da release `v0.3.0`, e guardá-lo nesta pasta com o nome
    `compose.yaml`. Para mudar a porta ou a pasta dos projectos, ver
    [Mudar a porta, o endereço ou a pasta dos projectos](#mudar-a-porta-o-endereço-ou-a-pasta-dos-projectos) (opcional).
    **No Linux**, cria já o `.env` com o teu utilizador e grupo, antes do passo 4, para os ficheiros dos projectos
@@ -517,7 +517,7 @@ Sem `.env` valem as omissões. Para mudar, descarrega o `env.example` da release
 `compose.yaml`, tira o `#` das linhas que queres mudar e corre `docker compose up -d` (no Linux já tens um `.env` do
 passo 3: não o substituas, acrescenta-lhe as linhas):
 ```powershell
-curl.exe -fsSLo .env https://github.com/MozThinker/squad-office-lite/releases/download/v0.2.0/env.example
+curl.exe -fsSLo .env https://github.com/MozThinker/squad-office-lite/releases/download/v0.3.0/env.example
 ```
 (no Terminal, `curl` em vez de `curl.exe`). O anexo chama-se `env.example` porque o GitHub muda o nome dos anexos que
 começam por ponto.
@@ -741,7 +741,7 @@ antigos (de todas as filas). No log, o que é da Biblioteca começa por «biblio
 leitura e com ele desenha os «Primeiros passos» e a faixa «O runner não dá sinal desde HH:MM» (mais de 3 min sem
 passagem). Só valores de uma lista conhecida, nunca segredos, caminhos nem a saída dos comandos:
 ```json
-{"v": 1, "em": "2026-11-08T19:30:00+00:00", "versao": "0.2.0",
+{"v": 1, "em": "2026-11-08T19:30:00+00:00", "versao": "0.3.0",
  "claude": "ok|falta", "credencial": "ok|falta|modo", "gh": "ok|sem sessão"}
 ```
 `credencial` diz se há uma credencial válida (`claude.env`, `runner.env` ou o login do `claude`), sem a ler para fora
@@ -1086,6 +1086,16 @@ acrescenta `arquivo`: `{"arquivavel", "arquivado": null | {"em", "motivo"}, "pen
   mensagens levam só squad, projecto, estado e ids, nunca o texto das tarefas.
 - **Barra de progresso:** fases SPEC → PLAN → CODE → QA → PR nos `goal` e estimativa pela mediana das últimas
   tarefas concluídas da mesma squad e modo.
+- **Escritório (0.3.0):** barra de contadores (salas, agentes, a trabalhar, subagentes, «à tua espera» = aprovações
+  em aberto + PRs, falhas) e avisos «precisa de ti» com Responder/Ver; ⚙ com música, volume, tema, notificações e «Dia
+  e noite». Lista lateral Tarefa | Agentes | Entregas: `/` pesquisa um agente e «Seguir» acompanha-o; Actividade e O
+  meu dia (tempo a trabalhar e à espera, «Ver tabela»). **Entregas** (ADR-014, `GET /api/entregas`): o que ficou
+  pronto nos últimos 7 dias, «por ler» nas últimas 24 h. **Replay do dia** (ADR-015, `GET /api/replay?dia=AAAA-MM-DD`,
+  hoje e 6 dias antes): o dia reconstruído das metas e dos transcripts, a 60×/180×/600×, sem escrita nova. O painel da
+  tarefa mostra como acabou a execução (ADR-013: recusas de ferramentas e erros da API, lidos do `claude.log`).
+  **Demonstração:** `/?demo=1` mostra o escritório com dados inventados, sem tocar nos teus. Os campos novos do
+  `/api/state` são aditivos: `espera`, `falhas_exec`, `tasks[].titulo/fim`, `tarefas/linhas/modelo/ramo` por agente e
+  `today.inicio/intervalos`.
 
 ### Segurança
 
@@ -1223,4 +1233,5 @@ Como reportar, propor, preparar o ambiente, correr os testes e o que se aceita n
 
 ## Licença
 
-[MIT](LICENSE).
+[MIT](LICENSE). A letra Pixelify Sans dos títulos (`static/fonts/`) é da SIL Open Font License 1.1
+(`static/fonts/OFL.txt`).

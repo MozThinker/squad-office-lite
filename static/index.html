@@ -33,7 +33,7 @@ try {
 :root {
   --bg: #12141c; --panel: #1b1f2b; --line: #2c3245; --text: #e8eaf2; --muted: #9aa3b8;
   --ok: #66bb6a; --warn: #ffb74d; --bad: #ef5350; --accent: #64b5f6;
-  --well: #0d0f15; --sunk: #232838; --ctl: #2c3245; --ok-bg: #1e3a2a; --warn-bg: #2e2716; --bad-bg: #2e1719; --on-accent: #0d0f15;
+  --well: #0d0f15; --sunk: #232838; --ctl: #6a7493; --ok-bg: #1e3a2a; --warn-bg: #2e2716; --bad-bg: #2e1719; --on-accent: #0d0f15;
   --on-warn: #212121; --backdrop: #000000bb; --focus: #64b5f6; --imgbg: #0d0f15; --skel: #232838; color-scheme: dark;
   --now-bg: #3a3220; --act-bg: #1f2a1f; --well-focus: #64b5f6;
 }
@@ -57,208 +57,16 @@ try {
   --now-bg: var(--warn-bg); --act-bg: var(--ok-bg); --well-focus: #ffff00;
 }
 * { box-sizing: border-box; }
-::placeholder { color: var(--muted); opacity: 1; }
-body { margin: 0; background: var(--bg); color: var(--text);
-  font: 14px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
-header { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
-header h1 { font-size: 16px; margin: 0; letter-spacing: .5px; }
-#def-b, #bell, #music, #tema { background: var(--panel); color: var(--muted); border: 1px solid var(--ctl);
-  min-height: 36px; padding: 4px 10px; font: inherit; font-size: 12px; cursor: pointer; }
-#bell { margin-left: auto; }
-/* 16 px: o iOS faz zoom em selects mais pequenos; rótulos curtos para música + tema + ao vivo caberem numa linha a 360 px */
-#tema { min-height: 44px; font-size: 16px; padding: 4px 0 4px 4px; }
-/* Biblioteca: botão preenchido na 1.ª linha do header (em 360 px o resto desce); a secção substitui o escritório */
-#quad-b, #bib-b { min-height: 44px; padding: 4px 12px; background: var(--accent); color: var(--on-accent); border: 1px solid var(--accent);
-  font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
-#quad-b:focus-visible, #bib-b:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
-@media (max-width: 520px) { header { column-gap: 8px; } header h1 { flex: 1 1 0; min-width: 0; } header > :not(h1, #bib-b) { order: 2; }
-  header::after { content: ""; order: 1; flex-basis: 100%; margin-top: -8px; } }
-header > #def-b { min-width: 44px; min-height: 44px; font-size: 18px; order: 0; }
-body[data-view="biblioteca"] :is(#rooms, #filt, #tabs, #totals, main, #fabrica) { display: none; }
-body[data-view="quadro"] :is(#aprovacoes, #rooms, #filt, #tabs, #totals, main, #fabrica) { display: none; }
-#bell[aria-pressed="true"], #music[aria-pressed="true"] { color: var(--text); border-color: var(--accent); }
-#vol { width: 90px; accent-color: var(--accent); }
-#live { color: var(--muted); font-size: 12px; display: flex; align-items: center; gap: 6px; }
-#live i { width: 8px; height: 8px; background: var(--ok); display: inline-block; }
-#live.off i { background: var(--bad); }
-#tabs, #rooms { display: flex; gap: 8px; padding: 10px 16px; overflow-x: auto; border-bottom: 1px solid var(--line); }
-#tabs button, #rooms button { flex: none; background: var(--panel); color: var(--text); border: 1px solid var(--ctl);
-  padding: 6px 10px; font: inherit; font-size: 12px; cursor: pointer; }
-#tabs button[aria-pressed="true"], #rooms button[aria-pressed="true"] { border-color: var(--accent); box-shadow: inset 0 -2px 0 var(--accent); }
-#rooms { padding-bottom: 0; border-bottom: 0; }
-#rooms button { min-height: 36px; padding: 6px 14px; font-size: 13px; }
-#tabs .dot, #rooms .dot { display: inline-block; width: 7px; height: 7px; margin-right: 6px; background: var(--muted); }
-#tabs .dot.run, #rooms .dot.run { background: var(--ok); animation: blink 1s steps(2) infinite; }
-main { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 16px; padding: 16px; }
-@media (max-width: 900px) { main { grid-template-columns: 1fr; } }
-#office { background: var(--well); border: 1px solid var(--line); }
-#office svg { display: block; width: 100%; height: auto; image-rendering: pixelated; }
-aside { background: var(--panel); border: 1px solid var(--line); padding: 14px; min-width: 0; }
-aside h2 { font-size: 14px; margin: 0 0 4px; }
-.sub { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
-.badge { display: inline-block; padding: 1px 6px; font-size: 11px; border: 1px solid currentColor; margin-left: 6px; }
-.s-run { color: var(--ok); } .s-ok { color: var(--accent); } .s-warn { color: var(--warn); } .s-bad { color: var(--bad); }
-.steps { display: flex; gap: 4px; margin: 12px 0; }
-.steps span { flex: 1; text-align: center; font-size: 11px; padding: 4px 0; background: var(--sunk); color: var(--muted); }
-.steps span.done { background: var(--ok-bg); color: var(--ok); }
-.steps span.now { background: var(--now-bg); color: var(--warn); }
-/* barra de progresso */
-.prog { margin: 12px 0; } .prog .steps { margin: 0 0 6px; } .prog-t { margin-top: 4px; color: var(--muted); font-size: 12px; }
-.prog-m { height: 6px; background: var(--sunk); outline: 1px solid var(--line); }
-.prog-m i { display: block; height: 100%; background: var(--accent); } .late i { background: var(--warn); }
-a { color: var(--accent); }
-ol { list-style: none; margin: 10px 0 0; padding: 0; max-height: 52vh; overflow-y: auto; }
-li { display: grid; grid-template-columns: 10px 1fr auto; gap: 8px; padding: 6px 0; border-top: 1px solid var(--line); font-size: 12px; }
-li i { width: 10px; height: 10px; margin-top: 3px; }
-li b { font-weight: 600; } li .t { color: var(--muted); white-space: nowrap; }
-li.act { background: var(--act-bg); }
-.issues { color: var(--warn); font-size: 12px; margin-top: 8px; white-space: pre-line; }
-#who { border: 1px solid var(--accent); padding: 8px 10px; margin-bottom: 12px; font-size: 12px; }
-#who button { float: right; min-height: 32px; margin: -4px -4px 0 8px; background: var(--bg); color: var(--text);
-  border: 1px solid var(--ctl); font: inherit; font-size: 12px; cursor: pointer; }
-#office .seat { cursor: pointer; }
-#office .seat:focus { outline: none; }
-/* foco: 2 px de ecrã em qualquer escala do SVG (CA-A6.3) */
-#office .seat:focus-visible > rect:first-of-type { stroke: var(--well-focus); stroke-width: 2px; vector-effect: non-scaling-stroke; }
-/* ecrã estreito: o papel seria ilegível (fica no toque/tooltip) e o nome ganha 1 unidade (cabe em 64 u) */
-@media (max-width: 520px) { #office .role { display: none; } #office .seat > text { font-size: 8px; } }
-/* 4 salas a 360 px sem scroll horizontal */
-@media (max-width: 520px) { #rooms { gap: 4px; padding-inline: 8px; } #rooms button { padding: 6px 8px; } }
-.empty { color: var(--muted); padding: 40px 16px; text-align: center; }
-#totals { padding: 6px 16px 0; }
-#totals:empty { display: none; }
-/* faixa Fábrica: igual em todas as salas; <details> fechados por defeito */
-#fabrica { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 12px; padding: 0 16px 16px; }
-#fabrica h2 { flex-basis: 100%; font-size: 14px; margin: 0; }
-#fabrica details { flex: 1 1 300px; background: var(--panel); border: 1px solid var(--line); padding: 0 12px 6px; min-width: 0; }
-#fabrica table { width: 100%; border-collapse: collapse; font-size: 12px; margin: 6px 0; }
-#fabrica th, #fabrica td { padding: 3px 4px; text-align: right; border-top: 1px solid var(--line); }
-#fabrica th:first-child, #fabrica td:first-child { text-align: left; overflow-wrap: anywhere; }
-#fabrica details[data-k="wait"] ol { max-height: 40vh; overflow-y: auto; overscroll-behavior: contain; }
-#fabrica caption { text-align: left; font-weight: 600; padding-top: 6px; }
-li.warn { background: var(--warn-bg); } li.warn b { color: var(--warn); }
-li.bad { background: var(--bad-bg); } li.bad b { color: var(--bad); }
-li.off { opacity: .5; }
-details summary { cursor: pointer; color: var(--accent); min-height: 32px; padding-top: 6px; }
-details summary:focus-visible { outline: 1px solid var(--focus); outline-offset: 2px; }
-/* alto contraste: foco amarelo de 2 px em todos os controlos (os outros temas mantêm o anel do browser) */
-[data-theme="contraste"] :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
-@keyframes blink { 50% { opacity: .2; } }
-svg .typeA { animation: blink .5s steps(1) infinite; }
-svg .typeB { animation: blink .5s steps(1) infinite reverse; }
-svg .glow { animation: blink 1.2s steps(2) infinite; }
-svg .idle { opacity: .55; }
-svg .zz { animation: float 2s steps(4) infinite; }
-@keyframes float { 0% { transform: translateY(0); opacity: 1; } 100% { transform: translateY(-6px); opacity: 0; } }
-@media (prefers-reduced-motion: reduce) { svg *, .dot.run { animation: none !important; } }
-/* v2: luz rotativa de CI vermelho (sem feixe com reduced-motion), etiqueta «preso?», «Agora:» */
-svg .beam { transform-origin: 19px 198px; animation: spin 1.6s linear infinite; }
-@keyframes spin { to { transform: rotate(360deg); } }
-@media (prefers-reduced-motion: reduce) { svg .beam { display: none; } }
-.tag { display: inline-block; padding: 0 5px; font-size: 11px; background: var(--warn); color: var(--on-warn); font-weight: 600; }
-.now { margin-top: 4px; font-size: 12px; }
-/* config inválida ou ausente: o servidor usa o exemplo e diz porquê */
-#aviso, #runner-f { margin: 0; padding: 6px 16px; font-size: 12px; background: var(--warn-bg); color: var(--warn); border-bottom: 1px solid var(--line); }
-/* primeiros passos (até à 1.ª tarefa entregue); só no escritório */
-#passos { margin: 12px 16px 0; padding: 10px 14px; background: var(--panel); border: 1px solid var(--accent); }
-body:is([data-view="quadro"], [data-view="biblioteca"]) #passos { display: none; }
-#passos h2 { font-size: 14px; margin: 0 0 6px; }
-#passos ul { list-style: none; margin: 0 0 10px; padding: 0; }
-#passos li { display: block; padding: 6px 0; border-top: 1px solid var(--line); }
-#passos code { display: block; margin-top: 4px; padding: 4px 6px; background: var(--bg); overflow-wrap: anywhere; user-select: all; }
-#passos a { display: inline-flex; align-items: center; min-height: 44px; padding: 0 14px; background: var(--accent); color: var(--on-accent); font-weight: 600; text-decoration: none; }
-#passos a:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
-@media (max-width: 520px) { #passos { margin-inline: 8px; } }
-#banner { position: fixed; top: 8px; left: 50%; transform: translateX(-50%); z-index: 10; width: max-content; max-width: calc(100vw - 16px);
-  background: var(--ok-bg); color: var(--text); border: 2px solid var(--ok); padding: 8px 14px; font-weight: 600; box-shadow: 0 4px 0 #0008; overflow-wrap: anywhere; }
-/* filtro e pesquisa das tarefas terminadas */
-#filt { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 16px 0; }
-#filt [role="group"], #rd-f, .btns { display: flex; flex-wrap: wrap; gap: 4px; }
-#filt button, #rd-f button, .btns button, #rd-x, #rd-more { background: var(--panel); color: var(--text); border: 1px solid var(--ctl);
-  min-height: 36px; padding: 4px 10px; font: inherit; font-size: 12px; cursor: pointer; }
-#filt button[aria-pressed="true"], #rd-f button[aria-pressed="true"] { border-color: var(--accent); box-shadow: inset 0 -2px 0 var(--accent); }
-#q, #rd-q { flex: 1 1 140px; min-width: 0; min-height: 36px; background: var(--bg); color: var(--text); border: 1px solid var(--ctl);
-  padding: 4px 8px; font: inherit; font-size: 16px; }
-@media (max-width: 520px) { #filt { padding-inline: 8px; } }
-/* «O meu dia» */
-#fabrica details[data-k="day"] { flex: 2 1 420px; }
-.nums { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin: 6px 0 10px; }
-.nums div { background: var(--sunk); padding: 6px 8px; overflow-wrap: anywhere; }
-.nums b { display: block; font-size: 15px; } .nums span { color: var(--muted); font-size: 11px; }
-.chart { display: block; width: 100%; height: auto; max-width: 620px; }
-.chart text { fill: var(--muted); }
-.leg { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 11px; color: var(--muted); margin: 4px 0 10px; }
-.leg i { display: inline-block; width: 8px; height: 8px; margin-right: 4px; }
-.tl { display: grid; grid-template-columns: minmax(0, 10em) 1fr; gap: 8px; align-items: center; font-size: 11px; padding: 2px 0; }
-.tl-t { position: relative; height: 10px; background: var(--sunk); }
-.tl-t i { position: absolute; top: 0; bottom: 0; min-width: 3px; }
-.tk { display: flex; justify-content: space-between; font-size: 10px; color: var(--muted); }
-/* entrega e leitor (markdown escapado: as listas não herdam o estilo das listas do painel) */
-.deliv { margin-top: 12px; border-top: 1px solid var(--line); padding-top: 8px; }
-.deliv h3 { font-size: 13px; margin: 0 0 6px; }
-.deliv .md { max-height: 45vh; overflow-y: auto; margin-top: 8px; overscroll-behavior: contain; }
-.md { font-size: 12px; overflow-wrap: anywhere; }
-.md h3, .md h4, .md h5 { font-size: 13px; margin: 8px 0 4px; } .md p { margin: 4px 0; }
-.md ul, .md ol { list-style: revert; max-height: none; overflow: visible; margin: 4px 0; padding-left: 20px; }
-.md li { display: list-item; border: 0; padding: 1px 0; }
-.md code { background: var(--bg); padding: 0 3px; }
-.md blockquote { margin: 4px 0; padding: 2px 0 2px 10px; border-left: 3px solid var(--line); }
-.md pre, .ent pre { white-space: pre-wrap; overflow-wrap: anywhere; background: var(--bg); padding: 6px 8px; margin: 4px 0; font: inherit; font-size: 12px; max-height: 40vh; overflow-y: auto; }
-#reader { width: min(900px, calc(100vw - 16px)); max-height: calc(100dvh - 16px); padding: 0; background: var(--panel); color: var(--text); border: 1px solid var(--line); }
-#reader[open] { display: flex; flex-direction: column; }
-#reader::backdrop { background: var(--backdrop); }
-.rd-top { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--line); }
-.rd-top h2 { flex: 1; font-size: 14px; margin: 0; overflow-wrap: anywhere; }
-.rd-ctl { display: flex; flex-wrap: wrap; gap: 8px; padding: 8px 12px; }
-#rd-s { margin: 0 12px 6px; }
-#rd-list { flex: 1; min-height: 0; overflow-y: auto; padding: 0 12px; overscroll-behavior: contain; }
-.ent { border-top: 1px solid var(--line); padding: 6px 0; }
-.ent.k-pedido { border-left: 3px solid var(--accent); padding-left: 8px; }
-.ent.err pre { border-left: 3px solid var(--bad); }
-#rd-more { margin: 8px 12px 12px; align-self: flex-start; }
-/* tabelas markdown: scroll só dentro do próprio bloco */
-.md .tw { overflow-x: auto; margin: 4px 0; }
-.md table { border-collapse: collapse; overflow-wrap: normal; }
-.md th, .md td { border: 1px solid var(--line); padding: 3px 6px; text-align: left; vertical-align: top; }
-/* Aprovações (fim da página; escondida sem pedidos; a secção e cada pedido recolhem) */
-#aprovacoes { padding: 0 16px 16px; }
-#apr-d > summary { min-height: 44px; color: var(--text); }
-#apr-d h2 { display: inline; font-size: 14px; margin: 0; }
-#apr-n { color: var(--muted); font-size: 12px; }
-.apr { background: var(--panel); border: 1px solid var(--line); margin-bottom: 8px; min-width: 0; }
-.apr button, #ad-x { min-height: 44px; background: var(--bg); color: var(--text); border: 1px solid var(--ctl);
-  padding: 6px 12px; font: inherit; font-size: 13px; cursor: pointer; }
-.apr button:disabled { opacity: .45; cursor: not-allowed; }
-.apr button:focus-visible, .apr textarea:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
-.apr .apr-h { display: block; width: 100%; text-align: left; border: 0; background: none; padding: 10px 12px; overflow-wrap: anywhere; }
-.apr-h b { display: block; font-size: 14px; }
-.apr-b { padding: 0 12px 12px; border-top: 1px solid var(--line); min-width: 0; }
-.apr-b > h3 { font-size: 12px; color: var(--muted); margin: 10px 0 2px; }
-.dec { border-top: 1px solid var(--line); margin-top: 10px; padding-top: 8px; overflow-wrap: anywhere; }
-.dec p { margin: 0 0 6px; }
-.dec textarea { display: block; width: 100%; min-height: 64px; background: var(--bg); color: var(--text); border: 1px solid var(--ctl);
-  padding: 6px 8px; font: inherit; font-size: 16px; resize: vertical; }
-.apr .btns { gap: 6px; margin-top: 6px; }
-.apr .ok-b { border-color: var(--ok); } .apr .no-b { border-color: var(--bad); }
-.cf { margin-top: 8px; padding: 8px; border: 1px solid var(--warn); background: var(--warn-bg); }
-.cf span { display: block; font-weight: 600; margin-bottom: 6px; overflow-wrap: anywhere; }
-.apr .msg { margin: 6px 0 0; font-size: 12px; }
-@media (max-width: 520px) { #aprovacoes { padding-inline: 8px; } }
-#apr-dlg { width: min(900px, calc(100vw - 16px)); max-height: calc(100dvh - 16px); padding: 0; background: var(--panel); color: var(--text); border: 1px solid var(--line); }
-#apr-dlg[open] { display: flex; flex-direction: column; }
-#apr-dlg::backdrop { background: var(--backdrop); }
-#ad-b { flex: 1; min-height: 0; overflow-y: auto; padding: 8px 12px 12px; overscroll-behavior: contain; }
+body { margin: 0; background: var(--bg); color: var(--text); }
 </style>
+<link rel="stylesheet" href="office.css">
+<link rel="stylesheet" href="lateral.css">
 </head>
 <body>
 <header>
   <h1>▣ Squad Office</h1>
-  <button id="bib-b" type="button" aria-pressed="false">▤ Biblioteca</button>
-  <button id="quad-b" type="button" aria-pressed="false">▦ Quadro</button>
-  <button id="bell" aria-pressed="false" title="Notificar quando um goal termina ou há um alerta">🔕 notificações</button>
-  <button id="music" aria-pressed="false" aria-label="Música de fundo">🔈 música</button>
-  <input id="vol" type="range" min="0" max="100" step="10" value="30" aria-label="Volume da música" hidden>
-  <select id="tema" aria-label="Tema"><option value="auto">auto</option><option value="escuro">escuro</option><option value="claro">claro</option><option value="sepia">sépia</option><option value="contraste">contraste</option></select>
+  <button id="bib-b" type="button" aria-pressed="false" aria-label="Biblioteca">▤<span class="lg"> Biblioteca</span></button>
+  <button id="quad-b" type="button" aria-pressed="false" aria-label="Quadro">▦<span class="lg"> Quadro</span></button>
   <button id="def-b" type="button" aria-label="Definições" aria-haspopup="dialog">⚙</button>
   <div id="live"><i></i><span>a ligar…</span></div>
 </header>
@@ -271,10 +79,9 @@ body:is([data-view="quadro"], [data-view="biblioteca"]) #passos { display: none;
 <div id="filt"><div role="group" aria-label="Tarefas terminadas de"><button type="button" data-p="hoje">hoje</button><button type="button" data-p="7d">7 d</button><button type="button" data-p="30d">30 d</button></div>
   <input id="q" type="search" placeholder="pesquisar tarefa" aria-label="Pesquisar tarefas por projecto ou id" autocomplete="off"></div>
 <nav id="tabs" aria-label="Execuções"></nav>
-<div id="totals" class="sub"></div>
 <main>
   <section id="office" aria-label="Escritório da squad"></section>
-  <aside id="info"></aside>
+  <aside id="info"><div id="info-s"></div><div id="info-t" role="tabpanel"></div></aside>
 </main>
 <section id="fabrica" aria-labelledby="fab-h">
   <h2 id="fab-h">Fábrica</h2>
@@ -284,7 +91,6 @@ body:is([data-view="quadro"], [data-view="biblioteca"]) #passos { display: none;
   <details data-k="usage"><summary>Consumo da conta (estimativa)</summary><div></div></details>
 </section>
 <section id="aprovacoes" aria-labelledby="apr-h" hidden><details id="apr-d" open><summary><h2 id="apr-h">Aprovações</h2> <span id="apr-n"></span></summary><div id="apr-list"></div></details></section>
-<div id="banner" role="status" hidden></div>
 <dialog id="reader" aria-labelledby="rd-h">
   <div class="rd-top"><h2 id="rd-h">Transcript</h2><button type="button" id="rd-x">fechar</button></div>
   <div class="rd-ctl"><input id="rd-q" type="search" maxlength="100" placeholder="pesquisar no transcript" aria-label="Pesquisar no transcript" autocomplete="off">
@@ -298,6 +104,7 @@ body:is([data-view="quadro"], [data-view="biblioteca"]) #passos { display: none;
   <p id="ad-s" class="sub" aria-live="polite" style="margin: 6px 12px 0"></p>
   <div id="ad-b" class="md"></div>
 </dialog>
+<script src="act.js"></script>
 <script>
 "use strict";
 // nomes e papéis num só sítio: mudar um nome é só aqui
@@ -375,6 +182,9 @@ const fmtDur = (a, b) => {
 };
 
 let state = null, roomKey = null, selected = location.hash.match(/^#(biblioteca|quadro)/) ? null : decodeURIComponent(location.hash.slice(1)) || null, prevWorking = {}, firstPaint = true, picked = null;
+// ?demo=1 (CA-48): o demo.js troca o fetch e o localStorage antes de tudo o resto (módulos, rotas e o 1.º poll esperam por ele)
+let demo = null;
+const boot = /[?&]demo=1(&|$)/.test(location.search) ? import("./demo.js").then((m) => (demo = m).instalar()) : Promise.resolve();
 
 // ---- config do Office (GET api/config): lida antes da 1.ª pintura; sem resposta, omissões e nova tentativa a cada 5 s
 const CFG0 = { marca: "Squad Office", utilizador: { nome: "Utilizador" }, squads: [], projectos: [], colunas: [], biblioteca: [], aviso: null }; // sem listas lançáveis: os módulos tratam a falta
@@ -411,10 +221,10 @@ function person(role, x, y, mode) {
 
 // cores da secretária (madeira)
 const DESK = { top: "#a1887f", front: "#6d4c41", leg: "#4e342e" };
-function desk(role, active, used, done, tip) {
+function desk(role, active, used, done, tip, z) {
   const [x, y] = R().seats[role], r = rl(role);
   // secretária clicável (toque mostra #who); o rect transparente aumenta a área de toque
-  let g = `<g class="seat" data-role="${role}" tabindex="0" role="button" aria-label="${esc(r.name + ", " + r.full)}">`
+  let g = `<g class="seat${active || picked === role ? " on" : ""}" data-role="${role}" tabindex="${rp ? -1 : 0}" role="button" aria-label="${esc(r.name + ", " + r.full)}">`
     + `<title>${esc(`${r.name} — ${r.full}: ${tip}`)}</title><rect x="${x - 19}" y="${y - 11}" width="48" height="60" fill="transparent"/>`;
   // tudo desenhado à escala 1 e ampliado ×2 à volta do centro do sprite
   g += `<g transform="translate(${x + 5} ${y + 9}) scale(2) translate(${-x - 5} ${-y - 9})">` + person(role, x, y, active ? "work" : "idle");
@@ -430,13 +240,13 @@ function desk(role, active, used, done, tip) {
   if (active) {
     g += `<g class="typeA"><rect x="${x + 1}" y="${y + 8}" width="2" height="1" fill="${SKIN[0]}"/></g>`;
     g += `<g class="typeB"><rect x="${x + 7}" y="${y + 8}" width="2" height="1" fill="${SKIN[0]}"/></g>`;
-  } else {
-    g += `<text x="${x + 10}" y="${y - 1}" font-size="4" fill="#90a4ae" class="zz">z</text>`;
+  } else if (used && z) { // «z» parado e só em quem já trabalhou nesta execução e está parado (à espera do terminal não)
+    g += `<text x="${x + 10}" y="${y - 1}" font-size="4" fill="#90a4ae">z</text>`;
   }
   if (done) g += `<rect x="${x + 13}" y="${y + 3}" width="4" height="4" fill="#66bb6a"/><path d="M${x + 13.8} ${y + 5} l1 1 l1.6 -2" stroke="#0d0f15" stroke-width=".7" fill="none"/>`;
-  // placa: nome a negrito e papel curto por baixo (o papel esconde-se em ecrãs estreitos, ver CSS)
-  g += `</g><text x="${x + 5}" y="${y + 41}" text-anchor="middle" font-size="7" font-weight="bold" fill="${active ? "#ffffff" : used ? "#b0bec5" : "#90a4ae"}" font-family="ui-monospace,monospace">${esc(r.name)}</text>`;
-  g += `<text class="role" x="${x + 5}" y="${y + 47}" text-anchor="middle" font-size="5" fill="#90a4ae" font-family="ui-monospace,monospace">${esc(r.short)}</text>`;
+  // placa: nome (negrito em quem trabalha ou já trabalhou) e papel curto só na activa, na escolhida e no foco (ver CSS)
+  g += `</g><text x="${x + 5}" y="${y + 41}" text-anchor="middle" font-size="5.5" font-weight="${active || used ? "bold" : "normal"}" fill="${active ? "#ffffff" : used ? "#b0bec5" : "#90a4ae"}" font-family="ui-monospace,monospace">${esc(r.name)}</text>`;
+  g += `<text class="role" x="${x + 5}" y="${y + 46}" text-anchor="middle" font-size="4" fill="#90a4ae" font-family="ui-monospace,monospace">${esc(r.short)}</text>`;
   return g + `</g>`;
 }
 
@@ -455,13 +265,14 @@ function bubble(role, text) {
 const rc = (x, y, w, h, f, c = "", st = "") => `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${f}"${c ? ` class="${c}"` : ""}${st ? ` style="${st}"` : ""}/>`;
 
 function room(task) {
-  let s = `<svg viewBox="0 0 320 ${R().h || 258}" shape-rendering="crispEdges" role="group" aria-label="Escritório pixel art da sala ${esc(R().name)}${task?.gh?.ci === "vermelho" ? " · CI vermelho" : ""}">`;
+  let s = `<svg viewBox="0 0 320 ${R().h || 258}" shape-rendering="crispEdges" role="group" aria-label="Escritório pixel art da sala ${esc(R().name)}${task?.gh?.ci === "vermelho" ? " · CI vermelho" : ""}${amb?.sufixo(hA(), TZ, amb.ligado(localStorage)) ?? ""}${rp?.sufixo() ?? ""}">`;
   // chão e parede
   for (let j = 0; j < 15; j++) for (let i = 0; i < 20; i++)
     s += `<rect x="${i * 16}" y="${32 + j * 16}" width="16" height="16" fill="${(i + j) % 2 ? "#2b2f3a" : "#262a34"}"/>`;
   s += `<rect width="320" height="32" fill="#3b4256"/><rect y="30" width="320" height="3" fill="#2a2f3e"/>`;
-  s += `<rect x="12" y="6" width="34" height="18" fill="#1a237e"/><rect x="13" y="7" width="15" height="16" fill="#283593"/><rect x="30" y="7" width="15" height="16" fill="#283593"/><rect x="18" y="10" width="2" height="2" fill="#fff59d"/><rect x="38" y="14" width="1" height="1" fill="#fff"/>`;
   s += `<rect x="290" y="14" width="8" height="10" fill="#6d4c41"/><rect x="288" y="6" width="12" height="9" fill="#43a047"/><rect x="291" y="3" width="6" height="4" fill="#66bb6a"/>`;
+  // janela, camada da noite e candeeiros (ambiente.js): por baixo do quadro, das secretárias, dos balões, do «preso?» e do CI
+  s += amb ? amb.fundo(R().h || 258) : `<rect x="12" y="6" width="34" height="18" fill="#1a237e"/><rect x="13" y="7" width="15" height="16" fill="#283593"/><rect x="30" y="7" width="15" height="16" fill="#283593"/>`;
   // quadro: fases nas squads com worktree; modo e estado nas de sessão (não têm fases)
   s += `<rect x="104" y="4" width="112" height="24" fill="#eceff1"/><rect x="104" y="27" width="112" height="2" fill="#90a4ae"/>`;
   if (!R().fases) {
@@ -488,7 +299,7 @@ function room(task) {
   if (busy || (task && R().optional.includes(L.lead))) used.add(L.lead); // o gestor fica na sala depois da sua execução
   for (const role of Object.keys(R().seats)) {
     if (R().optional.includes(role) && !used.has(role)) continue;
-    s += desk(role, working.has(role), used.has(role), done.has(role) && !working.has(role), doing(task, role));
+    s += desk(role, working.has(role), used.has(role), done.has(role) && !working.has(role), doing(task, role), lat?.parado(task, role, Date.now()) ?? 1);
   }
   if (task) {
     for (const a of task.agents.filter((a) => a.active)) s += bubble(roleOf(a.role), a.act ? actText(a.act) : a.desc);
@@ -505,20 +316,18 @@ function room(task) {
 
 const endText = (t) => (t.status === "morreu" ? "a tarefa morreu" : ROOMS[sq(t)].fases && t.status === "concluída" ? `PR pronto para ${cfg.utilizador?.nome || "ti"}` : "terminou: " + rot(t.status));
 
-// ---- v2: actividade ao vivo (o estado só traz kind/tool/error; os rótulos vivem aqui)
-const ACT = { ler: ["📖", "a ler"], editar: ["✏️", "a editar"], terminal: ["💻", "terminal"], testes: ["🧪", "testes"], web: ["🌐", "web"],
-  delegar: ["🤝", "a delegar"], pensar: ["💭", "a pensar"], pr_aberto: ["🎉", "PR aberto"], pr_integrado: ["✅", "PR integrado"],
-  push: ["⬆️", "push"], ci_vermelho: ["🔴", "CI vermelho"], ci_verde: ["🟢", "CI verde"] };
-const GH_KIND = /^(pr_|push$|ci_)/;
-const actText = (a) => (!a ? "" : GH_KIND.test(a.kind) ? ACT[a.kind].join(" ") : a.error ? `⚠️ erro em ${a.tool || a.kind}`
-  : ACT[a.kind] ? ACT[a.kind].join(" ") : `🔧 a usar ${a.tool || "outra"}`);
+// rótulos da actividade ao vivo: act.js (carregado antes deste script)
+const actText = (a) => globalThis.ACTIVIDADE?.actText(a) ?? "";
 // {act, stuck} de um papel numa tarefa a correr (o líder é a sessão principal)
 function nowOf(t, role) {
   if (!t?.running) return null;
   if (role === leadOf(t).lead && t.lead) return t.lead;
   return t.agents.find((a) => roleOf(a.role) === role && !a.finished && (a.act || a.stuck)) || null;
 }
-const nowLine = (n) => (n && (n.act || n.stuck) ? `<div class="now">Agora: ${esc(n.act ? actText(n.act) : "—")}${n.stuck ? ` <span class="tag">preso?</span>` : ""}</div>` : "");
+// Bash em 1.º plano sem resultado (act.desde): «à espera do terminal», âmbar aos 10 min e «preso?» aos 25 (topo.terminalTexto)
+const agoraH = (n) => { const tt = n.act?.desde && topo?.terminalTexto(n.act.desde, Date.now());
+  return (tt ? `<span class="${tt.classe}">💻 ${esc(tt.texto)}</span>` : esc(n.act ? actText(n.act) : "—")) + (n.stuck || tt?.preso ? ` <span class="tag">preso?</span>` : ""); };
+const nowLine = (n) => (n && (n.act || n.stuck) ? `<div class="now">Agora: ${agoraH(n)}</div>` : "");
 // etiqueta «preso?» por cima do ombro (fica entre o balão e a secretária; não toca no vizinho)
 const stuckTag = (role) => { const [x, y] = R().seats[role];
   return `<g pointer-events="none">${rc(x + 11, y - 10, 22, 8, "#ffb74d")}<text x="${x + 22}" y="${y - 4}" text-anchor="middle" font-size="5" font-weight="bold" fill="#212121" font-family="ui-monospace,monospace">preso?</text></g>`; };
@@ -577,7 +386,7 @@ function progHtml(p) {
 function fly(from, to) {
   const g = document.getElementById("fly");
   const seats = R().seats;
-  if (!g || !seats[from] || !seats[to]) return;
+  if (!g || !seats[from] || !seats[to] || rp || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
   const [x1, y1] = seats[from].map((v, i) => v + (i ? 4 : 2)), [x2, y2] = seats[to].map((v, i) => v + (i ? 4 : 2));
   const el = document.createElementNS("http://www.w3.org/2000/svg", "g");
   el.innerHTML = `<rect x="0" y="2" width="12" height="9" fill="#ffca28"/><rect x="0" y="0" width="5" height="2" fill="#ffb300"/><rect x="2" y="5" width="8" height="2" fill="#fff8e1"/>`;
@@ -591,7 +400,7 @@ function fly(from, to) {
 // confetti curto quando há PR novo (nada com reduced-motion)
 function confetti() {
   const g = document.getElementById("fly");
-  if (!g || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  if (!g || rp || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
   for (let i = 0; i < 40; i++) {
     const el = document.createElementNS("http://www.w3.org/2000/svg", "rect"), x = 10 + Math.random() * 300, y = -6 - Math.random() * 30;
     el.setAttribute("width", 3); el.setAttribute("height", 2);
@@ -610,19 +419,26 @@ function confetti() {
 function statusClass(t) {
   if (t.running) return "s-run";
   if (t.status === "concluída") return "s-ok";
-  if (/erro|incompleta|parada|falhou|morreu/.test(t.status)) return "s-bad";
+  if (/erro|incompleta|parada|falhou|morreu|interrompida/.test(t.status)) return "s-bad";
   return "s-warn";
 }
 
 // separador de salas (ponto verde = sala com execução a correr)
 function renderRooms() {
-  $("#rooms").innerHTML = Object.entries(ROOMS).map(([k, r]) =>
-    `<button aria-pressed="${k === roomKey}" data-room="${k}"><span class="dot ${state.tasks.some((t) => sq(t) === k && t.running) ? "run" : ""}"></span>${esc(r.name)}</button>`).join("");
-  $("#rooms").querySelectorAll("button").forEach((b) => (b.onclick = () => { if (b.dataset.room === roomKey) return; roomKey = b.dataset.room; selected = null; picked = null; paint(false); }));
+  setHtml($("#rooms"), Object.entries(ROOMS).map(([k, r]) =>
+    `<button aria-pressed="${k === roomKey}" data-room="${k}"><span class="dot ${state.tasks.some((t) => sq(t) === k && t.running) ? "run" : ""}"></span>${esc(r.name)}</button>`).join("")
+    + `<button id="rp-b" aria-pressed="${!!rp}" aria-label="Rever o dia em acelerado">↺<span> Replay</span></button>`);
+  $("#rp-b").onclick = () => (rpP ||= import("./replay.js")).then((m) => m.abrir(rpApi()), () => { rpP = null; });
+  $("#rooms").querySelectorAll("[data-room]").forEach((b) => (b.onclick = () => { if (b.dataset.room === roomKey) return; roomKey = b.dataset.room; selected = null; picked = null; paint(false); }));
 }
 
-// nas squads de sessão os ids podem repetir-se, por isso modo + dia e hora
-const tabName = (t) => (!ROOMS[sq(t)].fases && t.started
+// replay do dia (replay.js): só o desenho, as salas e a faixa mostram o quadro do instante; o resto fica ao vivo
+let rpP = null;
+const rpApi = () => ({ paint, esc, tz: () => TZ, getState: () => state, guardar: () => [roomKey, selected, picked], repor: (g) => ([roomKey, selected, picked] = g),
+  ligar: (m) => (rp = m), desligar: () => (rp = null) });
+const hA = () => rp?.agora() ?? Date.now() + (AJ ? AJ.desvioRelogio(state?.now, stateEm) : 0); // hora do desenho (servidor; replay: a do quadro)
+// título da tarefa (40 car.); sem ele, nas squads de sessão (ids repetidos) modo + dia e hora
+const tabName = (t) => (t.titulo ? cut(t.titulo, 40) : !ROOMS[sq(t)].fases && t.started
   ? `${t.mode} ${new Date(t.started).toLocaleString("pt-PT", { timeZone: TZ, day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}`
   : String(t.id).slice(14) || t.id);
 
@@ -642,13 +458,15 @@ function whoBox(t) {
 
 function renderInfo(t) {
   const keep = document.activeElement?.matches?.("#who button"); // o poll de 8 s não pode roubar o foco
-  const box = $("#info"), open = [...box.querySelectorAll("details[open]")].map((d) => d.dataset.k);
+  const box = $("#info"), tp = $("#info-t"), open = [...tp.querySelectorAll("details[open]")].map((d) => d.dataset.k);
   const fk = document.activeElement?.matches?.("#info summary") && document.activeElement.parentElement.dataset.k;
   const fa = document.activeElement?.closest?.("#info [data-act]")?.dataset.act; // botões da entrega
-  box.innerHTML = whoBox(t) + (t ? infoHtml(t) : `<p class="sub">Sem execuções neste período${$("#q").value.trim() ? " com esta pesquisa" : ""}.</p>`);
-  for (const k of open) box.querySelector(`details[data-k="${k}"]`)?.setAttribute("open", ""); // um <details> aberto continua aberto
-  if (fk) box.querySelector(`details[data-k="${fk}"] summary`)?.focus();
-  if (fa) box.querySelector(`[data-act="${fa}"]`)?.focus();
+  const v = roomKey + t?.id, y = box.dataset.v === v ? box.scrollTop : 0; // o poll não mexe no scroll; outra tarefa ou sala: topo
+  if (!lat || lat.separadorActual() === "tarefa") setHtml(tp, whoBox(t) + (t ? infoHtml(t) : `<p class="sub">Sem execuções neste período${$("#q").value.trim() ? " com esta pesquisa" : ""}.</p>`));
+  for (const k of open) tp.querySelector(`details[data-k="${k}"]`)?.setAttribute("open", ""); // um <details> aberto continua aberto
+  if (fk) tp.querySelector(`details[data-k="${fk}"] summary`)?.focus();
+  if (fa) tp.querySelector(`[data-act="${fa}"]`)?.focus();
+  box.dataset.v = v; box.scrollTop = y;
   const b = $("#who button");
   if (b && keep) b.focus();
   if (b) b.onclick = () => { picked = null; renderInfo(t); };
@@ -659,98 +477,17 @@ const fmtUsd = (n) => (n == null ? "—" : "≈ US$ " + fmtNum(n, 2));
 const costLine = (t) => esc(`custo equivalente ${fmtUsd(t.cost_usd)} · ${t.turns == null ? "—" : t.turns + (t.turns === 1 ? " turno" : " turnos")} · `
   + (t.duration_s == null ? "—" : t.duration_s < 3600 ? fmtNum(t.duration_s / 60, 1) + "\u00a0min" : fmtNum(t.duration_s / 3600, 1) + "\u00a0h"));
 
-// totais da sala (dia e 7 dias civis, pela hora de início)
-function renderTotals() {
-  const x = state.totals?.[roomKey];
-  const win = (w) => fmtUsd(w.cost_usd) + (w.sem_custo > 0 ? ` (${w.sem_custo} sem custo)` : "");
-  $("#totals").textContent = x ? `Hoje ${win(x.day)} · 7 dias ${win(x.week)} · custo equivalente` : "";
-}
-
-// ---- faixa Fábrica: só reescreve o que mudou (o poll não fecha um <details> aberto nem tira o foco a um link)
+// só reescreve o que mudou (o poll não fecha um <details> aberto nem tira o foco a um link)
 const setHtml = (el, h) => { if (el._h !== h) { el.innerHTML = h; el._h = h; } };
 const fmtDT = (iso) => (iso ? new Date(iso).toLocaleString("pt-PT", { timeZone: TZ, day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "—");
-const fmtTok = (n) => (n >= 999500 ? fmtNum(n / 1e6, 1) + " M" : n >= 1e3 ? fmtNum(n / 1e3, 0) + " k" : fmtNum(n));
 const PR_RE = /^https:\/\/github\.com\/([\w.-]+\/[\w.-]+)\/pull\/(\d+)$/;
-function waitHtml(list) {
-  const items = list.map((w) => {
-    const m = String(w.pr_url).match(PR_RE), name = m ? `${m[1]}#${m[2]}` : "";
-    return `<li><i style="background:${w.draft ? "var(--warn)" : "var(--accent)"}"></i><span><b>${esc(w.project ?? w.id)}</b> · `
-      + (m ? `<a href="${esc(w.pr_url)}" target="_blank" rel="noopener noreferrer">${esc(name)}</a>` : "PR sem link") + (w.draft ? " · rascunho" : "")
-      + `</span><span class="t">${fmtDT(w.finished)}</span></li>`;
-  }).join("");
-  return (items ? `<ol>${items}</ol>` : `<p class="sub">Nada à tua espera.</p>`)
-    + `<p class="sub">Estado do PR gravado no fim da tarefa; pode já ter sido integrado ou fechado.</p>`;
-}
-function usageHtml(u) {
-  const note = `<p class="sub">Estimativa a partir dos registos locais; o limite da conta não é conhecido.</p>`;
-  if (u?.status !== "ok") return `<p class="sub">A calcular…</p>` + note;
-  const tot = (x) => x.input + x.output + x.cache_read + x.cache_creation;
-  const table = (k, cap) => {
-    const rows = Object.entries(u.windows[k] || {}).sort((a, b) => tot(b[1]) - tot(a[1]))
-      .map(([m, x]) => `<tr><td>${esc(m)}</td><td>${esc(fmtTok(tot(x)))}</td><td>${esc(fmtTok(x.output))}</td></tr>`).join("");
-    return rows ? `<table><caption>${cap}</caption><tr><th scope="col">modelo</th><th scope="col">total</th><th scope="col">saída</th></tr>${rows}</table>`
-      : `<p class="sub"><b>${cap}</b>: sem registos.</p>`;
-  };
-  return table("5h", "Últimas 5 h") + table("7d", "Últimos 7 dias") + note + `<p class="sub">calculado às ${fmtT(u.computed_at)}</p>`;
-}
-// ---- v2: «O meu dia» (4 números, custo de 30 dias empilhado por squad, linha do tempo de hoje) e «Actividade»
-const tzMin = (iso) => { const p = Object.fromEntries(new Intl.DateTimeFormat("en-GB", { timeZone: TZ, hour: "numeric", minute: "numeric", hourCycle: "h23" })
-  .formatToParts(new Date(iso)).map((x) => [x.type, x.value])); return +p.hour * 60 + +p.minute; };
-function barsSvg(hist) {
-  const tot = (d) => SQS.reduce((a, k) => a + (d[k]?.cost_usd || 0), 0), max = Math.max(0.01, ...hist.map(tot)), H = 80;
-  let s = "";
-  hist.forEach((d, i) => {
-    let y = 8 + H;
-    const tip = `${d.date.slice(8)}/${d.date.slice(5, 7)}: ` + SQS.map((k) => `${ROOMS[k].name} ${fmtUsd(d[k]?.cost_usd || 0)}`).join(" · ");
-    s += `<g><title>${esc(tip)}</title>${rc(i * 10 + 1, 8, 8, H, "#232838", "", "fill:var(--sunk)")}`;
-    for (const k of SQS) { const h = ((d[k]?.cost_usd || 0) / max) * H; if (h > 0) { y -= h; s += rc(i * 10 + 1, y.toFixed(2), 8, Math.max(.5, h).toFixed(2), SQC[k]); } }
-    s += `</g>`;
-  });
-  const sum = hist.reduce((a, d) => a + tot(d), 0), t = (x, a, v) => `<text x="${x}" y="${a}" font-size="7" font-family="ui-monospace,monospace"${x > 150 ? ` text-anchor="end"` : ""}>${esc(v)}</text>`;
-  return `<svg class="chart" viewBox="0 0 300 100" role="img" aria-label="${esc(`Custo dos últimos 30 dias: ${fmtUsd(sum)}, máximo num dia ${fmtUsd(max)}`)}">`
-    + s + t(1, 6, "máx. " + fmtUsd(max)) + t(1, 98, hist[0] ? `${hist[0].date.slice(8)}/${hist[0].date.slice(5, 7)}` : "") + t(299, 98, "hoje") + `</svg>`;
-}
-function timelineHtml(tl) {
-  if (!tl?.length) return `<p class="sub">Nenhuma tarefa começou hoje.</p>`;
-  const now = tzMin(Date.now());
-  return tl.map((x) => {
-    const a = tzMin(x.start), b = x.end ? tzMin(x.end) : now, e = b < a ? 1440 : b, sqk = SQC[x.squad] ? x.squad : SQS[0];
-    const hm = (iso) => new Date(iso).toLocaleTimeString("pt-PT", { timeZone: TZ, hour: "2-digit", minute: "2-digit" });
-    const when = `${hm(x.start)}–${x.end ? hm(x.end) : "agora"}`;
-    return `<div class="tl"><span>${esc(x.project)}<br><span class="sub">${esc(when)}</span></span><span class="tl-t" role="img" aria-label="${esc(`${ROOMS[sqk].name}: ${x.project} ${when}`)}">`
-      + `<i style="left:${(a / 14.4).toFixed(2)}%;width:${(Math.max(0, e - a) / 14.4).toFixed(2)}%;background:${SQC[sqk]}"></i></span></div>`;
-  }).join("") + `<div class="tl" aria-hidden="true"><span></span><span class="tk"><span>0 h</span><span>6</span><span>12</span><span>18</span><span>24</span></span></div>`;
-}
-function dayHtml(td, hist) {
-  if (!td) return `<p class="sub">Sem dados do dia.</p>`;
-  const num = (v, l) => `<div><b>${esc(v)}</b><span>${l}</span></div>`;
-  return `<div class="nums">${num(fmtUsd(td.cost_usd), "custo hoje")}${num(td.done, "tarefas concluídas")}${num(fmtNum(td.hours, 1) + " h", "horas de trabalho")}`
-    + `${num(td.top ? `${td.top.project} ${fmtUsd(td.top.cost_usd)}` : "—", "tarefa mais cara")}</div>`
-    + (hist?.length ? barsSvg(hist) : "") + `<div class="leg">${SQS.map((k) => `<span><i style="background:${SQC[k]}"></i>${ROOMS[k].name}</span>`).join("")}</div>`
-    + `<p class="sub">Linha do tempo de hoje (${esc(TZ || "hora local")})</p>` + timelineHtml(td.timeline);
-}
-function feedHtml(f) {
-  const items = (f || []).map((e) => {
-    const t = state.tasks.find((x) => x.id === e.task), who = ROLES[e.role] || e.role === ROOMS[e.squad]?.lead ? label(e.role, ROOMS[e.squad]) : e.role || "?";
-    return `<li class="${e.kind === "ci_vermelho" || (e.error && !GH_KIND.test(e.kind)) ? "bad" : ""}"><i style="background:${SQC[e.squad] || "var(--muted)"}"></i>`
-      + `<span><b>${esc(actText(e))}</b> · ${esc(who)}<br><span class="sub">${esc(t ? `${t.project} · ${tabName(t)}` : e.task)}</span></span><span class="t">${fmtT(e.at)}</span></li>`;
-  }).join("");
-  return items ? `<ol>${items}</ol>` : `<p class="sub">Sem actividade recente.</p>`;
-}
-function renderFabrica() {
-  const w = state.waiting || [], part = (k) => $(`#fabrica details[data-k="${k}"]`);
-  const sums = { day: state.today ? `O meu dia (${fmtUsd(state.today.cost_usd)} hoje)` : "O meu dia", feed: `Actividade (${(state.feed || []).length})`,
-    wait: `À tua espera (${w.length})`, usage: "Consumo da conta (estimativa)" };
-  const bodies = { day: dayHtml(state.today, state.history), feed: feedHtml(state.feed),
-    wait: waitHtml(w), usage: usageHtml(state.usage) };
-  for (const k in sums) { setHtml(part(k).querySelector("summary"), esc(sums[k])); setHtml(part(k).querySelector("div"), bodies[k]); }
-}
+// O meu dia (com o total da sala), Actividade, À tua espera e Consumo: fabrica.js
 
 function infoHtml(t) {
   const pr = t.pr ? t.pr.match(/^(\S+)\s*(.*)$/) : null;
   const items = t.agents.slice().reverse().map((a) => {
     const r = rl(roleOf(a.role));
-    const now = t.running && !a.finished && (a.act || a.stuck) ? `<br><span class="sub">Agora: ${esc(actText(a.act) || "—")}</span>${a.stuck ? ` <span class="tag">preso?</span>` : ""}` : "";
+    const now = t.running && !a.finished && (a.act || a.stuck) ? `<br><span class="sub">Agora: ${agoraH(a)}</span>` : "";
     return `<li class="${a.active ? "act" : ""}"><i style="background:${r.shirt}"></i><span><b>${esc(label(roleOf(a.role)))}</b> — ${esc(a.desc)}${now}</span>`
       + `<span class="t">${fmtT(a.start)}${a.active ? " · agora" : " · " + fmtDur(a.start, a.end || a.last)}</span></li>`;
   }).join("");
@@ -762,24 +499,29 @@ function infoHtml(t) {
     <div class="sub">${esc(t.mode)}${t.branch ? " · " + esc(t.branch) : ""}</div>
     <div class="sub">início ${fmtT(t.started)} · ${t.running ? "há " + fmtDur(t.started) : "duração " + fmtDur(t.started, t.finished)}
       ${t.auto_resumes ? " · retomas auto: " + t.auto_resumes : ""}</div>
-    <div class="sub">${costLine(t)}</div>
+    <div class="sub mono">${costLine(t)}</div>
     ${t.running ? nowLine(t.lead) : ""}${gh}
     ${pr ? `<div class="sub">PR: ${PR_RE.test(pr[1]) ? `<a href="${esc(pr[1])}" target="_blank" rel="noopener noreferrer">${esc(pr[1].replace(/^https:\/\/github.com\//, ""))}</a>` : esc(pr[1])} ${esc(pr[2])}</div>` : ""}
     ${progHtml(t.progress) || (ROOMS[sq(t)].fases ? `<div class="steps">${phases(t).map((p) => `<span class="${p.state}">${p.name}</span>`).join("")}</div>` : "")}
     ${t.issues.length ? `<div class="issues">${esc(t.issues.join("\n"))}</div>` : ""}
-    ${t.running ? "" : erroHtml(t)}
-    <ol>${items || `<li><i></i><span class="sub">${t.mode === "task" ? "Tarefa de um só engenheiro (sem subagentes)." : "Ainda sem passagens."}</span><span></span></li>`}</ol>
+    ${t.running ? "" : erroHtml(t) + fimHtml(t)}
+    ${lat ? lat.agentesTarefaH(t) : `<ol>${items || `<li><i></i><span class="sub">${t.mode === "task" ? "Tarefa de um só engenheiro (sem subagentes)." : "Ainda sem passagens."}</span><span></span></li>`}</ol>`}
     ${t.running ? "" : delivHtml(t)}`;
 }
 
 // ---- 0.1.3 (ajuda.js, por import()): rótulos de estado, resultado com dica, faixa do runner e primeiros passos
 let AJ = null, stateEm = 0; // stateEm: Date.now() quando chegou o state (para o desvio do relógio)
-import("./ajuda.js").then((m) => { AJ = m; paint(false); }, () => {}); // sem ajuda.js: estados crus, sem faixa nem passos
+boot.then(() => import("./ajuda.js").then((m) => { AJ = m; paint(false); }, () => {})); // sem ajuda.js: estados crus, sem faixa nem passos
 const rot = (s) => (AJ ? AJ.rotuloEstado(s) : s);
 // resultado (já mascarado no servidor, sempre escapado) e dica com o comando que resolve; não em tarefas concluídas
 function erroHtml(t) {
   const dica = AJ?.dicaErro(t.status, t.resultado, cfg.modo), res = typeof t.resultado === "string" && t.status !== "concluída" ? t.resultado : "";
   return (res ? `<div class="issues">${esc(res)}</div>` : "") + (dica ? `<div class="md">${md(dica)}</div>` : "");
+}
+// v3 (CA-17): recusas de ferramentas (com a dica do runner.ferramentas) e erro da API no fim da execução (tasks[].fim)
+function fimHtml(t) {
+  const r = AJ?.recusasTexto(t.fim), e = AJ?.erroApiTexto(t.fim);
+  return (e ? `<div class="issues">${esc(e)}</div>` : "") + (r ? `<div class="fim"><b class="s-warn">${esc(r)}</b><div class="md">${md(AJ.DICA_RECUSAS)}</div></div>` : "");
 }
 function renderAjuda() {
   if (!AJ || !state) return;
@@ -790,7 +532,7 @@ function renderAjuda() {
   $("#passos").hidden = !ps;
   setHtml($("#passos"), !ps ? "" : `<h2 id="passos-h">Primeiros passos</h2><ul>${ps.map((p) => `<li><span role="img" aria-label="${p.ok ? "feito" : "por fazer"}">${p.ok ? "✓" : "✗"}</span> `
     + `${esc(p.rotulo)}${p.comando ? `<code>${esc(p.comando)}</code>` : ""}</li>`).join("")}</ul>`
-    + `<a href="#quadro/novo">Criar o primeiro cartão</a>`);
+    + `<a href="#quadro/novo">Criar o primeiro cartão</a> <a href="?demo=1">Ver uma demonstração</a>`);
 }
 
 // ---- v2: entrega e leitor do transcript (só por clique; nunca no polling). O #info é reescrito a cada 8 s: a entrega fica em cache
@@ -925,11 +667,13 @@ function selectTask(id) {
   if (isQuadro()) qFechar();
   const t = state?.tasks.find((x) => x.id === id);
   if (t) roomKey = sq(t);
-  selected = id; picked = null; paint(false);
+  selected = id; picked = null; lat?.separador("tarefa"); paint(false);
 }
 
 function paint(animate) {
   if (!state) return;
+  const vivo = state;
+  if (rp) state = rp.estado(); // replay: o desenho, as salas e a faixa são do quadro do instante
   if (!roomKey) { // 1.ª pintura: sala da execução pedida (#id), senão a que tem trabalho a correr (empate: a 1.ª sala)
     const h = state.tasks.find((t) => t.id === selected), run = state.tasks.filter((t) => t.running);
     roomKey = h ? sq(h) : run.some((t) => sq(t) === SQS[0]) ? SQS[0] : run.length ? sq(run[0]) : state.tasks[0] ? sq(state.tasks[0]) : SQS[0];
@@ -940,15 +684,19 @@ function paint(animate) {
   const f = document.activeElement?.closest?.(".seat")?.dataset.role; // o repaint não pode roubar o foco
   renderRooms();
   renderTabs(list);
-  renderTotals();
-  renderApr();
-  renderFabrica();
-  $("#office").innerHTML = room(t);
+  setHtml($("#office"), room(t)); // a 600× os nós e o foco mantêm-se
+  amb?.aplicar($("#office"), hA(), TZ);
   if (f) $("#office").querySelector(`.seat[data-role="${f}"]`)?.focus();
-  renderInfo(t);
+  state = vivo;
+  const ti = rp ? rp.tarefaViva(vivo) : t;
+  renderApr();
+  fab?.render(state);
+  topo?.render(state);
+  lat?.render(state);
+  renderInfo(ti);
   renderAjuda();
   musicRoom();
-  if (!t || !animate) return;
+  if (!t || !animate || rp) return;
   const before = new Set((prevWorking[t.id] || []).map(roleOf)), now = new Set(t.working.map(roleOf));
   let delay = 0;
   const lead = leadOf(t).lead;
@@ -959,7 +707,7 @@ function paint(animate) {
 // tocar/Enter numa personagem abre a caixa #who (delegação: sobrevive ao repaint)
 function pick(e) {
   const seat = e.target.closest?.(".seat");
-  if (!seat) return;
+  if (!seat || rp) return;
   picked = seat.dataset.role;
   renderInfo(state?.tasks.find((x) => x.id === selected));
   $("#who")?.scrollIntoView({ block: "nearest" });
@@ -1155,34 +903,26 @@ async function tick() {
     if (prev) for (const t of state.tasks) {
       const old = prev.tasks.find((x) => x.id === t.id);
       if (old?.running && !t.running) notifyDone(t);
-      if (newPr(old, t)) prBanner(t);
+      if (newPr(old, t)) confetti();
     }
     alertsTick();
     if (jt?.update(prev, next, musicOn && !document.hidden && !!eng).length) eng.jingle(); // um jingle por poll
     firstPaint = false;
     $("#live").className = "";
-    $("#live span").textContent = "ao vivo · " + new Date().toLocaleTimeString("pt-PT", { timeZone: TZ });
+    $("#live span").innerHTML = `<b class="lg">ao vivo · </b>${esc(new Date().toLocaleTimeString("pt-PT", { timeZone: TZ }))}`; // a ≤ 520 px só a hora
   } catch (e) {
     $("#live").className = "off";
-    $("#live span").textContent = "sem ligação";
+    if (topo) topo.ligacao(false); else $("#live span").textContent = "sem ligação";
   }
 }
-// ---- v2: PR aberto/integrado novo face à carga anterior → faixa 8 s + confetti (nunca na 1.ª carga: só corre com prev)
+// ---- PR aberto/integrado novo → confetti; o aviso informativo vem do avisos.js (nunca na 1.ª carga: só corre com prev)
 const newPr = (o, t) => (t.gh?.pr === "aberto" || t.gh?.pr === "integrado") && (o?.gh?.pr !== t.gh.pr || o?.gh?.pr_url !== t.gh.pr_url);
-function prBanner(t) {
-  const m = String(t.gh.pr_url ?? "").match(PR_RE), b = $("#banner");
-  b.textContent = `${t.gh.pr === "integrado" ? "✅ PR integrado" : "🎉 PR aberto"}: ${t.project}${m ? " #" + m[2] : ""}`;
-  b.hidden = false;
-  clearTimeout(b._t);
-  b._t = setTimeout(() => (b.hidden = true), 8000);
-  confetti();
-}
 // ---- v2: alertas (tarefas mortas): «(N) » no título e uma notificação por chave nova (nada na 1.ª carga)
 let alertKeys = null;
 function alertsTick() {
-  const items = state.alerts?.items || [], n = state.alerts?.count || 0;
-  document.title = (n > 0 ? `(${n}) ` : "") + cfg.marca;
-  if (alertKeys && notifyOn()) for (const k of items) if (!alertKeys.has(k)) notifyAlert(k);
+  const items = state.alerts?.items || [], n = (state.alerts?.count || 0) + (state.falhas_exec?.length || 0); // = nFalhas (topo.js)
+  document.title = (demo ? "[demo] " : "") + (n > 0 ? `(${n}) ` : "") + cfg.marca;
+  if (alertKeys && notifyOn() && document.hidden) for (const k of items) if (!alertKeys.has(k)) notifyAlert(k);
   alertKeys = new Set(items); // uma chave que sai e volta notifica de novo
 }
 async function notifyAlert(k) {
@@ -1194,7 +934,7 @@ async function notifyAlert(k) {
   if (n) n.onclick = () => { window.focus(); selectTask(id); };
 }
 
-// ---- notificações do browser (com a página aberta, mesmo noutro separador ou minimizada)
+// ---- notificações do browser: só com o separador escondido (com ele à vista, chega o aviso do avisos.js)
 const store = {
   get: () => { try { return localStorage.getItem("notify") === "1"; } catch { return false; } },
   set: (v) => { try { localStorage.setItem("notify", v ? "1" : "0"); } catch {} },
@@ -1204,26 +944,22 @@ const supported = "Notification" in window; // false no Safari do iPhone fora da
 const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
 const notifyOn = () => supported && Notification.permission === "granted" && store.get();
 
+// para o ⚙ (definicoes.js): on | off | bloqueado | ios | sem-suporte; bloqueadas → ponto --warn no ⚙
+const notifEstado = () => (!supported ? (isIOS ? "ios" : "sem-suporte") : Notification.permission === "denied" ? "bloqueado" : notifyOn() ? "on" : "off");
 function paintBell() {
-  const b = $("#bell");
-  if (!supported) return; // fica visível: o clique explica como activar
-  const on = notifyOn(), blocked = Notification.permission === "denied";
-  b.setAttribute("aria-pressed", on);
-  b.textContent = blocked ? "🔕 bloqueadas no browser" : on ? "🔔 notificações" : "🔕 notificações";
+  const b = notifEstado() === "bloqueado";
+  $("#def-b").classList.toggle("warn", b);
+  $("#def-b").setAttribute("aria-label", b ? "Definições (notificações bloqueadas)" : "Definições");
 }
-$("#bell").onclick = async () => {
-  if (!supported) return alert(isIOS
-    ? "No iPhone, as notificações só funcionam com a página instalada (iOS 16.4 ou mais recente): Partilhar → Adicionar ao ecrã principal, e abre a partir do ícone."
-    : "Este browser não suporta notificações.");
-  if (Notification.permission === "denied") return alert("As notificações estão bloqueadas para este site. Desbloqueia no cadeado ao lado do endereço → Notificações → Permitir, e recarrega a página.");
+async function bellToggle() { // o pedido de permissão sai no gesto, antes de qualquer outro await
+  if (!supported || Notification.permission === "denied") return;
   if (Notification.permission === "default") await Notification.requestPermission();
   const on = Notification.permission === "granted" && !notifyOn();
   store.set(on);
   paintBell();
   // aviso de teste: sem ele, não há forma de saber se o sistema operativo mostra as notificações
-  if (on) show("🔔 Notificações ligadas", { body: "Vais ser avisado quando um goal terminar ou houver um alerta.", tag: "teste" })
-    .catch((e) => alert("O browser deu permissão, mas a notificação falhou: " + e.message));
-};
+  if (on) await show("🔔 Notificações ligadas", { body: "Vais ser avisado quando um goal terminar ou houver um alerta.", tag: "teste" }).catch(() => {});
+}
 
 async function show(title, opts) {
   const reg = await swReady;
@@ -1232,7 +968,7 @@ async function show(title, opts) {
 }
 
 async function notifyDone(t) {
-  if (!notifyOn()) return;
+  if (!notifyOn() || !document.hidden) return;
   const ok = t.status === "concluída";
   const title = `${ok ? "✅" : "⚠️"} ${t.project}: ${t.mode} ${ok ? "concluído" : t.status}`;
   const detail = t.pr ? "PR " + t.pr : t.issues.join("\n") || t.branch || "";
@@ -1245,9 +981,8 @@ navigator.serviceWorker?.addEventListener("message", (e) => {
 });
 paintBell();
 
-// ---- tema: aplicado pelo script do <head> (temaAplicar); aqui só o selector e a gravação
-$("#tema").value = temaEscolha;
-$("#tema").onchange = (e) => { temaAplicar(e.target.value); try { localStorage.setItem("tema", temaEscolha); } catch {} };
+// ---- tema: aplicado pelo script do <head> (temaAplicar); o selector vive no ⚙ e grava aqui
+const tema = { valor: () => temaEscolha, aplicar: (v) => { temaAplicar(v); try { localStorage.setItem("tema", temaEscolha); } catch {} } };
 
 // ---- biblioteca: biblioteca.js só carrega ao abrir (como o music.js); um hash «#biblioteca…» é dela, nunca de uma tarefa.
 // O polling continua (Aprovações, alertas) mas nunca toca em #bib.
@@ -1282,7 +1017,7 @@ addEventListener("hashchange", () => { if (isBib() || document.body.dataset.view
 // ---- quadro: quadro.js/.css só carregam ao abrir «#quadro» (como a Biblioteca); flag própria qOn para não pisar o data-view dela
 const isQuadro = () => location.hash.startsWith("#quadro");
 let qP = null, qOn = false;
-const quadroApi = () => ({ root: $("#quadro"), md, esc, cfg, fechar: qFechar, barra: progHtml,
+const quadroApi = () => ({ root: $("#quadro"), md, esc, cfg, fechar: qFechar, barra: progHtml, espera: () => state?.espera?.n ?? null,
   verAprovacao: (f, fi) => { qFechar(); verAprovacao(f, fi); }, abrirTarefa: qTarefa });
 // do Quadro para a sala: limpa a pesquisa e alarga o período (sem gravar) até a execução aparecer
 function qTarefa(id) {
@@ -1311,48 +1046,55 @@ addEventListener("hashchange", qRoute);
 // ---- «Definições» (lazy)
 let defP = null;
 $("#def-b").onclick = async () => {
-  try { (await (defP ||= import("./definicoes.js"))).abrir({ esc, cfg, swReady, isIOS, getState: () => state,
+  try { (await (defP ||= import("./definicoes.js"))).abrir({ esc, cfg, swReady, isIOS, getState: () => state, musica, tema, notif: { estado: notifEstado, alternar: bellToggle },
     repintar: () => { paint(false); qP?.then((m) => m.repintar(), () => {}); } }); }
   catch { defP = null; alert("Não foi possível abrir as definições."); }
 };
 
-// ---- música de fundo (music.js só carrega ao ligar; prefs lidas aqui, regra do readPrefs; o AudioContext nasce no gesto: iOS)
+// ---- v3: módulos do arranque por import() (sem eles o escritório desenha-se na mesma); a pedido só ao clicar
+let fab = null, lat = null, topo = null, amb = null, rp = null;
+const ctx = () => ({ ROOMS, SQS, SQC, TZ }), quem = (e) => (ROLES[e.role] || e.role === ROOMS[e.squad]?.lead ? label(e.role, ROOMS[e.squad]) : e.role || "?");
+const sair = () => { if (isBib()) bibFechar(); if (isQuadro()) qFechar(); }, verApr = (f, fi) => { sair(); verAprovacao(f, fi); };
+boot.then(() => {
+// barra de contadores, avisos e atalhos P/? (topo.js e avisos.js); painéis e ajuda só ao clicar
+import("./topo.js").then((m) => { m.iniciar({ esc, getState: () => state, sq, abrirTarefa: qTarefa, verAprovacao: verApr, sair, agentes: () => { lat?.separador("agentes"); $("#info").scrollIntoView({ block: "nearest" }); },
+  notificar: (t, b) => show(t, { body: b, tag: "aviso" }).catch(() => {}), ligadas: notifyOn }); topo = m; paint(false); }, () => {});
+// separadores do #info, «Agentes», «Seguir», «4/7» e entregas por ler (lateral.js); a Fábrica (fabrica.js)
+import("./lateral.js").then((m) => { m.iniciar({ esc, ROOMS: () => ROOMS, cfg: () => cfg, rl, label, sq, roleOf, leadOf, nowOf, agoraH, fmtT, fmtDur,
+  demo: () => !!demo, replay: () => !!rp, getState: () => state, sala: () => roomKey, tarefa: () => selected, picked: () => picked, abrirTarefa: qTarefa,
+  repintar: () => paint(false), seguir: (s, id, r) => { sair(); roomKey = s; selected = id; picked = ROOMS[s]?.seats[r] ? r : "general"; paint(false); } }); lat = m; paint(false); }, () => {});
+import("./ambiente.js").then((m) => { amb = m; paint(false); }, () => {});
+import("./fabrica.js").then((m) => { m.iniciar({ esc, fmtT, fmtNum, fmtUsd, fmtDT, ctx, quem, getState: () => state, sala: () => roomKey || SQS[0],
+  ir: (it) => it?.tipo === "aprovacao" && verApr(it.fonte, it.ficheiro) }); fab = m; paint(false); }, () => {});
+});
+
+// ---- música de fundo (music.js só carrega ao ligar; prefs lidas aqui, regra do readPrefs; o AudioContext nasce no gesto: iOS; controlos no ⚙)
 const pref = (() => { try { const v = localStorage.getItem("musicVol"); return [localStorage.getItem("music") === "1", /^\d{1,3}$/.test(v) && v <= 100 ? +v : 30]; } catch { return [false, 30]; } })();
-let musicOn = pref[0], M = null, eng = null, actx = null, jt = null, loadP = null;
-$("#vol").value = pref[1];
-const vol = () => +$("#vol").value;
+let musicOn = pref[0], vol = pref[1], M = null, eng = null, actx = null, jt = null, loadP = null;
 const loadMusic = () => (loadP ||= import("./music.js").then((m) => { M = m; jt = m.createJingleTracker(); return m; },
-  () => { loadP = null; musicOn = false; paintMusic(); actx?.suspend(); })); // falhou: desliga, o clique seguinte tenta de novo
-function paintMusic() {
-  const b = $("#music");
-  b.setAttribute("aria-pressed", musicOn);
-  b.textContent = (musicOn ? "🔊" : "🔈") + " música";
-  $("#vol").hidden = !musicOn;
-}
+  () => { loadP = null; musicOn = false; actx?.suspend(); })); // falhou: desliga, o clique seguinte tenta de novo
 function unlock() { if (musicOn) { actx ||= new (window.AudioContext || window.webkitAudioContext)(); return actx.resume(); } } // síncrono, dentro do gesto
 function syncMusic() { // depois do load
   if (!M || !actx) return;
   if (!eng) { if (!musicOn) return actx.suspend(); eng = M.createEngine({ ctx: actx }); }
-  eng.setVolume(vol());
+  eng.setVolume(vol);
   if (musicOn) { musicRoom(); eng.start(); if (document.hidden) eng.suspend(); } else eng.stop();
 }
 function musicRoom() { if (eng && state && musicOn) { eng.setRoom(roomKey); eng.setLayers(M.layersFor(state, roomKey, SQS)); } }
-$("#music").onclick = () => {
-  musicOn = !musicOn; paintMusic(); unlock();
-  loadMusic().then((m) => { m?.writePrefs(localStorage, { on: musicOn, vol: vol() }); syncMusic(); });
-};
-$("#vol").oninput = () => { eng?.setVolume(vol()); loadMusic().then((m) => m?.writePrefs(localStorage, { on: musicOn, vol: vol() })); };
-if (musicOn) { // pref ligada: o botão aparece ligado, mas o som só sai no 1.º gesto (regra de autoplay)
+const musicPrefs = () => loadMusic().then((m) => { m?.writePrefs(localStorage, { on: musicOn, vol }); return m; });
+// para o ⚙: alternar() corre no clique (unlock síncrono, dentro do gesto); com a música desligada o volume não carrega o music.js
+const musica = { on: () => musicOn, volume: () => vol, alternar: () => { musicOn = !musicOn; unlock(); return musicPrefs().then(syncMusic); },
+  setVolume: (v) => { vol = v; eng?.setVolume(v); if (musicOn) musicPrefs(); } };
+if (musicOn) { // pref ligada: o som só sai no 1.º gesto (regra de autoplay)
   const ev = ["click", "touchend", "keydown"], off = () => ev.forEach((n) => removeEventListener(n, g, true));
-  const g = (e) => { if (e.target.id === "music" || !musicOn) return off(); // iOS: pointerdown não activa o áudio; no #music o clique desliga
+  const g = (e) => { if (e.target.id === "def-mus" || !musicOn) return off(); // iOS: pointerdown não activa o áudio; no interruptor do ⚙ o clique desliga
     unlock().then(() => actx.state === "running" && off()); loadMusic().then(syncMusic); };
   ev.forEach((n) => addEventListener(n, g, true));
 }
 document.addEventListener("visibilitychange", () => { if (eng && musicOn) document.hidden ? eng.suspend() : eng.resume(); });
-paintMusic();
 
 // arranque: a config primeiro (ou as omissões, se falhar), depois as rotas e o estado
-lerCfg().then(() => { bibRoute(); qRoute(); tick(); setInterval(tick, 8000); });
+boot.then(lerCfg).then(() => { bibRoute(); qRoute(); tick(); setInterval(tick, 8000); });
 </script>
 </body>
 </html>

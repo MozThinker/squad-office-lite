@@ -1,0 +1,28 @@
+/* v3 (CA-43): painel do replay por cima do escritório (posto pelo replay.js) */
+/* na grelha do main: o painel por cima do desenho e o #info ao lado dos dois */
+@media (min-width: 901px) {
+  main:has(#replay) { grid-template-rows: auto 1fr; }
+  main:has(#replay) > #replay { grid-column: 1; }
+  main:has(#replay) > #info { grid-column: 2; grid-row: 1 / span 2; }
+}
+#replay { display: flex; flex-direction: column; gap: 6px; padding: 8px; background: var(--panel); border: 1px solid var(--line); min-width: 0; }
+.rp-l { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; }
+/* «REPLAY hh:mm»: mono, accent sobre o fundo (≥ 4,5:1 nos 5 temas) */
+#rp-et { margin: 0; padding: 0 8px; line-height: 44px; background: var(--accent); color: var(--on-accent); font-size: 14px; font-weight: 700; white-space: nowrap; }
+#replay button, #replay select, .rp-v label { min-height: 44px; min-width: 44px; padding: 4px 10px; background: var(--bg); color: var(--text);
+  border: 1px solid var(--ctl); font: inherit; font-size: 14px; cursor: pointer; }
+#replay button[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+#replay button:disabled { cursor: default; color: var(--muted); }
+#rp-x { margin-left: auto; }
+.rp-v { display: flex; gap: 0; }
+.rp-v label { display: flex; align-items: center; justify-content: center; padding: 4px 8px; font-family: var(--mono); }
+.rp-v label + label { border-left: 0; }
+.rp-v input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.rp-v label:has(input:checked) { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+#rp-t { flex: 1 1 120px; min-width: 0; min-height: 44px; margin: 0; accent-color: var(--accent); }
+#replay :is(button, select, #rp-t):focus-visible, .rp-v label:has(input:focus-visible) { outline: 2px solid var(--focus); outline-offset: 2px; }
+#rp-m { margin: 0; }
+#rp-m:empty { display: none; }
+#rp-m button { min-height: 44px; margin-left: 6px; }
+#rp-nota { margin: 0 0 10px; }
+@media (max-width: 520px) { #replay { padding: 6px; } #rp-et { font-size: 13px; padding: 0 6px; } .rp-v label { padding: 4px; } }

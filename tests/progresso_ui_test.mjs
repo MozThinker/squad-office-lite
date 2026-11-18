@@ -83,7 +83,7 @@ test("progHtml escapa o nome das fases", () => {
 });
 
 test("AC-25: a barra não tem animação nem transição (nada a anular com reduced-motion)", () => {
-  const css = [...HTML.matchAll(/<style>([\s\S]*?)<\/style>/g)].map((m) => m[1]).join("") + QCSS;
+  const css = [...HTML.matchAll(/<style>([\s\S]*?)<\/style>/g)].map((m) => m[1]).join("") + QCSS + readFileSync(new URL("../static/office.css", import.meta.url), "utf8");
   const regras = [...css.matchAll(/([^{}]*\.prog[^{}]*)\{([^}]*)\}/g)];
   assert.ok(regras.length >= 4);
   for (const [, sel, d] of regras) assert.doesNotMatch(d, /animation|transition/, sel);

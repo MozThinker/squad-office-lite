@@ -16,6 +16,10 @@ STATIC = Path(__file__).resolve().parent.parent / "static"
 SRC = (STATIC / "index.html").read_text(encoding="utf-8")
 QCSS = (STATIC / "quadro.css").read_text(encoding="utf-8")
 BCSS = (STATIC / "biblioteca.css").read_text(encoding="utf-8")
+OCSS = (STATIC / "office.css").read_text(encoding="utf-8")   # v3: CSS dos componentes; os tokens ficam no <style> do index.html
+LCSS = (STATIC / "lateral.css").read_text(encoding="utf-8")
+DEF = (STATIC / "definicoes.js").read_text(encoding="utf-8")
+DEFCSS = (STATIC / "definicoes.css").read_text(encoding="utf-8")
 TEMAS = ["escuro", "claro", "sepia", "contraste"]   # temas efectivos (auto resolve para escuro/claro)
 # rótulos curtos (review 1): música + tema + «ao vivo» numa linha a 360 px; o contexto vem do aria-label="Tema"
 OPCOES = [("auto", "auto"), ("escuro", "escuro"), ("claro", "claro"), ("sepia", "sépia"), ("contraste", "contraste")]
@@ -31,8 +35,8 @@ def head_script() -> str:
 
 
 def estilo() -> str:
-    """Todos os <style> do index.html (o CSS inline)."""
-    return "".join(re.findall(r"<style>(.*?)</style>", SRC, re.S))
+    """Todos os <style> do index.html (tokens dos temas, inline) + office.css e lateral.css (componentes, v3)."""
+    return "".join(re.findall(r"<style>(.*?)</style>", SRC, re.S)) + OCSS + LCSS
 
 
 # --- contraste (copiado do contraste.py do TEMAS) ---
@@ -150,7 +154,7 @@ def pares(tema: str) -> list[tuple[str, str, str, float]]:
           ("--well-focus/#2a2f3e (foco sobre o chão do escritório)", c("--well-focus"), "#2a2f3e", ui),
           ("--warn/--now-bg (.steps .now)", c("--warn"), resolver(g["--now-bg"], g), txt),
           ("--text/--act-bg (li.act)", c("--text"), resolver(g["--act-bg"], g), txt)]
-    if tema != "escuro":   # CA19: no escuro --ctl = --line (decisão do tech lead)
+    if True:   # CA19 / v3 CA-4: --ctl ≥ 3:1 em todos os temas (no escuro deixou de ser = --line)
         for bg in ("--bg", "--panel"):
             P.append((f"--ctl/{bg}", c("--ctl"), c(bg), ui))
         for bg in ("--q-col", "--q-card"):
@@ -174,35 +178,29 @@ def pares(tema: str) -> list[tuple[str, str, str, float]]:
 
 
 class SelectorTest(unittest.TestCase):
-    def test_select_no_header_entre_volume_e_live(self):
-        # CA14: <select id="tema" aria-label="Tema"> nativo, depois de #music/#vol e antes de #live, dentro do <header>
+    # v3 (CA-1): o selector saiu do cabeçalho para a secção «Tema» do ⚙; a gravação e o 1.º paint ficam no index.html
+    def test_select_no_painel_e_nao_no_header(self):
         h = SRC[SRC.index("<header>"):SRC.index("</header>")]
-        i = h.index('<select id="tema" aria-label="Tema">')
-        self.assertLess(h.index('id="music"'), i)
-        self.assertLess(h.index('id="vol"'), i)
-        self.assertLess(i, h.index('id="live"'))
-        self.assertEqual(SRC.count('id="tema"'), 1)
+        for i in ('id="tema"', 'id="bell"', 'id="music"', 'id="vol"'):
+            self.assertNotIn(i, h)
+        self.assertIn('<h3 id="def-th">Tema</h3><select id="def-tema" aria-label="Tema">', DEF)
 
     def test_opcoes_e_ordem(self):
-        sel = re.search(r'<select id="tema"[^>]*>(.*?)</select>', SRC, re.S).group(1)
-        self.assertEqual(re.findall(r'<option value="([^"]*)">([^<]*)</option>', sel), OPCOES)
-        self.assertNotIn("selected", sel)   # defeito auto vem da 1.ª opção / do script
+        m = re.search(r"export const TEMAS = (\[.*?\]);\n", DEF)
+        self.assertEqual([tuple(x) for x in json.loads(m.group(1))], OPCOES)
+        self.assertIn('${TEMAS.map(([v, r]) => `<option value="${v}">${r}</option>`).join("")}', DEF)
 
     def test_alvo_de_toque_e_foco(self):
-        # CA25: 44 px; o foco usa o contorno global (--focus) ou o do browser
-        self.assertRegex(estilo(), r"#tema\s*\{[^}]*min-height:\s*44px")
-        self.assertRegex(estilo(), r"#tema\s*\{[^}]*font-size:\s*16px")   # o iOS faz zoom em selects < 16 px
-        self.assertRegex(estilo(), r"#bell, #music, #tema \{[^}]*border: 1px solid var\(--ctl\)")
+        # CA25: 44 px e 16 px (o iOS faz zoom em selects < 16 px); borda --ctl
+        self.assertRegex(DEFCSS, r"#def-tema \{[^}]*min-height: 44px[^}]*border: 1px solid var\(--ctl\)[^}]*font-size: 16px")
         # CA16: no alto contraste o foco é um contorno de 2 px na cor --focus (amarelo) em todos os controlos
         self.assertIn('[data-theme="contraste"] :focus-visible { outline: 2px solid var(--focus);', estilo())
 
     def test_change_aplica_e_grava_em_try(self):
-        # CA22/CA25: change → temaAplicar + localStorage["tema"] em try/catch
-        m = re.search(r'\$\("#tema"\)\.onchange = \(e\) => \{(.*)\};', SRC)
-        self.assertIsNotNone(m)
-        self.assertIn("temaAplicar(e.target.value)", m.group(1))
-        self.assertRegex(m.group(1), r'try \{ localStorage\.setItem\("tema", temaEscolha\); \} catch')
-        self.assertIn('$("#tema").value = temaEscolha;', SRC)
+        # CA22/CA25: change → temaAplicar + localStorage["tema"] em try/catch (api.tema do ⚙)
+        self.assertIn('const tema = { valor: () => temaEscolha, aplicar: (v) => { temaAplicar(v); try { localStorage.setItem("tema", temaEscolha); } catch {} } };', SRC)
+        self.assertIn('$("#def-tema").addEventListener("change", (e) => A.tema?.aplicar(e.target.value));', DEF)
+        self.assertIn('$("#def-tema").value = A.tema.valor();', DEF)
 
 
 class HeadTest(unittest.TestCase):
@@ -317,10 +315,10 @@ class ContrasteTest(unittest.TestCase):
         self.assertNotIn("--probe-off", SRC)
         self.assertRegex(estilo(), r"#office \.seat:focus-visible > rect:first-of-type \{ stroke: var\(--well-focus\)")
 
-    def test_escuro_ctl_igual_a_line(self):
-        # CA19: decisão do tech lead (aspecto actual no escuro)
+    def test_escuro_ctl_contorno_visivel(self):
+        # v3 CA-4 (substitui o CA19 «--ctl = --line»): bordas de controlos a #6a7493 (≥ 3:1 no painel e no fundo); --line não muda
         g = tokens_globais()["escuro"]
-        self.assertEqual(g["--ctl"], g["--line"])
+        self.assertEqual((g["--ctl"], g["--line"]), ("#6a7493", "#2c3245"))
 
 
 # --- script do <head> em node, com document/localStorage/matchMedia falsos ---

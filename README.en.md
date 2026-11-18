@@ -55,17 +55,17 @@ There are two ways to install the Lite:
    [Claude credentials](#claude-credentials)).
    Install `gh` following the [official instructions for Ubuntu](https://github.com/cli/cli/blob/trunk/docs/install_linux.md);
    for `gh auth login`, preferably use a [token limited to the Office repositories](#github-token).
-3. **Download and install the Office.** The URL is pinned to the version (`v0.2.0`), so you always read the same
+3. **Download and install the Office.** The URL is pinned to the version (`v0.3.0`), so you always read the same
    script that the book and this README describe.
    **Careful way** (recommended: you read the script before running it):
    ```bash
-   curl -fsSLO https://raw.githubusercontent.com/MozThinker/squad-office-lite/v0.2.0/get.sh
+   curl -fsSLO https://raw.githubusercontent.com/MozThinker/squad-office-lite/v0.3.0/get.sh
    less get.sh
-   bash get.sh --versao 0.2.0
+   bash get.sh --versao 0.3.0
    ```
    **One command:**
    ```bash
-   curl -fsSL https://raw.githubusercontent.com/MozThinker/squad-office-lite/v0.2.0/get.sh | bash -s -- --versao 0.2.0
+   curl -fsSL https://raw.githubusercontent.com/MozThinker/squad-office-lite/v0.3.0/get.sh | bash -s -- --versao 0.3.0
    ```
    > This command downloads a script from the internet and runs it on your server, as your user. Only do it with
    > URLs you trust, and preferably read it first. `get.sh` checks the package's sha256: that catches a corrupted
@@ -78,14 +78,14 @@ There are two ways to install the Lite:
    that is what the careful way is for. Options (after `bash -s --` in the one-line command, or after `bash get.sh`):
    - `--sem-perguntas` (no questions): the answers come from the environment (see the header of `install.sh`;
      `OFFICE_GIT_NOME` and `OFFICE_GIT_EMAIL` for the git identity; without them, and with no identity in git, it only
-     warns). E.g.: `curl -fsSL …/get.sh | bash -s -- --versao 0.2.0 --sem-perguntas`;
-   - `--versao X.Y.Z`: installs that version instead of the latest (`… | bash -s -- --versao 0.2.0`);
+     warns). E.g.: `curl -fsSL …/get.sh | bash -s -- --versao 0.3.0 --sem-perguntas`;
+   - `--versao X.Y.Z`: installs that version instead of the latest (`… | bash -s -- --versao 0.3.0`);
    - any other options are passed on to `install.sh` (e.g. `--proxy traefik --rede <rede>`).
 
    **Optional origin check.** The sha256 only confirms that the package is not corrupted. To confirm that it was
    built by the public repository (GitHub attestation; needs `gh` logged in), download the package manually and run:
    ```bash
-   gh attestation verify squad-office-lite-0.2.0.tar.gz --repo MozThinker/squad-office-lite
+   gh attestation verify squad-office-lite-0.3.0.tar.gz --repo MozThinker/squad-office-lite
    ```
    Only versions published with an attestation pass. A failure here is a reason not to install and to report it (see
    [`SECURITY.en.md`](SECURITY.en.md)).
@@ -126,7 +126,7 @@ needs no restart. If you changed the `raizes`, run `./install.sh` again (it does
 
 The same `get.sh`, without `--versao` (it installs the latest published version; read the warning in “Installation”):
 ```bash
-curl -fsSL https://raw.githubusercontent.com/MozThinker/squad-office-lite/v0.2.0/get.sh | bash
+curl -fsSL https://raw.githubusercontent.com/MozThinker/squad-office-lite/v0.3.0/get.sh | bash
 ```
 The installed version moves to `~/squad-office-lite.anterior-<data>` and the new one goes to `~/squad-office-lite`.
 `~/office-lite` (config, `.env`, credentials and data) is not touched by `get.sh`; `install.sh` only asks again for
@@ -447,17 +447,17 @@ your PC. You don't install `claude`, `gh`, `git` or Python: they come in the run
    ```bash
    mkdir -p ~/office && cd ~/office
    ```
-3. **Download the `compose.yaml`** for version 0.2.0. The Office and runner images are pinned by digest: what runs is
+3. **Download the `compose.yaml`** for version 0.3.0. The Office and runner images are pinned by digest: what runs is
    always what was published with this version.
    In PowerShell (it's `curl.exe`, not `curl`):
    ```powershell
-   curl.exe -fsSLO https://github.com/MozThinker/squad-office-lite/releases/download/v0.2.0/compose.yaml
+   curl.exe -fsSLO https://github.com/MozThinker/squad-office-lite/releases/download/v0.3.0/compose.yaml
    ```
    In the Terminal:
    ```bash
-   curl -fsSLO https://github.com/MozThinker/squad-office-lite/releases/download/v0.2.0/compose.yaml
+   curl -fsSLO https://github.com/MozThinker/squad-office-lite/releases/download/v0.3.0/compose.yaml
    ```
-   You can also download it with the browser, from the `v0.2.0` release page, and save it in this folder as
+   You can also download it with the browser, from the `v0.3.0` release page, and save it in this folder as
    `compose.yaml`. To change the port or the projects folder, see
    [Changing the port, the address or the projects folder](#changing-the-port-the-address-or-the-projects-folder) (optional).
    **On Linux**, create the `.env` with your user and group now, before step 4, so that the project files belong to
@@ -537,7 +537,7 @@ Without a `.env` the defaults apply. To change them, download the release's `env
 `compose.yaml` folder, remove the `#` from the lines you want to change and run `docker compose up -d` (on Linux you
 already have a `.env` from step 3: don't replace it, add the lines to it):
 ```powershell
-curl.exe -fsSLo .env https://github.com/MozThinker/squad-office-lite/releases/download/v0.2.0/env.example
+curl.exe -fsSLo .env https://github.com/MozThinker/squad-office-lite/releases/download/v0.3.0/env.example
 ```
 (in the Terminal, `curl` instead of `curl.exe`). The attachment is called `env.example` because GitHub renames
 attachments whose names start with a dot.
@@ -767,7 +767,7 @@ it read-only and uses it to draw «Primeiros passos» ("First steps") and the «
 runner hasn't checked in since HH:MM") banner (more than 3 min without a pass). Only values from a known list, never
 secrets, paths or command output:
 ```json
-{"v": 1, "em": "2026-11-08T19:30:00+00:00", "versao": "0.2.0",
+{"v": 1, "em": "2026-11-08T19:30:00+00:00", "versao": "0.3.0",
  "claude": "ok|falta", "credencial": "ok|falta|modo", "gh": "ok|sem sessão"}
 ```
 `credencial` says whether there is a valid credential (`claude.env`, `runner.env` or the `claude` login), without
@@ -1126,6 +1126,16 @@ indisponível`: folder missing or not writable). Success: **202** `{"id", "accao
   carry only the squad, project, status and ids, never the task text.
 - **Progress bar:** phases SPEC → PLAN → CODE → QA → PR for `goal` tasks, and an estimate from the median of the
   latest tasks completed by the same squad and mode.
+- **Office (0.3.0):** a counters bar (rooms, agents, working, subagents, «à tua espera» ("waiting for you") = open
+  approvals + PRs, failures) and «precisa de ti» ("needs you") notices with Reply/View; ⚙ holds music, volume, theme,
+  notifications and «Dia e noite» (day and night). Side list Tarefa | Agentes | Entregas (Task | Agents | Deliveries):
+  `/` searches an agent and «Seguir» (Follow) tracks it; Activity and «O meu dia» (My day: time working and waiting,
+  «Ver tabela»). **Deliveries** (ADR-014, `GET /api/entregas`): what was finished in the last 7 days, "unread" in the
+  last 24 h. **Day replay** (ADR-015, `GET /api/replay?dia=YYYY-MM-DD`, today and the 6 days before): the day rebuilt
+  from task metas and transcripts at 60×/180×/600×, with no new writes. The task panel shows how the run ended
+  (ADR-013: denied tools and API errors, read from `claude.log`). **Demo:** `/?demo=1` shows the office with made-up
+  data, without touching yours. The new `/api/state` fields are additive: `espera`, `falhas_exec`,
+  `tasks[].titulo/fim`, `tarefas/linhas/modelo/ramo` per agent and `today.inicio/intervalos`.
 
 ### Security
 
@@ -1272,4 +1282,5 @@ architecture decisions are in `DECISIONS.md`.
 
 ## License
 
-[MIT](LICENSE).
+[MIT](LICENSE). The Pixelify Sans typeface used in titles (`static/fonts/`) is under the SIL Open Font License
+1.1 (`static/fonts/OFL.txt`).

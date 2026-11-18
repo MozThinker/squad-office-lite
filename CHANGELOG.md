@@ -1,5 +1,28 @@
 # Changelog
 
+## Lite 0.3.0 (2026-11-18)
+
+Office v3 no Lite (porte do Squad Office): escritório legível no telemóvel, barra de contadores, avisos, lista de
+agentes, Actividade, O meu dia, Entregas, replay do dia, dia e noite e modo demonstração (ADR-013…016). Sem chaves
+novas no `office.yaml` (`versao: 1`), contratos v1 iguais, nenhuma escrita nova no servidor e o runner sem mudanças.
+
+- **Legibilidade:** cabeçalho numa linha; música, volume, tema, notificações e «Dia e noite» passam para o ⚙; letra
+  ≥ 12 px e alvos de 44 px; letra Pixelify Sans (SIL OFL 1.1) só nos títulos. Escritório com ≈ 830 px no portátil.
+- **Barra de contadores** «salas · agentes · a trabalhar · subagentes · à tua espera · falhas» e **avisos «precisa
+  de ti»** com Responder/Ver, em vez da faixa de PR. «À tua espera» = aprovações em aberto + PRs (o Quadro mostra o
+  mesmo número). Atalhos `P`, `?` e `/`.
+- **Como acabou a execução (ADR-013):** recusas de ferramentas e erros da API no painel da tarefa, lidos do
+  `claude.log`, com a dica de `runner.ferramentas`; o estado `interrompida` conta como falha.
+- **Lista lateral** Tarefa | Agentes | Entregas, com pesquisa `/` e «Seguir»; Actividade em linhas; O meu dia com o
+  tempo a trabalhar e à espera e «Ver tabela». **Entregas (ADR-014)**: `GET /api/entregas`, só ao abrir o separador.
+- **Replay do dia (ADR-015):** `GET /api/replay?dia=`, até 6 dias atrás, a 60×/180×/600×, reconstruído das metas e
+  dos transcripts, sem escrita nova. Progresso 4/7, linhas, modelo e ramo por agente.
+- **Dia e noite** pelas horas no `fuso` da config (desligável no ⚙) e **modo demonstração** em `/?demo=1`.
+- Separador do browser com o título do pedido; painel lateral com scroll próprio.
+- **Interface em módulos (ADR-016):** `index.html` com tecto de 95 106 B (ficou com ≈ 76 KB); o resto em ficheiros
+  estáticos carregados a pedido. Módulos novos do servidor: `entregas.py` e `replay.py` (no `Dockerfile`).
+- **CI:** proposta em `docs/propostas-ci/ci-v3.patch` para compilar os módulos novos no passo «Python compila».
+
 ## Lite 0.2.0 (2026-11-17)
 
 Docker rootless na VPS (ADR-009), documentação e modelos para os testers da comunidade (agora também em inglês) e a

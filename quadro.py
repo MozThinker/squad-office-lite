@@ -39,7 +39,7 @@ PR_OPEN = re.compile(r"(https://github\.com/[\w.-]+/[\w.-]+/pull/\d+) \((open(?:
 PR_ANY = re.compile(r"(https://github\.com/[\w.-]+/[\w.-]+/pull/\d+)(?: \(([a-z, ]{1,30})\))?")
 TID = re.compile(r"[A-Za-z0-9._-]{1,120}")
 SLUG_PREFIX = re.compile(r"^\d{8}-\d{4}-")
-FAIL = ("erro", "incompleta", "morreu")
+FAIL = ("erro", "incompleta", "morreu", "interrompida")   # interrompida: o runner não a grava (metas de fora)
 SQUAD_FAIL = FAIL + ("falhou",)
 # execuções de rotina das squads: um cartão por squad + mode + dia local; estes modes ficam individuais
 INDIVIDUAIS = ("task", "goal", "tarefa", "estudo")

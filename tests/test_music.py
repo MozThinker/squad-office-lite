@@ -63,10 +63,10 @@ class MusicIndexTest(unittest.TestCase):
         src = INDEX.read_text(encoding="utf-8")
         start = src.index("// ---- música de fundo")
         end = src.index("\n// arranque:", start)
-        outside = src[:start] + src[end:]
+        outside = src[:start] + src[end:] + (INDEX.parent / "office.css").read_text(encoding="utf-8")   # CSS de componentes (v3)
         markers = ("#music", "#vol", 'id="music"', 'id="vol"', "jt?.update")
         lines = [l for l in outside.splitlines() if any(m in l for m in markers) or l.strip() == "musicRoom();"]
-        self.assertEqual(len(lines), 7, lines)  # 3 CSS + 2 HTML + paint() + tick()
+        self.assertEqual(len(lines), 2, lines)  # paint() + tick(): v3 tirou o botão e o volume do cabeçalho (estão no ⚙)
         total = len(src[start:end].encode()) + sum(len(l.encode()) + 1 for l in lines)
         self.assertLessEqual(total, 3 * 1024)
 

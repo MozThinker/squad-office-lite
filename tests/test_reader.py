@@ -381,12 +381,15 @@ class TranscriptHttpTest(unittest.TestCase):
 class RulesTest(unittest.TestCase):
     def test_stdlib_only(self):
         # AC-1
-        for name in ("server.py", "reader.py", "aprovacoes.py", "quadro.py", "progresso.py", "lancar.py"):
+        for name in ("server.py", "reader.py", "aprovacoes.py", "quadro.py", "progresso.py", "lancar.py", "entregas.py",
+                     "replay.py"):
             tree = ast.parse((ROOT / name).read_text())
             mods = {a.name.split(".")[0] for n in ast.walk(tree) if isinstance(n, ast.Import) for a in n.names}
             mods |= {n.module.split(".")[0] for n in ast.walk(tree) if isinstance(n, ast.ImportFrom) and n.module}
             with self.subTest(name=name):
-                self.assertLessEqual(mods - {"reader", "aprovacoes", "biblioteca", "quadro", "progresso", "push", "lancar", "officecfg"}, set(sys.stdlib_module_names) | {"__future__"})
+                locais = {"reader", "aprovacoes", "biblioteca", "quadro", "progresso", "push", "lancar", "officecfg",
+                          "entregas", "replay"}
+                self.assertLessEqual(mods - locais, set(sys.stdlib_module_names) | {"__future__"})
 
     def test_static_no_external_scripts(self):
         rx = re.compile(r"<(?:script|link)\b[^>]*\b(?:src|href)\s*=\s*[\"']?(?:https?:)?//", re.I)

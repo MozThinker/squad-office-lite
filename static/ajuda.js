@@ -89,3 +89,50 @@ export function projectoNovo(filtro, cfg) {
   const l = cfg?.lancar?.projectos;
   return Array.isArray(filtro) && filtro.length === 1 ? filtro[0] : Array.isArray(l) && l.length === 1 ? l[0] : "outro";
 }
+
+// ---- v3 (CA-17): como acabou a execução. «N recusas: Bash, …» e a dica (a mesma do README «O que fazer se…»)
+export const DICA_RECUSAS = "Para o runner deixar a squad usar estas ferramentas, acrescenta a regra a `runner.ferramentas` no `office.yaml` (README, «O que fazer se…»).";
+export function recusasTexto(fim) {
+  const n = fim?.recusas;
+  if (!(Number.isInteger(n) && n > 0)) return null;
+  const f = Array.isArray(fim.ferramentas) ? fim.ferramentas.filter((x) => typeof x === "string") : [];
+  return `${n} ${n === 1 ? "recusa" : "recusas"}${f.length ? ": " + f.join(", ") : ""}`;
+}
+// erro da API no fim da execução: «erro da API (HTTP 429, api_error)»; null sem erro
+export function erroApiTexto(fim) {
+  if (fim?.erro !== true) return null;
+  const d = [Number.isInteger(fim.http) ? "HTTP " + fim.http : "", typeof fim.motivo === "string" && fim.motivo !== "completed" ? fim.motivo : ""].filter(Boolean);
+  return "a execução acabou com erro" + (d.length ? ` (${d.join(", ")})` : "");
+}
+
+// ---- v3 (CA-8): ajuda do «?» com a legenda dos estados (ROTULOS), os sinais, os contadores e os atalhos. Só o abrir() mexe no DOM
+const COR = [["var(--ok)", "a correr"], ["var(--accent)", "concluída"], ["var(--warn)", `parcial, à espera (${ROTULOS["parcial (PR draft)"]}) ou a demorar`],
+  ["var(--bad)", `falhou, morreu, interrompida ou ${ROTULOS.incompleta.toLowerCase()}`]];
+const SINAIS = [["z", "a secretária já trabalhou nesta execução e está parada"], ["preso?", "sem sinal há 10 min (num terminal, há 25 min)"],
+  ["à espera do terminal", "um comando em primeiro plano sem resposta: a partir de 10 min a âmbar, aos 25 min «preso?»"],
+  ["CI vermelho", "os testes do PR desta tarefa falharam no GitHub"]];
+const CONT = [["salas", "squads com trabalho a correr"], ["agentes", "líderes e subagentes vivos nas tarefas a correr"],
+  ["a trabalhar", "quem está a trabalhar agora"], ["subagentes", "subagentes vivos"],
+  ["à tua espera", "aprovações em aberto e PRs à espera de merge"], ["falhas", "tarefas que morreram e execuções com erro (3 dias)"]];
+const TECLAS = [["P", "abre o pedido mais antigo à tua espera"], ["?", "abre esta ajuda"], ["/", "no Escritório: pesquisa em «Agentes»"],
+  ["Esc", "fecha um painel ou diálogo"]];
+let dlg = null;
+export function abrir({ esc }) {
+  if (!dlg) {
+    const dl = (l, k) => `<dl class="aj">${l.map(([a, b]) => `<dt>${k ? `<kbd>${esc(a)}</kbd>` : esc(a)}</dt><dd>${esc(b)}</dd>`).join("")}</dl>`;
+    dlg = document.createElement("dialog");
+    dlg.id = "ajuda";
+    dlg.className = "pn";
+    dlg.setAttribute("aria-labelledby", "aj-h");
+    dlg.innerHTML = `<div class="rd-top"><h2 id="aj-h">Ajuda</h2><button type="button" data-a="fechar">fechar</button></div><div class="aj-b">`
+      + `<h3>Cores de estado</h3><ul class="aj-c">${COR.map(([c, t]) => `<li><i style="background:${c}"></i><span>${esc(t)}</span></li>`).join("")}</ul>`
+      + `<h3>Sinais no escritório</h3>${dl(SINAIS)}<h3>Contadores do topo</h3>${dl(CONT)}`
+      + `<h3>Atalhos</h3>${dl(TECLAS, true)}<p class="sub">Os atalhos não actuam dentro de campos de texto, com um diálogo aberto nem com Ctrl, Alt ou Cmd.</p></div>`;
+    document.body.append(dlg);
+    dlg.addEventListener("click", (e) => e.target.closest('[data-a="fechar"]') && dlg.close());
+    dlg.addEventListener("close", () => dlg._origem?.focus?.());
+  }
+  dlg._origem = document.activeElement;
+  dlg.showModal();
+  dlg.querySelector('[data-a="fechar"]').focus();
+}

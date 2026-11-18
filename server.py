@@ -3,19 +3,31 @@
 Config: office.yaml (OFFICE_CONFIG, lido por officecfg.py no arranque; inválido/ausente → exemplo + aviso).
 GET /api/config devolve a parte pública (officecfg.publico: sem caminhos, contacto nem segredos).
 
-/api/state só leva metadados, nunca conteúdo de mensagens:
+/api/state só leva metadados, nunca conteúdo de mensagens; de texto das metas só sai, mascarado e cortado, o
+tasks[].titulo (≤ TITULO_MAX = 120: 1.º título do brief ou meta.titulo; separador do browser) e o tasks[].resultado
+(meta.result, ≤ quadro.RESULTADO_MAX = 300):
 - squads formato worktree: TASKS_DIR/<id>/meta.json (runner), os nomes SPEC/PLAN/QA.md e a mtime do heartbeat
 - /data/claude/<worktree com cada não alfanumérico → "->/<sessão>.jsonl (mtime + actividade: só nome/tipo da
   ferramenta e eventos GitHub)
 - .../<sessão>/subagents/agent-*.meta.json (papel, descrição curta, finished) + 1.º timestamp do .jsonl
 - squads formato sessao: SQUADS_DIR/<squad>/<id>/meta.json, só a sessão indicada,
   /data/claude/<claude_dir>/<session_id>.jsonl
-- worktree: fim do <tarefa>/claude.log (só custo, turnos e duração das linhas "result")
+- worktree: fim do <tarefa>/claude.log (custo, turnos e duração das linhas "result" e, da última, um "fim" com 5 chaves
+  sanitizadas: recusas, nomes das ferramentas recusadas, motivo, erro e estado HTTP; ADR-013), só ficheiro regular
 - /data/claude/**/*.jsonl em fundo: só contagens de tokens das linhas "assistant" (por message.id)
 - RUNNER_ESTADO_DIR/estado.json (só leitura): o sinal do runner, só enumerados ("runner"; inválido → null)
+- transcripts seguidos: também contagens de TodoWrite/TaskCreate/TaskUpdate, linhas +/-, modelo e ramo por agente (só
+  inteiros e valores que casam uma regex) e o run_in_background do Bash
+- "espera" (aprovações em aberto + PRs à espera), "falhas_exec" e today.inicio/intervalos: só ids, estados e horas
 
 Excepção, só a pedido: /api/transcript/<id> (reader.py) mostra a entrega e o transcript das sessões
 principais de uma tarefa com meta.json, com máscara de segredos e resultados de ficheiros .env* ocultados.
+/api/entregas (entregas.py, ADR-014): manchete e resumo mascarados das terminadas há ≤ 7 dias, da mesma fonte que a
+entrega do leitor, só a pedido (nunca no poll).
+
+Replay (replay.py, ADR-015): GET /api/replay?dia= reconstrói hoje ou um dos 6 dias anteriores a partir das metas e dos
+transcripts, com o mesmo _live_line sobre um estado próprio; só a allowlist do contrato (sem títulos nem texto). Não
+escreve.
 
 Aprovações (aprovacoes.py): /api/state leva o resumo dos pedidos pendentes (APROVACOES_DIR, só leitura) e o token
 do arranque; /api/aprovacao mostra o corpo a pedido. Única escrita do serviço: POST /api/decisao grava um JSON por
@@ -45,6 +57,7 @@ host; o Office só lê as `<fonte>/.arquivo/` («Ver arquivados» e links antigo
 """
 from __future__ import annotations
 
+import gzip
 import hmac
 import json
 import math
@@ -56,7 +69,7 @@ import sys
 import threading
 import time
 from collections import deque
-from datetime import datetime, time as dtime, timedelta, timezone
+from datetime import date, datetime, time as dtime, timedelta, timezone
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path, PurePosixPath
 from urllib.parse import parse_qs, unquote, urlsplit
@@ -64,12 +77,14 @@ from zoneinfo import ZoneInfo
 
 import aprovacoes
 import biblioteca
+import entregas
 import lancar
 import officecfg
 import progresso
 import push
 import quadro
 import reader
+import replay
 
 TASKS = Path(os.environ.get("TASKS_DIR", "/data/tasks"))
 CLAUDE = Path(os.environ.get("CLAUDE_PROJECTS_DIR", "/data/claude"))
@@ -86,6 +101,7 @@ AGENTS_S = 3 * 86400    # terminadas há mais disto saem sem agentes (nem se olh
 CACHE_S = 5
 DEAD_S = 5 * 60         # heartbeat do lançador parado há mais disto = "morreu"
 STUCK_S = 10 * 60       # ferramenta sem resultado e transcript parado há mais disto = "preso?"
+STUCK_TERM_S = 25 * 60  # idem para um Bash em 1.º plano (testes e builds longos são normais)
 TAIL_FIRST = 256 * 1024  # 1.ª leitura de um transcript para actividade: só o fim
 FEED_N = 30
 HISTORY_DAYS = 30
@@ -97,12 +113,17 @@ SESSION_ID = re.compile(r"[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}")
 ENTRYPOINT_LINES = 30
 
 LOG_TAIL = 65536        # do claude.log só se lê o fim
+LOG_TAIL_MAX = 1 << 20  # ... ou até 1 MiB se a linha result não cabe nos 64 KB (muitas recusas)
+TOOL_NAME = re.compile(r"[A-Za-z0-9_.:-]{1,64}")   # nome de ferramenta recusada que pode sair; o resto é «outra»
+REASON = re.compile(r"[a-z_]{1,40}")               # terminal_reason que pode sair; o resto é «outro»
+FIM_TOOLS_MAX = 5
+INTERVALOS_N = 200      # today.intervalos: no máximo estes (os mais recentes)
 WAIT_STATUS = quadro.WAIT_STATUS
 PR_OPEN = quadro.PR_OPEN
 
 # gen: o POST incrementa; build antigo não fica fresco
 _cache: dict = {"at": 0.0, "body": b"", "gen": 0, "state": {}, "aux": {}}
-_log_cache: dict = {}   # caminho → (mtime_ns, tamanho, (custo, turnos, duração))
+_log_cache: dict = {}   # caminho → (mtime_ns, tamanho, (custo, turnos, duração, fim), parcial: sem os 1 MiB)
 USAGE_EVERY_S = 60
 WEEK_S = 7 * 86400
 USAGE_KEYS = ("input", "output", "cache_read", "cache_creation")
@@ -117,6 +138,7 @@ _state_lock = threading.Lock()   # um /api/state de cada vez (o rastreador abaix
 # no fim do build_state
 _aux: dict = {"metas": [], "result": {}, "titulo": {}}
 INBOX_REF = re.compile(r"inbox/([a-z0-9][a-z0-9._-]*\.md)")
+TITULO_MAX = 120        # tasks[].titulo (separador do browser), já mascarado
 
 # actividade ao vivo: o último tool_use/thinking de cada transcript seguido; só rótulos, nunca texto/comando/caminho
 KINDS = {"Read": "ler", "Grep": "ler", "Glob": "ler", "Edit": "editar", "Write": "editar", "NotebookEdit": "editar",
@@ -142,20 +164,39 @@ BG_LAUNCHED = "Async agent launched"   # resultado do Agent lançado em fundo
 CHECKS = ("pass", "fail", "pending", "skipping", "cancel")
 LIVE_MARKS = (b'"tool_use"', b'"tool_result"', b'"thinking"', b'"pr-link"')
 PENDING_N = 32
+# por agente: progresso, linhas alteradas, modelo e ramo; só inteiros e valores que casam a regex
+MODELO = re.compile(r"[\w.:-]{1,60}")
+RAMO = re.compile(r"[A-Za-z0-9._/-]{1,80}")
+TASK_ID = re.compile(r"[A-Za-z0-9_-]{1,40}")
+TAREFAS_MAX = 999
+LINHAS_MAX = 10 ** 7
+EDIT_TOOLS = ("Edit", "MultiEdit", "Write")
 
 
 class _FileState:
-    __slots__ = ("ino", "off", "act", "last_id", "pending", "bg", "pr", "ci", "primed")
+    __slots__ = ("ino", "off", "act", "last_id", "pending", "bg", "pr", "ci", "primed",
+                 "todo", "tk_n", "tk", "mec", "mais", "menos", "edit_ok", "aprox", "modelo", "ramo")
 
     def __init__(self, ino: int):
         self.ino, self.off = ino, 0
         self.act = None        # (kind, tool, error, at)
         self.last_id = None    # id do último tool_use (o erro só conta no resultado dele)
-        self.pending = {}      # tool_use_id → (kind, classe GitHub | None, gh pr create?), à espera do resultado
+        self.pending = {}      # tool_use_id → (kind, classe GitHub | None, gh pr create?, desde | None, mais, menos),
+        #                        à espera do resultado; desde = at do tool_use de um Bash em 1.º plano; mais/menos =
+        #                        linhas estimadas pelo input de Edit/MultiEdit/Write (inteiros), senão None
         self.bg = {}           # tool_use_ids de Agents lançados em fundo (resultado "Async agent launched…")
         self.pr = None         # ("pr_aberto"|"pr_integrado", url | None, at)
         self.ci = None         # ("ci_vermelho"|"ci_verde", at)
-        self.primed = False    # a 1.ª leitura não enche o feed
+        self.primed = False    # a 1.ª leitura não enche o feed (e o replay nunca o põe a True)
+        self.todo = None       # (feitas, total) do último TodoWrite; None = todos não era lista
+        self.tk_n = 0          # TaskCreate vistos
+        self.tk = {}           # taskId → "completed" | "deleted" | "outro" (≤ TAREFAS_MAX ids)
+        self.mec = None        # último mecanismo usado: "todo" | "task" | None
+        self.mais = self.menos = 0   # linhas alteradas (tecto LINHAS_MAX)
+        self.edit_ok = False   # houve pelo menos uma edição com sucesso
+        self.aprox = False     # estimativa pelo input, ou a 1.ª leitura começou pelo fim (TAIL_FIRST)
+        self.modelo = None     # message.model da última linha assistant seguida, se casa MODELO
+        self.ramo = None       # gitBranch da última linha user/assistant seguida, se casa RAMO
 
 
 _live: dict = {}        # transcript → _FileState
@@ -258,6 +299,8 @@ def configurar(cfg: dict, aviso: str | None = None) -> None:
     lancar.configurar(cfg)
     push.configurar(cfg)
     biblioteca.configurar(cfg)
+    entregas.configurar(cfg)
+    replay.configurar(cfg)
     BIBLIOTECA = biblioteca.Indice(biblioteca.dirs(cfg, BIBLIOTECA_DIR), TASKS, APROVACOES)
     # o índice das `<fonte>/.arquivo/` só varre quando é pedido («Ver arquivados», link antigo de um item arquivado)
     BIBLIOTECA_ARQ = biblioteca.Indice(biblioteca.dirs(cfg, BIBLIOTECA_DIR), TASKS, APROVACOES, arquivo=True)
@@ -285,37 +328,84 @@ def _aware(s) -> datetime | None:
     return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
 
 
-def _log_result(path: Path) -> tuple:
+def _fim(d: dict) -> dict:
+    # ADR-013: da linha "result" só saem estas 5 chaves, sanitizadas; dos permission_denials só o nome da ferramenta
+    pd = d.get("permission_denials")
+    pd = pd if isinstance(pd, list) else []
+    tools = []
+    for x in pd:
+        name = x.get("tool_name") if isinstance(x, dict) else None
+        name = name if isinstance(name, str) and TOOL_NAME.fullmatch(name) else "outra"
+        if name not in tools and len(tools) < FIM_TOOLS_MAX:
+            tools.append(name)
+    why = d.get("terminal_reason")
+    http = d.get("api_error_status")
+    return {"recusas": len(pd), "ferramentas": tools, "erro": d.get("is_error") is True,
+            "motivo": None if why is None else why if isinstance(why, str) and REASON.fullmatch(why) else "outro",
+            "http": http if isinstance(http, int) and not isinstance(http, bool) and 100 <= http <= 599 else None}
+
+
+def _log_scan(path: Path, correr: bool = False) -> tuple:
     # linhas {"type": "result"} do fim do claude.log (uma por run; --resume acrescenta outra):
-    # custo = total_cost_usd da última (já acumulado na sessão), turnos e duração = soma de todas; nada mais sai daqui
+    # custo = total_cost_usd da última (já acumulado na sessão), turnos e duração = soma de todas,
+    # fim = _fim da última (um --resume sem recusas limpa as anteriores); nada mais sai daqui.
+    # correr: o log cresce a cada build e a linha result ainda não existe → só os 64 KB (sem releitura de 1 MiB)
     try:
-        st = path.stat()
+        st = path.lstat()   # só ficheiro regular: um FIFO bloqueava o open com o _state_lock na mão; symlink não
     except OSError:
-        return None, None, None
+        return None, None, None, None
+    if not stat.S_ISREG(st.st_mode):
+        return None, None, None, None
     hit = _log_cache.get(str(path))
-    if hit and hit[:2] == (st.st_mtime_ns, st.st_size):
+    if hit and hit[:2] == (st.st_mtime_ns, st.st_size) and (correr or not hit[3]):
         return hit[2]
-    res = (None, None, None)
-    try:
-        with path.open("rb") as f:
-            f.seek(max(0, st.st_size - LOG_TAIL))
-            tail = f.read(LOG_TAIL)
-    except OSError:
-        return res
-    results = []
-    for line in tail.splitlines():
+    res = (None, None, None, None)
+    results, last, parcial = [], None, False
+    for janela in (LOG_TAIL, LOG_TAIL_MAX):
         try:
-            d = json.loads(line)
-        except ValueError:
-            continue
-        if isinstance(d, dict) and d.get("type") == "result":
-            results.append((_num(d.get("total_cost_usd")), _int(d.get("num_turns")), _num(d.get("duration_ms"))))
+            fd = os.open(path, os.O_RDONLY | os.O_NONBLOCK | os.O_NOFOLLOW | os.O_CLOEXEC)
+            with os.fdopen(fd, "rb") as f:
+                if not stat.S_ISREG(os.fstat(f.fileno()).st_mode):
+                    return res
+                f.seek(max(0, st.st_size - janela))
+                tail = f.read(janela)
+        except OSError:
+            return res
+        lines = tail.splitlines()
+        cortada = st.st_size > janela and bool(lines) and b'"result"' in lines[0]
+        results, last = [], None
+        for line in lines:
+            if b'"result"' not in line:
+                continue
+            try:
+                d = json.loads(line)
+            except (ValueError, RecursionError):   # JSON muito aninhado não pode deitar abaixo o /api/state
+                continue
+            if isinstance(d, dict) and d.get("type") == "result":
+                results.append((_num(d.get("total_cost_usd")), _int(d.get("num_turns")), _num(d.get("duration_ms"))))
+                last = d
+        # a última linha result pode ter ficado cortada no início da janela: tenta uma vez com 1 MiB
+        if st.st_size <= janela or (results and not cortada):
+            break
+        if correr:
+            parcial = True
+            break
     if results:
         turns = [t for _, t, _ in results if t is not None]
         ms = [x for _, _, x in results if x is not None]
-        res = (results[-1][0], sum(turns) if turns else None, sum(ms) / 1000 if ms else None)
-    _log_cache[str(path)] = (st.st_mtime_ns, st.st_size, res)
+        res = (results[-1][0], sum(turns) if turns else None, sum(ms) / 1000 if ms else None, _fim(last))
+    _log_cache[str(path)] = (st.st_mtime_ns, st.st_size, res, parcial)
     return res
+
+
+def _log_result(path: Path, correr: bool = False) -> tuple:
+    # (custo, turnos, duração) do fim do claude.log
+    return _log_scan(path, correr)[:3]
+
+
+def _log_fim(path: Path) -> dict | None:
+    # como acabou a última execução (_fim) ou None sem claude.log/linha "result"
+    return _log_scan(path)[3]
 
 
 def _windows(now: float) -> tuple[datetime, datetime]:
@@ -465,10 +555,10 @@ def _push_loop() -> None:
         time.sleep(max(1, PUSH_EVERY_S - (time.monotonic() - t0)))
 
 
-def _costs(m: dict, squad: str, workdir: Path) -> tuple:
+def _costs(m: dict, squad: str, workdir: Path, correr: bool = False) -> tuple:
     cost, turns, dur = _num(m.get("cost_usd")), _int(m.get("turns")), _num(m.get("duration_s"))
     if cost is None and FORMATO.get(squad) == "worktree":
-        cost, t, d = _log_result(workdir / "claude.log")
+        cost, t, d = _log_result(workdir / "claude.log", correr)
         turns = turns if turns is not None else t
         dur = dur if dur is not None else d
     return cost, turns, dur
@@ -644,11 +734,92 @@ def _gh_event(fs: _FileState, ctx: tuple, event: str, url, at: str, tool) -> Non
         fs.pr = (event, url, at)
         # o mesmo PR visto noutro transcript da tarefa (subagente + principal) não repete no feed
         key = (ctx[0], ctx[1], event, _pr_num(url)) if url else None
-        if key and any(e.get("_pr") == key for e in _feed):
+        # sem primed o _emit não faz nada: o replay (outra thread) nunca lê o _feed
+        if key and fs.primed and any(e.get("_pr") == key for e in _feed):
             return
     elif event.startswith("ci_"):
         fs.ci = (event, at)
     _emit(fs, ctx, event, tool, event == "ci_vermelho", at, key)
+
+
+def _modelo_ramo(d: dict, msg: dict, fs: _FileState, kind: str) -> None:
+    # valem os da última linha seguida; o que não casa a regex fica None (nunca sai texto livre)
+    if kind == "assistant":
+        m = msg.get("model")
+        fs.modelo = m if isinstance(m, str) and m != "<synthetic>" and MODELO.fullmatch(m) else None
+    r = d.get("gitBranch")
+    fs.ramo = (r if isinstance(r, str) and RAMO.fullmatch(r) and ".." not in r and r[0] not in "-/" else None)
+
+
+def _nlinhas(s) -> int:
+    # "a\nb\n" e "a\nb" = 2; vazio = 0
+    return s.count("\n") + (not s.endswith("\n")) if isinstance(s, str) and s else 0
+
+
+def _estimativa(name, inp) -> tuple:
+    # (mais, menos) pelo input de uma edição, só como inteiros; as strings saem logo de âmbito
+    if name not in EDIT_TOOLS or not isinstance(inp, dict):
+        return None, None
+    if name == "Write":
+        return _nlinhas(inp.get("content")), 0
+    edits = inp.get("edits") if name == "MultiEdit" else [inp]
+    pares = [e for e in edits if isinstance(e, dict)] if isinstance(edits, list) else []
+    return (sum(_nlinhas(e.get("new_string")) for e in pares), sum(_nlinhas(e.get("old_string")) for e in pares))
+
+
+def _linhas(fs: _FileState, tur, e_mais: int, e_menos: int) -> None:
+    # edição com sucesso: +/- do structuredPatch (só o 1.º carácter de cada linha); sem patch, a estimativa
+    patch = tur.get("structuredPatch") if isinstance(tur, dict) else None
+    mais = menos = 0
+    if isinstance(tur, dict) and tur.get("type") == "create" and isinstance(tur.get("content"), str):
+        mais = _nlinhas(tur["content"])   # Write de um ficheiro novo: structuredPatch [], o content é exacto
+    elif isinstance(patch, list) and patch:
+        for h in patch:
+            for ln in (h.get("lines") if isinstance(h, dict) and isinstance(h.get("lines"), list) else ()):
+                c = ln[:1] if isinstance(ln, str) else ""
+                mais += c == "+"
+                menos += c == "-"
+    else:
+        mais, menos, fs.aprox = e_mais, e_menos, True
+    fs.mais, fs.menos = min(fs.mais + mais, LINHAS_MAX), min(fs.menos + menos, LINHAS_MAX)
+    fs.edit_ok = True
+
+
+def _progresso(fs: _FileState, name, inp) -> None:
+    # TodoWrite: só todos[].status (vale a última); TaskCreate: +1; TaskUpdate: só taskId e status
+    if name == "TodoWrite":
+        todos = inp.get("todos") if isinstance(inp, dict) else None
+        fs.todo = ((sum(1 for t in todos if isinstance(t, dict) and t.get("status") == "completed"), len(todos))
+                   if isinstance(todos, list) else None)
+        fs.mec = "todo"
+    elif name == "TaskCreate":
+        fs.tk_n = min(fs.tk_n + 1, LINHAS_MAX)
+        fs.mec = "task"
+    elif name == "TaskUpdate":
+        fs.mec = "task"
+        tid = inp.get("taskId") if isinstance(inp, dict) else None
+        st = inp.get("status") if isinstance(inp, dict) else None
+        if not (isinstance(tid, str) and TASK_ID.fullmatch(tid) and isinstance(st, str)):
+            return
+        if tid in fs.tk or len(fs.tk) < TAREFAS_MAX:
+            fs.tk[tid] = st if st in ("completed", "deleted") else "outro"
+
+
+def _extras(fs: _FileState | None) -> dict:
+    # as 4 chaves por agente e do líder no /api/state; sem transcript seguido, tudo None
+    if fs is None:
+        return {"tarefas": None, "linhas": None, "modelo": None, "ramo": None}
+    feitas = total = 0
+    if fs.mec == "todo" and fs.todo:
+        feitas, total = fs.todo
+    elif fs.mec == "task":
+        estados = list(fs.tk.values())
+        total, feitas = fs.tk_n - estados.count("deleted"), estados.count("completed")
+    total = max(0, min(total, TAREFAS_MAX))
+    feitas = max(0, min(feitas, total))
+    return {"tarefas": {"feitas": feitas, "total": total} if total else None,
+            "linhas": {"mais": fs.mais, "menos": fs.menos, "aprox": fs.aprox} if fs.edit_ok else None,
+            "modelo": fs.modelo, "ramo": fs.ramo}
 
 
 def _live_line(d: dict, fs: _FileState, ctx: tuple, mtime: float) -> None:
@@ -659,6 +830,8 @@ def _live_line(d: dict, fs: _FileState, ctx: tuple, mtime: float) -> None:
                   _line_at(d, mtime), None)
         return
     msg = d.get("message")
+    if kind in ("assistant", "user") and isinstance(msg, dict):
+        _modelo_ramo(d, msg, fs, kind)
     content = msg.get("content") if kind in ("assistant", "user") and isinstance(msg, dict) else None
     if not isinstance(content, list):
         return
@@ -672,16 +845,24 @@ def _live_line(d: dict, fs: _FileState, ctx: tuple, mtime: float) -> None:
             uid = b.get("id") if isinstance(b.get("id"), str) else None
             fs.last_id = uid
             if uid:
-                fs.pending[uid] = (act_kind, *_gh_cls(b.get("name"), b.get("input")))
+                # do input do Bash só se lê, além do comando (descartado), o booleano run_in_background
+                inp = b.get("input")
+                fg = b.get("name") == "Bash" and not (isinstance(inp, dict) and inp.get("run_in_background") is True)
+                fs.pending[uid] = (act_kind, *_gh_cls(b.get("name"), inp), at if fg else None,
+                                   *_estimativa(b.get("name"), inp))
                 while len(fs.pending) > PENDING_N:
                     fs.pending.pop(next(iter(fs.pending)))
+            _progresso(fs, b.get("name"), b.get("input"))
             _set_act(fs, ctx, (act_kind, tool, False, at))
         elif kind == "assistant" and bt == "thinking":
             fs.last_id = None
             _set_act(fs, ctx, ("pensar", None, False, at))
         elif kind == "user" and bt == "tool_result":
             rid, err = b.get("tool_use_id"), b.get("is_error") is True
-            was, cls, create = fs.pending.pop(rid, (None, None, False)) if isinstance(rid, str) else (None, None, False)
+            nada = (None, None, False, None, None, None)
+            was, cls, create, _, e_mais, e_menos = fs.pending.pop(rid, nada) if isinstance(rid, str) else nada
+            if e_mais is not None and not err:
+                _linhas(fs, d.get("toolUseResult"), e_mais, e_menos)
             if was == "delegar" and _result_text(b.get("content")).startswith(BG_LAUNCHED):
                 fs.bg[rid] = True
                 while len(fs.bg) > PENDING_N:
@@ -709,6 +890,7 @@ def _live_read(path: Path, fs: _FileState, st, ctx: tuple) -> None:
                 f.seek(st.st_size - TAIL_FIRST)
                 f.readline()   # linha cortada
                 fs.off = f.tell()
+                fs.aprox = True   # o que ficou antes não se contou
             else:
                 f.seek(fs.off)
             for line in f:
@@ -743,14 +925,18 @@ def _track(path: Path, st, ctx: tuple) -> _FileState:
 def _act(fs: _FileState | None) -> dict | None:
     if fs is None or fs.act is None:
         return None
-    return dict(zip(("kind", "tool", "error", "at"), fs.act))
+    out = dict(zip(("kind", "tool", "error", "at"), fs.act))
+    p = fs.pending.get(fs.last_id) if fs.last_id else None
+    if p is not None and p[3]:   # Bash em 1.º plano à espera do resultado: o cliente mostra «terminal há N min»
+        out["desde"] = p[3]
+    return out
 
 
 def _stuck(fs: _FileState | None, mtime: float, now: float) -> bool:
     # o ÚLTIMO tool_use sem resultado (delegar não conta: quem trabalha é o subagente) e transcript parado;
-    # pendentes antigos (interrompidos e retomados) não contam
+    # pendentes antigos (interrompidos e retomados) não contam; um Bash em 1.º plano só aos STUCK_TERM_S
     p = fs.pending.get(fs.last_id) if fs is not None and fs.last_id else None
-    return p is not None and p[0] != "delegar" and now - mtime > STUCK_S
+    return p is not None and p[0] != "delegar" and now - mtime > (STUCK_TERM_S if p[3] else STUCK_S)
 
 
 def _gh_task(states: list) -> dict:
@@ -807,6 +993,7 @@ def _session(project_dir: Path, stem: str, now: float, track, ctx: tuple, states
             "active": not finished and now - mtime < ACTIVE_S,
             "act": _act(fs) if alive else None,
             "stuck": alive and not finished and _stuck(fs, mtime, now),
+            **_extras(fs),
         })
         last = max(last, mtime)
     agents.sort(key=lambda a: a["start"] or "")
@@ -879,6 +1066,50 @@ def _history(days: dict, today_tasks: list) -> tuple[list, dict]:
     return history, summary
 
 
+def _intervalo(m: dict, squad: str, vivo: bool, inicio: datetime, now: float) -> dict | None:
+    # {squad, ini, fim} de uma tarefa que toca hoje («O meu dia»); só squad e horas, nunca texto.
+    # A correr: o finished_at é de uma execução anterior, conta só se viva (fim null)
+    start = _aware(m.get("started_at"))
+    if start is None or start.timestamp() > now:
+        return None
+    fim = None if m.get("status") == "a correr" else _aware(m.get("finished_at"))
+    if fim is None:
+        if not vivo:
+            return None
+    elif fim < inicio:
+        return None
+    return {"squad": squad, "ini": _iso_local(m.get("started_at")),
+            "fim": _iso_local(m.get("finished_at")) if fim else None}
+
+
+def _ordem(iso) -> tuple:
+    # mais antigo primeiro, sem data no fim
+    d = _aware(iso)
+    return (d is None, d.timestamp() if d else 0.0)
+
+
+def _espera(aprov: list, waiting: list) -> dict:
+    # regra única de «à tua espera» (D-3): aprovações em aberto + PRs à espera (drafts contam); recusas não
+    itens = []
+    for a in aprov:
+        fonte, nome = a.get("fonte"), a.get("ficheiro")
+        if not (isinstance(fonte, str) and isinstance(nome, str)) or not (a.get("abertas") or 0) > 0:
+            continue
+        try:   # a aprovação espera desde as 00:00 do dia em que foi criada, no fuso da config
+            desde = datetime.combine(date.fromisoformat(a.get("criado")), dtime(0), LOCAL_TZ).isoformat()
+        except (TypeError, ValueError):
+            desde = None
+        itens.append({"tipo": "aprovacao", "chave": f"apr:{fonte}/{nome}", "fonte": fonte, "ficheiro": nome,
+                      "titulo": a.get("titulo"), "criado": a.get("criado"), "idade_dias": a.get("idade_dias"),
+                      "abertas": a["abertas"], "desde": desde})
+    for w in waiting:
+        itens.append({"tipo": "pr", "chave": f"pr:{w['squad']}/{w['id']}", "id": w["id"], "squad": w["squad"],
+                      "project": w["project"], "pr_url": w["pr_url"], "draft": w["draft"], "finished": w["finished"],
+                      "desde": w["finished"]})
+    itens.sort(key=lambda i: _ordem(i["desde"]))
+    return {"n": len(itens), "itens": itens}
+
+
 def _alerts(dead: list) -> dict:
     items = [f"tarefa:{tid}" for tid in dead]
     return {"count": len(items), "items": sorted(items)}
@@ -905,6 +1136,8 @@ def build_state(now: float | None = None) -> dict:
     tasks, waiting, totals, wins = [], [], _empty_totals(), _windows(now)
     days, today_tasks, dead_ids = _empty_days(now), [], []
     amostras, vivas = {}, []   # barra de progresso (progresso.py): durações das concluídas e tarefas a preencher
+    falhas = []   # falhas_exec: (fim em epoch, item) das terminadas há ≤ AGENTS_S em falha ou com erro da API
+    ivs = []      # today.intervalos: {squad, ini, fim} das tarefas sem dry-run que tocam hoje
     today = datetime.fromtimestamp(now, LOCAL_TZ).date()
     _seen.clear()
     for meta_path, squad in _metas():
@@ -923,7 +1156,7 @@ def build_state(now: float | None = None) -> dict:
         status = m.get("status", "?")
         running = status == "a correr"
         # totais, histórico e "à tua espera" contam todas as metas, antes do corte
-        cost, turns, dur = _costs(m, squad, workdir)
+        cost, turns, dur = _costs(m, squad, workdir, running)
         start = _aware(m.get("started_at"))
         _add_total(totals, squad, start, cost, wins)
         _add_day(days, squad, start, status in DONE_STATUS, cost, dur)
@@ -936,9 +1169,11 @@ def build_state(now: float | None = None) -> dict:
         if start and _local_date(start) == today:
             today_tasks.append((start.timestamp(), cost, tid, squad, m.get("project"), _iso_local(m.get("started_at")),
                                 None if running else _iso_local(m.get("finished_at"))))
+        task = m.get("task")
+        h1 = quadro.titulo_task(task)
+        h1_tab = h1 or (m["titulo"] if isinstance(m.get("titulo"), str) else None)
+        titulo = (" ".join(reader.mask(h1_tab).split())[:TITULO_MAX] or None) if h1_tab else None   # separador
         if "dry-run" not in (m.get("mode"), status):
-            task = m.get("task")
-            h1 = quadro.titulo_task(task)
             aux_metas.append((squad, tid, frozenset(INBOX_REF.findall(task)) if isinstance(task, str) else frozenset(),
                               quadro.chave_titulo(h1)))
             if h1:   # em bruto: o quadro.py mascara só o que emite
@@ -946,9 +1181,19 @@ def build_state(now: float | None = None) -> dict:
             if isinstance(m.get("result"), str):
                 aux_result[(squad, tid)] = m["result"]
             entregue = entregue or (dev and status in ("concluída", "parcial (PR draft)"))
+        dry = "dry-run" in (m.get("mode"), status)
         item = _waiting_item(m, tid, squad) if dev else None
         if item:
-            waiting.append((item["finished"] or "", _iso_local(m.get("started_at")) or "", item))
+            waiting.append((item["finished"] or "", _iso_local(m.get("started_at")) or "", item, dry))
+        # ADR-013: como acabou, só worktree terminadas há ≤ AGENTS_S (a correr: o result é de uma execução anterior)
+        fin_at = None if running else _aware(m.get("finished_at"))
+        recente = fin_at is not None and now - fin_at.timestamp() <= AGENTS_S
+        fim = _log_fim(workdir / "claude.log") if dev and recente else None
+        if recente and not dry and (status in (quadro.FAIL if dev else quadro.SQUAD_FAIL) or (fim and fim["erro"])):
+            falhas.append((fin_at.timestamp(), {
+                "id": tid, "squad": squad, "project": m.get("project"), "status": quadro.txt(str(status), 30),
+                "motivo": fim["motivo"] if fim else None, "http": fim["http"] if fim else None,
+                "erro": bool(fim and fim["erro"]), "finished": _iso_local(m.get("finished_at"))}))
         meta_age = now - meta_path.stat().st_mtime
         if not running and meta_age > RECENT_S:
             continue
@@ -977,10 +1222,15 @@ def build_state(now: float | None = None) -> dict:
             shown = "morreu"
         else:   # heartbeat fresco: o processo está vivo, nunca "parada?"
             shown = "parada?" if running and beat is None and idle > STALE_S else status
+        if not dry:
+            iv = _intervalo(m, squad, live and shown != "parada?", wins[0], now)
+            if iv:
+                ivs.append(iv)
         tasks.append({
             "id": tid,
             "project": m.get("project"),
             "mode": m.get("mode", "task"),
+            "titulo": titulo,
             "status": shown,
             "running": live,
             "branch": m.get("branch") if dev else None,
@@ -998,10 +1248,11 @@ def build_state(now: float | None = None) -> dict:
             "turns": turns,
             "duration_s": dur,
             "lead": {"role": lead, "act": _act(main[0]) if live else None,
-                     "stuck": live and _stuck(main[0], main[1], now)},
+                     "stuck": live and _stuck(main[0], main[1], now), **_extras(main[0])},
             "gh": _gh_task(states),
             "progress": None,
             "resultado": quadro.txt(m.get("result"), quadro.RESULTADO_MAX) or None,
+            "fim": fim,
         })
         if live:
             t = tasks[-1]
@@ -1019,14 +1270,19 @@ def build_state(now: float | None = None) -> dict:
     rest = sorted((t for t in tasks if not t["running"]), key=lambda t: t["started"] or "", reverse=True)
     waiting.sort(key=lambda w: w[:2], reverse=True)
     history, today_sum = _history(days, today_tasks)
+    today_sum["inicio"] = wins[0].isoformat()
+    today_sum["intervalos"] = sorted(ivs, key=lambda iv: _aware(iv["ini"]))[-INTERVALOS_N:]
     _aux = {"metas": aux_metas, "result": aux_result, "titulo": aux_titulo}
+    aprov = aprovacoes.listar(APROVACOES, FILA, LOCAL_TZ, now)
     return {"now": _iso_ts(now), "tasks": running + rest, "totals": totals,
             "waiting": [w[2] for w in waiting], "usage": _usage,
             "feed": sorted(({k: v for k, v in e.items() if k != "_pr"} for e in reversed(_feed)),
                            key=lambda e: e["at"], reverse=True),
             "alerts": _alerts(dead_ids), "history": history, "today": today_sum,
-            "aprovacoes": aprovacoes.listar(APROVACOES, FILA, LOCAL_TZ, now), "token": TOKEN,
-            "runner": runner_estado(), "tarefa_entregue": entregue}
+            "aprovacoes": aprov, "token": TOKEN,
+            "runner": runner_estado(), "tarefa_entregue": entregue,
+            "espera": _espera(aprov, [w[2] for w in waiting if not w[3]]),
+            "falhas_exec": [f for _, f in sorted(falhas, key=lambda f: f[0], reverse=True)]}
 
 
 def runner_estado() -> dict | None:
@@ -1063,22 +1319,8 @@ def runner_estado() -> dict | None:
 
 
 def _log_delivery(path: Path) -> str | None:
-    # só para o leitor: campo "result" da última linha result do fim do claude.log
-    try:
-        with path.open("rb") as f:
-            f.seek(max(0, path.stat().st_size - LOG_TAIL))
-            tail = f.read(LOG_TAIL)
-    except OSError:
-        return None
-    out = None
-    for line in tail.splitlines():
-        try:
-            d = json.loads(line)
-        except ValueError:
-            continue
-        if isinstance(d, dict) and d.get("type") == "result" and isinstance(d.get("result"), str):
-            out = d["result"]
-    return out
+    # leitor e /api/entregas: campo "result" da última linha result do fim do claude.log (reader.log_delivery)
+    return reader.log_delivery(path, LOG_TAIL, LOG_TAIL_MAX)
 
 
 def _entrypoint(path: Path):
@@ -1155,6 +1397,141 @@ def transcript(seg: str, query: str) -> dict | None:
             **reader.page(entries, f, qs.get("q", ""), page), "truncated": truncated}
 
 
+# replay (ADR-015): o mesmo _live_line sobre um estado próprio, nunca o _live; cache e lock dentro do objecto
+REPLAY = replay.Cronologias(_live_line, _FileState, LIVE_MARKS, ACTIVE_S, STUCK_S, STUCK_TERM_S)
+
+
+def _epoch(dt: datetime | None) -> int | None:
+    try:
+        return int(dt.timestamp()) if dt else None
+    except (OverflowError, ValueError, OSError):
+        return None
+
+
+def _fim_a_correr(meta_path: Path, pdir: Path | None, stems: list, now: float) -> int | None:
+    # meta «a correr»: a regra do ao vivo diz se ainda está viva (None); morta (heartbeat parado há > DEAD_S) ou
+    # parada (sem heartbeat e sem actividade há > STALE_S), acaba no maior entre heartbeat + DEAD_S e a última
+    # actividade (meta e transcripts) + STALE_S, nunca depois de agora
+    def mtime(p: Path) -> float | None:
+        try:
+            return os.lstat(p).st_mtime
+        except OSError:
+            return None
+    paths = [meta_path] + [q for st in stems for q in (pdir / f"{st}.jsonl",
+                                                      *(pdir / st / "subagents").glob("agent-*.jsonl"))]
+    last = max((m for q in paths if (m := mtime(q)) is not None), default=0.0)
+    beat = mtime(meta_path.parent / "heartbeat")
+    if (now - beat <= DEAD_S) if beat is not None else (now - last <= STALE_S):
+        return None
+    return int(min(now, max(last + STALE_S, beat + DEAD_S if beat is not None else 0)))
+
+
+def _replay_subagentes(pdir: Path, stems: list, inicio: int) -> list:
+    # metas dos subagentes da tarefa com o .jsonl tocado no dia: no máximo REPLAY_AGENTES, os de mais bytes (os mais
+    # activos), pela ordem de antes (sessão, nome); o tecto põe limite à leitura e ao tamanho de cada quadro
+    cands = []
+    for stem in stems:
+        for meta in sorted((pdir / stem / "subagents").glob("agent-*.meta.json")):
+            try:
+                st = os.lstat(meta.with_name(meta.name.replace(".meta.json", ".jsonl")))
+            except OSError:
+                continue
+            if stat.S_ISREG(st.st_mode) and st.st_mtime >= inicio:
+                cands.append((len(cands), st.st_size, meta))
+    escolhidos = sorted(cands, key=lambda c: (-c[1], c[0]))[:replay.REPLAY_AGENTES]
+    return [meta for _, _, meta in sorted(escolhidos, key=lambda c: c[0])]
+
+
+def _replay_tarefas(inicio: int, fim: int, now: float) -> list:
+    # metas sem dry-run das raízes (só dentro delas: resolve + pasta-mãe, ficheiro regular) que tocam [inicio, fim];
+    # chamar com REPLAY.lock
+    claude_real = CLAUDE.resolve()
+    out = []
+    roots = [(None, TASKS)] + [(sq, SQUADS_DIR / sq) for sq in SQUADS if FORMATO[sq] == "sessao"]
+    for root_sq, root in roots:
+        if not root.is_dir():
+            continue
+        real = root.resolve()
+        for meta_path in sorted(root.glob("*/meta.json")):
+            try:
+                if meta_path.resolve().parent.parent != real or not stat.S_ISREG(meta_path.stat().st_mode):
+                    continue
+            except (OSError, RuntimeError):
+                continue
+            m = _read_json(meta_path)
+            if not isinstance(m, dict) or "dry-run" in (m.get("mode"), m.get("status")):
+                continue
+            squad = root_sq or _meta_squad(m)
+            if squad is None:
+                continue
+            status = m.get("status") if isinstance(m.get("status"), str) else "?"
+            ini = _epoch(_aware(m.get("started_at")))
+            fin = None if status == "a correr" else _epoch(_aware(m.get("finished_at")))
+            if ini is None or ini >= fim or (fin < inicio if fin is not None else status != "a correr"):
+                continue
+            tid = str(m.get("id") or meta_path.parent.name)
+            dev = root_sq is None
+            fases = {}
+            for f in ("SPEC", "PLAN", "QA"):
+                try:
+                    fases[f] = math.ceil((meta_path.parent / f"{f}.md").stat().st_mtime) if dev else None
+                except OSError:
+                    fases[f] = None
+            if dev:
+                pdir = _dev_dir(m, tid)
+                stems = [p.stem for p in pdir.glob("*.jsonl")] if pdir is not None and pdir.is_dir() else []
+            else:
+                sid, cdir = m.get("session_id"), m.get("claude_dir")
+                pdir = CLAUDE / cdir if _safe(cdir) else CLAUDE
+                stems = [sid] if _safe(sid) and _safe(cdir) else []
+            if status == "a correr":
+                fin = _fim_a_correr(meta_path, pdir, stems, now)
+                if fin is not None and fin < inicio:
+                    continue
+            principais, agentes = [], []
+            for stem in sorted(stems):
+                c = REPLAY.do_dia(pdir / f"{stem}.jsonl", inicio, claude_real)
+                if c is not None:
+                    principais.append(c)
+            for meta in _replay_subagentes(pdir, sorted(stems), inicio):
+                c = REPLAY.do_dia(meta.with_name(meta.name.replace(".meta.json", ".jsonl")), inicio, claude_real)
+                if c is None:
+                    continue
+                try:
+                    sm = _read_json(meta) if stat.S_ISREG(meta.lstat().st_mode) else None
+                except OSError:
+                    sm = None
+                sm = sm if isinstance(sm, dict) else {}
+                agentes.append((sm.get("agentType") if _safe(sm.get("agentType")) else "general",
+                                bool(sm.get("finished")), c))
+            out.append({"id": tid, "squad": squad,
+                        "project": m.get("project") if isinstance(m.get("project"), str) else None,
+                        "mode": m.get("mode") if isinstance(m.get("mode"), str) else "task", "status": status,
+                        "ini": ini, "fin": fin, "fases": fases, "principais": principais, "agentes": agentes,
+                        "lead": LEADS[squad]})
+    out.sort(key=lambda tk: (tk["ini"], tk["squad"], tk["id"]))
+    return out
+
+
+def replay_dia(dia, now: float | None = None) -> dict | None:
+    # GET /api/replay?dia=AAAA-MM-DD (ADR-015): só leitura; None = 404
+    now = time.time() if now is None else now
+    j = replay.janela(dia, now)
+    if j is None:
+        return None
+    inicio, fim = j
+    with REPLAY.lock:
+        REPLAY.despejar(now)
+        tarefas = _replay_tarefas(inicio, fim, now)
+        maximo = replay.REPLAY_MAX
+
+        def calcular() -> dict:
+            out = {"v": 1, "dia": dia, "inicio": inicio, "fim": fim, "truncado": False, "quadros": []}
+            out["quadros"], out["truncado"] = REPLAY.quadros(tarefas, inicio, fim, maximo - len(replay.compacto(out)))
+            return out
+        return REPLAY.resposta(replay.firma(dia, inicio, fim, tarefas, maximo), calcular)
+
+
 def _state_cached() -> tuple[bytes, dict, dict]:
     # (corpo do /api/state, o mesmo dict, _aux desse build); refeito no máximo a cada CACHE_S
     with _state_lock:
@@ -1169,6 +1546,9 @@ def _state_cached() -> tuple[bytes, dict, dict]:
 
 
 class Handler(SimpleHTTPRequestHandler):
+    # com nosniff o tipo tem de ser certo; a imagem python:3.13-alpine não tem /etc/mime.types
+    extensions_map = {**SimpleHTTPRequestHandler.extensions_map, ".woff2": "font/woff2"}
+
     def __init__(self, *a, **kw):
         super().__init__(*a, directory=str(STATIC), **kw)
 
@@ -1230,6 +1610,27 @@ class Handler(SimpleHTTPRequestHandler):
             now = time.time()
             out = quadro.resposta(state, aux, QUADRO, TASKS / "inbox", LOCAL_TZ, now, TOKEN)
             lancar.completar(out, LANCAR, QUADRO, quadro.chaves(), LOCAL_TZ, now)
+            self._json(200, json.dumps(out, ensure_ascii=False).encode())
+            return
+        if path == "/api/replay":   # só leitura (ADR-015); os outros parâmetros ignoram-se
+            out = replay_dia(parse_qs(query).get("dia", [None])[0])
+            if out is None:
+                self._json(404, json.dumps({"error": "não encontrado"}, ensure_ascii=False).encode())
+                return
+            body, gz = replay.compacto(out), "gzip" in self.headers.get("Accept-Encoding", "")
+            if gz:
+                body = gzip.compress(body, 6, mtime=0)
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            if gz:
+                self.send_header("Content-Encoding", "gzip")
+            self.send_header("Vary", "Accept-Encoding")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        if path == "/api/entregas":   # só leitura (ADR-014); a query é ignorada
+            out = entregas.listar(TASKS, SQUADS_DIR, BIBLIOTECA, time.time())
             self._json(200, json.dumps(out, ensure_ascii=False).encode())
             return
         if path.startswith("/api/transcript/"):

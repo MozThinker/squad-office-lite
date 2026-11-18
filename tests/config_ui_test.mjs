@@ -69,12 +69,12 @@ test("config ausente: omissões sensatas (marca genérica, uma sala Dev)", () =>
 });
 
 test("AC-a5/a7: título, cabeçalho, fuso e aviso vêm da config; a config é lida antes do 1.º estado", () => {
-  assert.match(HTML, /document\.title = \(n > 0 \? `\(\$\{n\}\) ` : ""\) \+ cfg\.marca;/);
+  assert.match(HTML, /document\.title = \(demo \? "\[demo\] " : ""\) \+ \(n > 0 \? `\(\$\{n\}\) ` : ""\) \+ cfg\.marca;/);   // v3: «[demo] » no modo demonstração
   assert.match(HTML, /\$\("header h1"\)\.textContent = "▣ " \+ cfg\.marca;/);
   assert.match(HTML, /<p id="aviso" role="status" hidden><\/p>/);
   assert.match(HTML, /fetch\("api\/config", \{ cache: "no-store" \}\)/);
   assert.match(HTML, /catch \{ setTimeout\(lerCfg, 5000\); \}/);
-  assert.match(HTML, /lerCfg\(\)\.then\(\(\) => \{ bibRoute\(\); qRoute\(\); tick\(\); setInterval\(tick, 8000\); \}\);/);
+  assert.match(HTML, /boot\.then\(lerCfg\)\.then\(\(\) => \{ bibRoute\(\); qRoute\(\); tick\(\); setInterval\(tick, 8000\); \}\);/);   // v3: depois do demo.js (?demo=1)
   // todos os Intl com o fuso da config (TZ); nenhum fuso fixo
   for (const m of HTML.matchAll(/toLocale(?:Time|Date)?String\("[^"]+", \{([^}]*)\}/g)) if (!/FractionDigits/.test(m[1])) assert.match(m[1], /timeZone: TZ/, m[0]);
   assert.doesNotMatch(HTML, /toLocale(?:Time|Date)?String\("pt-PT"\)/);   // sem opções = sem fuso

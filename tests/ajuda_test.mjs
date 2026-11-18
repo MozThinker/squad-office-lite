@@ -7,6 +7,7 @@ import { ROTULOS, rotuloEstado, rotuloDe, TIPOS, TAMANHOS, dicaErro, lancarParad
   desvioRelogio, COMANDOS_DOCKER, comandos, ondeCorre } from "../static/ajuda.js";
 
 const HTML = readFileSync(new URL("../static/index.html", import.meta.url), "utf8");
+const OCSS = readFileSync(new URL("../static/office.css", import.meta.url), "utf8");   // v3: o CSS dos componentes saiu do index.html
 const T0 = Date.parse("2026-11-08T19:30:00+00:00");
 const RUN = { v: 1, em: "2026-11-08T19:30:00+00:00", versao: "0.1.3", claude: "ok", credencial: "ok", gh: "ok" };
 const min = (n) => n * 60_000;
@@ -128,7 +129,7 @@ test("CA-A6.2: nome das secretárias não usadas ≥ 4,5:1 contra os dois ladril
 });
 
 test("CA-A6.3: foco das secretárias com 2 px de ecrã e cor ≥ 3:1 contra o chão em todos os temas", () => {
-  assert.match(HTML, /#office \.seat:focus-visible > rect:first-of-type \{ stroke: var\(--well-focus\); stroke-width: 2px; vector-effect: non-scaling-stroke; \}/);
+  assert.match(OCSS, /#office \.seat:focus-visible > rect:first-of-type \{ stroke: var\(--well-focus\); stroke-width: 2px; vector-effect: non-scaling-stroke; \}/);
   const focos = [...HTML.matchAll(/--well-focus: (#[0-9a-f]{6})/g)].map((m) => m[1]);
   assert.equal(focos.length, 4);   // escuro, claro, sépia, contraste
   for (const f of focos) for (const bg of ["#2b2f3a", "#262a34", "#0d0f15"]) assert.ok(ratio(f, bg) >= 3, `${f} / ${bg} = ${ratio(f, bg).toFixed(2)}`);
@@ -150,7 +151,7 @@ test("C14.1/B7.4: o painel da tarefa mostra o rótulo e o resultado escapado com
   assert.match(HTML, /"terminou: " \+ rot\(t\.status\)/);
   assert.match(HTML, /import\("\.\/ajuda\.js"\)\.then\(\(m\) => \{ AJ = m; paint\(false\); \}/);
   assert.match(HTML, /<p id="runner-f" role="status" hidden><\/p>/);
-  assert.match(HTML, /#aviso, #runner-f \{/);   // mesmo padrão visual da faixa de config inválida
+  assert.match(OCSS, /#aviso, #runner-f \{/);   // mesmo padrão visual da faixa de config inválida
   assert.match(HTML, /<a href="#quadro\/novo">Criar o primeiro cartão<\/a>/);
   assert.match(HTML, /\$\{esc\(p\.rotulo\)\}\$\{p\.comando \? `<code>\$\{esc\(p\.comando\)\}<\/code>` : ""\}/);
 });

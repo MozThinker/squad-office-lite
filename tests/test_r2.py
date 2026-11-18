@@ -56,10 +56,11 @@ class BackgroundSubagentTest(R2Base):
 
     def test_request_shape_background(self):
         self.task("T1", self.lead(), age=590)
-        self.subm("T1", "S0", "a1", fake.tool_use("b1", "Bash", {"command": "sleep 9"}, age=700), age=700,
+        # Read: um Bash em 1.º plano só fica «preso?» aos 25 min (CA-20)
+        self.subm("T1", "S0", "a1", fake.tool_use("b1", "Read", age=700), age=700,
                   toolUseId="u0", requestShape="background")
         self.beat()
-        self.assertEqual(self.acts(), [("Bash", True)])
+        self.assertEqual(self.acts(), [("Read", True)])
 
     def test_launched_result_without_shape(self):
         self.task("T1", self.lead(), age=5)

@@ -60,7 +60,7 @@ test("AC-23: definicoes.* só entram por import() e o index.html cresce ≤ 4 KB
 
 test("AC-27: nenhum ficheiro servido menciona PUSH_DIR nem /data/push", () => {
   for (const f of readdirSync(STATIC)) {
-    if (f.endsWith(".png")) continue;
+    if (f.endsWith(".png") || f === "fonts") continue;   // fonts/: a letra pixel (binário) e a licença
     const s = ler(f).toString("utf8");
     assert.ok(!s.includes("PUSH_DIR") && !s.includes("/data/push"), f);
   }

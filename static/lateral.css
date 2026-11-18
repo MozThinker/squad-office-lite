@@ -1,0 +1,68 @@
+/* v3 (CA-24…29, 35, 43, 46): separadores do #info, «Agentes», Actividade em linhas, «O meu dia», Entregas e o botão Replay */
+
+/* separadores «Tarefa | Agentes | Entregas»: presos ao topo do #info (o painel tem o seu scroll) */
+#info-s { position: sticky; top: -14px; z-index: 1; margin: -14px -14px 12px; padding: 4px 14px 0; background: var(--panel); border-bottom: 1px solid var(--line); }
+#info-s:empty { display: none; }
+.sep { display: flex; gap: 4px; }
+.sep [role="tab"] { flex: 1 1 auto; min-height: 44px; padding: 8px 4px; background: none; color: var(--muted); border: 0; border-bottom: 3px solid transparent;
+  font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; }
+.sep [aria-selected="true"] { color: var(--text); border-bottom-color: var(--accent); }
+.sep [role="tab"]:focus-visible, #ag-q:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+.ao-vivo { margin: 0 0 8px; }
+
+/* «Agentes»: pesquisa e uma linha por agente (estado em texto, nome, acção e «Seguir») */
+#ag-q { width: 100%; min-height: 44px; background: var(--bg); color: var(--text); border: 1px solid var(--ctl); padding: 4px 8px; font: inherit; font-size: 16px; }
+.ag-g h3 { font-size: 14px; margin: 14px 0 4px; overflow-wrap: anywhere; }
+.ag-g ul { list-style: none; margin: 0; padding: 0; }
+.ag-g li { grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 2px 8px; }
+.ag-e { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; }
+.ag-e i { margin: 0; background: currentColor; }
+.ag-p { color: var(--muted); }
+.ag-n { grid-column: 1; overflow-wrap: anywhere; }
+.ag-a { display: block; }
+.ag-g button { grid-column: 2; grid-row: 1 / span 2; min-height: 44px; min-width: 44px; padding: 4px 12px; background: var(--bg); color: var(--text);
+  border: 1px solid var(--ctl); font: inherit; font-size: 14px; cursor: pointer; }
+.ag-g button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+/* anel à volta da secretária seguida (desenhado pelo lateral.js, nunca no markup do room()) */
+#office .seguir { fill: none; stroke: var(--accent); stroke-width: 1.5; pointer-events: none; }
+
+/* «Ver tabela» e «Mostrar mais» da Fábrica */
+#fabrica .tw { overflow-x: auto; }
+#fabrica .vt { display: block; min-height: 44px; margin: 4px 0 8px; padding: 4px 12px; background: var(--bg); color: var(--text); border: 1px solid var(--ctl);
+  font: inherit; font-size: 14px; cursor: pointer; }
+#fabrica li .vt { margin: 0; }
+#fabrica .vt:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+#fabrica .tw td { font-family: var(--mono); }
+
+/* «O meu dia»: tempos e barras por hora */
+.dia { margin: 10px 0 2px; font-size: 14px; overflow-wrap: anywhere; }
+.chart .b-ok { fill: var(--accent); }
+.chart .b-warn { fill: var(--warn); }
+
+/* Actividade: uma linha por evento (a ≥ 900 px sem quebrar) */
+.fd li { grid-template-columns: 10px minmax(0, 1fr); }
+@media (min-width: 900px) { .fd li > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } }
+
+/* Entregas: as por ler primeiro, com «por ler» em texto */
+.en-top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 8px; }
+.en-top .sub { margin: 0; }
+.en { list-style: none; margin: 8px 0 0; padding: 0; }
+.en li { display: block; padding: 10px 0; }
+.en li.en-nova { border-left: 3px solid var(--accent); padding-left: 10px; }
+.en h3 { font-size: 15px; margin: 2px 0; overflow-wrap: anywhere; }
+.en-m { margin: 2px 0 6px; font-size: 14px; overflow-wrap: anywhere; }
+.en-pl { color: var(--accent); }
+.en-r { margin: 8px 0 0; padding: 6px 8px; background: var(--bg); font-size: 13px; white-space: pre-wrap; overflow-wrap: anywhere; }
+#info .btns button, #info .btns a { display: inline-flex; align-items: center; min-height: 44px; }
+#info .btns a { padding: 4px 10px; border: 1px solid var(--accent); font-size: 13px; text-decoration: none; }
+
+/* «4/7», «linhas · modelo · ramo» por agente e as recusas da execução, em mono; quebra a 360 px sem scroll */
+.pg { font-family: var(--mono); }
+.ext { display: block; font-family: var(--mono); font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
+.fim { margin-top: 8px; font-size: 13px; overflow-wrap: anywhere; }
+/* botão «Replay» no fim da barra das salas (≥ 44 px); a ≤ 520 px só o ícone «↺» */
+#rooms { align-items: center; }
+#rooms #rp-b { min-height: 44px; min-width: 44px; margin-left: auto; }
+#rooms #rp-b[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+#rooms #rp-b:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+@media (max-width: 520px) { #rooms #rp-b span { display: none; } }

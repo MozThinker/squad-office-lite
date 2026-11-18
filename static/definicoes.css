@@ -24,3 +24,9 @@
 .def-bt { margin-top: 8px; }
 .def-fases { margin-left: 32px; }
 .def-fases .def-c:has(> input:disabled) { opacity: .45; cursor: not-allowed; }
+/* v3: música, tema e notificações deste browser (saíram do cabeçalho) */
+.def-r[hidden] { display: none; } /* o display:flex anularia o hidden */
+.def-r { display: flex; align-items: center; gap: 10px; min-height: 44px; }
+.def-r input { flex: 1; min-height: 44px; margin: 0; accent-color: var(--accent); }
+#def-tema { min-height: 44px; width: 100%; padding: 4px 8px; background: var(--bg); color: var(--text); border: 1px solid var(--ctl); font: inherit; font-size: 16px; }
+#def-dlg select:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }

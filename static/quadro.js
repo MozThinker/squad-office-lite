@@ -377,6 +377,8 @@ const execH = (c, cls = "q-lnk q-lx") => (manual(c) && c.lancamento?.estado === 
   ? `<button type="button" class="${esc(cls)}" data-a="exec">Abrir execução</button>` : "");
 const lockH = () => `<button type="button" class="q-lock" data-a="lock" aria-label="Muda sozinho com o estado real">${LOCK}</button>`;
 
+// v3 (CA-11): na coluna «À espera» o leitor de ecrã ouve também o «à tua espera» da barra (state.espera.n); os cartões contam à parte
+export const nRotulo = (k, n, espera) => (k === "a-espera" && Number.isInteger(espera) ? `${espera} à tua espera, ${n} cartões teus` : `${n} cartões`);
 function colunaH(col, lista, n) {
   const k = col.chave, [ic, vazio] = COL[k] || ["·", "Vazio."], filtrado = S.f.p.length || S.f.q;
   const antigos = lista.filter((c) => c.antigo), extra = antigos.slice(0, S.mais);
@@ -385,7 +387,7 @@ function colunaH(col, lista, n) {
   const addH = S.d.escrita ? `<button type="button" class="q-add" data-a="novo" data-col="${esc(k)}" aria-label="Novo cartão em ${esc(col.rotulo)}">+</button>` : "";
   return `<section class="q-col" id="q-col-${esc(k)}" data-col="${esc(k)}" aria-labelledby="q-ch-${esc(k)}">`
     + `<div class="q-ch"><span class="q-ci" aria-hidden="true">${esc(ic)}</span><h3 id="q-ch-${esc(k)}">${esc(col.rotulo)}</h3>`
-    + `<span class="q-n" aria-label="${esc(n)} cartões">${esc(n)}</span>${addH}</div>`
+    + `<span class="q-n" aria-label="${esc(nRotulo(k, n, A.espera?.()))}">${esc(n)}</span>${addH}</div>`
     + `<ul class="q-list" role="list">${vis(lista).map(cartaoH).join("")}</ul>`
     + `<div class="q-vazio"><span aria-hidden="true">${esc(ic)}</span>${esc(filtrado ? "Nada aqui com estes filtros." : vazio)}</div>${maisH}</section>`;
 }

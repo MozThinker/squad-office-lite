@@ -9,7 +9,9 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import re
+import stat
 import threading
 from collections import OrderedDict
 from datetime import datetime, timezone
@@ -170,6 +172,50 @@ def clip(s: str, n: int) -> str:
 
 def delivery(text) -> str | None:
     return clip(text, DELIVERY_MAX) if isinstance(text, str) and text.strip() else None
+
+
+def log_delivery(path: Path, tail: int = 65536, tail_max: int = 1 << 20) -> str | None:
+    # leitor e /api/entregas: campo "result" da última linha result do fim do claude.log (em bruto: mascarar com
+    # delivery); só ficheiro regular e sem symlink (um FIFO pendurava o pedido). Sem linha result nos últimos `tail`
+    # bytes, relê uma vez até `tail_max` e só olha para a linha cortada no início da janela (uma linha result com
+    # muitas recusas passa dos 64 KB); um result mais antigo, todo antes da janela, continua a não contar (AC-38)
+    def ultimo(linhas) -> str | None:
+        out = None
+        for line in linhas:
+            if b'"result"' not in line:
+                continue
+            try:
+                d = json.loads(line)
+            except (ValueError, RecursionError):
+                continue
+            if isinstance(d, dict) and d.get("type") == "result" and isinstance(d.get("result"), str):
+                out = d["result"]
+        return out
+
+    for janela in (tail, tail_max):
+        try:
+            if not stat.S_ISREG(path.lstat().st_mode):
+                return None
+            fd = os.open(path, os.O_RDONLY | os.O_NONBLOCK | os.O_NOFOLLOW | os.O_CLOEXEC)
+            with os.fdopen(fd, "rb") as f:
+                st = os.fstat(f.fileno())
+                if not stat.S_ISREG(st.st_mode):
+                    return None
+                f.seek(max(0, st.st_size - janela))
+                dados = f.read(janela)
+        except OSError:
+            return None
+        if janela == tail:
+            out = ultimo(dados.splitlines())
+            if out is not None or st.st_size <= tail:
+                return out
+            continue
+        corte = len(dados) - tail   # onde começava a 1.ª janela
+        if corte <= 0 or b"\n" in (dados[corte - 1:corte], dados[corte:corte + 1]):   # a janela começava numa linha inteira
+            return None
+        fim = dados.find(b"\n", corte)
+        return ultimo([dados[dados.rfind(b"\n", 0, corte) + 1:fim if fim >= 0 else len(dados)]])
+    return None
 
 
 def env_file(name, inp) -> bool:

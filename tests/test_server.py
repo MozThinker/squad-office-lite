@@ -133,16 +133,18 @@ class ServerTest(unittest.TestCase):
         tasks = server.build_state(now)["tasks"]
         decorrido = int(now - datetime(2026, 10, 23, 9, tzinfo=timezone.utc).timestamp())
         self.assertEqual(tasks, [{
-            "id": tid, "project": "joga", "mode": "goal", "status": "a correr", "running": True,
+            "id": tid, "project": "joga", "mode": "goal", "titulo": None, "status": "a correr", "running": True,
             "branch": "feat/x", "pr": None, "started": "2026-10-23T09:00:00+00:00", "finished": None,
             "last_activity": iso(100),
             "phases": {"SPEC": True, "PLAN": True, "QA": False}, "auto_resumes": 1, "issues": ["#7"],
             "agents": [{"role": "architect", "desc": "plano", "start": "2026-10-23T09:01:00Z", "end": iso(300),
-                        "last": iso(300), "finished": True, "active": False, "act": None, "stuck": False}],
+                        "last": iso(300), "finished": True, "active": False, "act": None, "stuck": False,
+                        "tarefas": None, "linhas": None, "modelo": None, "ramo": None}],
             "working": ["tech-lead"],
             "squad": "dev",
             "cost_usd": None, "turns": None, "duration_s": None,
-            "lead": {"role": "tech-lead", "act": None, "stuck": False},
+            "lead": {"role": "tech-lead", "act": None, "stuck": False, "tarefas": None, "linhas": None, "modelo": None,
+                     "ramo": None},
             "gh": {"pr_url": None, "pr": None, "ci": None, "at": None},
             "progress": {"fases": [{"nome": "SPEC", "estado": "feito"}, {"nome": "PLAN", "estado": "feito"},
                                    {"nome": "CODE", "estado": "agora"}, {"nome": "QA", "estado": ""},
@@ -150,6 +152,7 @@ class ServerTest(unittest.TestCase):
                          "decorrido_s": decorrido, "tipico_s": None, "amostra": 0, "pct": None, "faltam_s": None,
                          "atrasada": False},
             "resultado": None,
+            "fim": None,
         }])
 
     # --- (b) marketing a correr: só a sessão da meta ---

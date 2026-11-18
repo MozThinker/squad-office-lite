@@ -1,6 +1,8 @@
 // «Definições» (SPEC D15): notificações no telemóvel (Web Push, rotas api/push/*) e preferências da barra de progresso.
 // Só carregado ao abrir o painel (import() no index.html), com o definicoes.css. As funções exportadas no topo são puras
 // (sem window/document) para os testes em node.
+// v3 (CA-1, 2, 39): por cima, música (ligar e volume), tema e notificações neste browser, que saíram do cabeçalho, e «Dia e noite»;
+// o estado e as chaves do localStorage («music», «musicVol», «tema», «notify») continuam no index.html (api.musica, api.tema, api.notif).
 
 export const EVENTOS = [["concluida", "Tarefa concluída"], ["falhada", "Tarefa falhada ou parada"], ["pr", "PR aberto"],
   ["alertas", "Alertas (tarefas paradas)"], ["aprovacoes", "Aprovações novas"], ["fases", "Progresso por fase"]];
@@ -8,6 +10,15 @@ export const EVENTOS = [["concluida", "Tarefa concluída"], ["falhada", "Tarefa 
 export const FASES = [["SPEC", "SPEC"], ["PLAN", "PLAN"], ["CODE", "código"], ["QA", "QA"], ["PR", "PR"]];
 // squads da config (GET api/config) → [[id, nome]]
 export const squadsDe = (cfg) => (cfg?.squads || []).map((s) => [s.id, s.nome]);
+export const TEMAS = [["auto", "auto"], ["escuro", "escuro"], ["claro", "claro"], ["sepia", "sépia"], ["contraste", "contraste"]];
+// notificações neste browser (api.notif.estado()): texto por baixo do interruptor
+export const MSG_NB = {
+  bloqueado: "Bloqueadas no browser: desbloqueia no cadeado ao lado do endereço → Notificações → Permitir, e recarrega a página.",
+  ios: "No iPhone, as notificações só funcionam com a página instalada (iOS 16.4 ou mais recente): Partilhar → Adicionar ao ecrã principal, e abre a partir do ícone.",
+  "sem-suporte": "Este browser não suporta notificações.", on: "", off: "",
+};
+// preferências de ligado/desligado em localStorage («0» = desligado; omissão ligado), como as da barra de progresso
+export const AMB = [["diaNoite", "Dia e noite no escritório"]];
 export const VIS = [["progBarra", "Mostrar barra de progresso"], ["progEstimativa", "Mostrar estimativa de tempo"]];
 // = valores por omissão do servidor (SPEC D9); só para o formulário antes de haver resposta. As squads (todas ligadas) vêm da config: prefsOmissao(cfg)
 export const PREFS_OMISSAO = { eventos: { concluida: true, falhada: true, pr: true, alertas: true, aprovacoes: false, fases: false },
@@ -68,6 +79,14 @@ const caixa = (nome, rotulo, extra = "") => `<label class="def-c"><input type="c
 
 function html() {
   return `<div class="rd-top"><h2 id="def-h">Definições</h2><button type="button" data-a="fechar">fechar</button></div><div class="def-b">
+<section aria-labelledby="def-mh"><h3 id="def-mh">Música</h3><label class="def-c"><input type="checkbox" id="def-mus"> Música de fundo</label>
+<label class="def-r" id="def-vr">Volume <input type="range" id="def-vol" min="0" max="100" step="10"></label></section>
+<section aria-labelledby="def-th"><h3 id="def-th">Tema</h3><select id="def-tema" aria-label="Tema">${TEMAS.map(([v, r]) => `<option value="${v}">${r}</option>`).join("")}</select></section>
+<section aria-labelledby="def-eh"><h3 id="def-eh">Escritório</h3>${AMB.map(([k, r]) => caixa(k, r, ` data-v="${k}"`)).join("")}
+<p class="sub">Desligado: sempre de dia. A hora é a do fuso da configuração.</p></section>
+<section aria-labelledby="def-nh"><h3 id="def-nh">Notificações neste browser</h3>
+<label class="def-c"><input type="checkbox" id="def-nb"> Avisar quando um goal termina ou há um alerta (com o separador escondido)</label>
+<p class="def-msg" id="def-nm" role="status" aria-live="polite"></p></section>
 <section aria-labelledby="def-ph"><h3 id="def-ph">Notificações no telemóvel</h3>
 ${caixa("on", "Ligadas neste dispositivo", ' id="def-on"')}
 <p class="def-msg" id="def-m" role="status" aria-live="polite"></p>
@@ -215,7 +234,15 @@ async function guardar(e) {
   msg("#def-g", r.ok ? MSG.guardado : MSG.naoGuardou + msgErro(r.codigo, r.j));
 }
 
-// api = { esc, cfg (GET api/config), swReady, isIOS, getState(), repintar() }
+// música, tema e notificações deste browser (o estado vive no index.html)
+function sincPrefs() {
+  const m = A.musica, n = A.notif?.estado();
+  if (m) { $("#def-mus").checked = m.on(); $("#def-vol").value = m.volume(); $("#def-vr").hidden = !m.on(); }
+  if (A.tema) $("#def-tema").value = A.tema.valor();
+  if (n) { $("#def-nb").checked = n === "on"; $("#def-nb").disabled = !["on", "off"].includes(n); msg("#def-nm", MSG_NB[n] ?? ""); }
+}
+
+// api = { esc, cfg (GET api/config), swReady, isIOS, getState(), repintar(), musica, tema, notif }
 export async function abrir(api) {
   A = api;
   SQ = squadsDe(api.cfg);
@@ -234,10 +261,16 @@ export async function abrir(api) {
       try { localStorage.setItem(k, e.target.checked ? "1" : "0"); } catch {}
       A.repintar(); });
     dlg.addEventListener("close", () => document.getElementById("def-b")?.focus());
+    // alternar() no próprio clique: o AudioContext e o pedido de permissão têm de nascer no gesto (iOS)
+    $("#def-mus").addEventListener("change", () => A.musica?.alternar().then(sincPrefs, sincPrefs));
+    $("#def-vol").addEventListener("input", (e) => A.musica?.setVolume(+e.target.value));
+    $("#def-tema").addEventListener("change", (e) => A.tema?.aplicar(e.target.value));
+    $("#def-nb").addEventListener("change", () => { const p = A.notif?.alternar(); sincPrefs(); p?.then(sincPrefs, sincPrefs); });
   }
+  sincPrefs();
   $("#def-sq").innerHTML = `<legend>Squads</legend>${SQ.map(([k, r]) => caixa("s-" + k, r)).join("")}`;
   $("#def-tz").textContent = "Fuso: " + (A.cfg?.fuso || "o do browser");
-  for (const [k] of VIS) $(`[data-v="${k}"]`).checked = ler(k);
+  for (const [k] of [...VIS, ...AMB]) $(`[data-v="${k}"]`).checked = ler(k);
   msg("#def-g", "");
   if (!dlg.open) dlg.showModal();
   await carregar();

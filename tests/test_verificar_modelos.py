@@ -19,7 +19,8 @@ SO_DEV = pytest.mark.skipif(vm.nomes_internos() is None,
 
 
 def test_modelos_do_repo_passam():
-    assert sorted(p.name for p in MODELOS.iterdir()) == ["conteudo", "desenvolvimento", "investigacao", "observacao"]
+    assert sorted(p.name for p in MODELOS.iterdir()) == ["atendimento", "comercial", "conteudo", "desenvolvimento",
+                                                         "investigacao", "observacao"]
     assert vm.verificar(MODELOS, vm.nomes_internos()) == []
     r = subprocess.run([sys.executable, str(RAIZ / "tools" / "verificar_modelos.py")], capture_output=True, text=True,
                        check=False)

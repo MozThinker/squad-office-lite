@@ -736,6 +736,8 @@ const aName = (id) => (id === "*" ? "o pedido" : id);
 // enviada daqui para a mesma versão do pedido: aprovar/recusar fecham a decisão até o servidor a dar como recebida
 const aSent = (u, p, d) => (u.sent[d.id]?.sha === p.sha256 ? u.sent[d.id].accao : null);
 const aOpen = (u, p) => p.decisoes.filter((d) => d.aberta && !["aprovar", "recusar"].includes(aSent(u, p, d)));
+// «Aprovar todas» só com 2+ decisões em aberto e nunca num pedido de acções externas (ADR-021: uma a uma)
+const aTodas = (p, n) => n >= 2 && !/^accoes-/.test(p.ficheiro);
 const aTotal = (list) => list.reduce((a, p) => a + aOpen(aUi(aKey(p)), p).length, 0);
 const aVerb = { aprovar: "Aprovar", recusar: "Recusar", comentar: "Enviar comentário em" };
 function aConfirmText(p, c) {
@@ -768,7 +770,7 @@ function aprHtml(p) {
     + (p.datas ? `<h3>Datas e orçamento</h3><div class="md">${md(p.datas)}</div>` : "")
     + `<div class="btns"><button type="button" data-a="full" data-f="full">Ver o pedido completo</button></div>`
     + p.decisoes.map((d) => aDecHtml(p, u, d)).join("");
-  if (n >= 2) h += `<div class="dec"><div class="btns"><button type="button" class="ok-b" data-a="todas" data-f="todas"${u.busy ? " disabled" : ""}>Aprovar todas (${n})</button></div>`
+  if (aTodas(p, n)) h += `<div class="dec"><div class="btns"><button type="button" class="ok-b" data-a="todas" data-f="todas"${u.busy ? " disabled" : ""}>Aprovar todas (${n})</button></div>`
     + (u.confirm?.id === "*todas" ? aCf(p, u) : "") + `</div>`;
   if (u.busy) h += `<p class="msg sub" role="status">A enviar…</p>`;
   // erro de uma decisão que já não está em aberto (ex.: 409 depois de recarregar) fica no fim do pedido
@@ -813,6 +815,7 @@ function renderApr() {
 async function aprSend(k) {
   const p = aFind(k), u = aUi(k), c = u.confirm;
   if (!p || !c || u.busy) return;
+  if (c.id === "*todas" && !aTodas(p, aOpen(u, p).length)) { u.confirm = null; return renderApr(); }
   const ids = c.id === "*todas" ? aOpen(u, p).map((d) => d.id) : [c.id];
   Object.assign(u, { busy: true, confirm: null, err: null });
   renderApr();
@@ -859,7 +862,7 @@ $("#apr-list").addEventListener("click", (e) => {
   if (a === "full") return aprFull(aFind(k));
   if (a === "tog") { u.open = !u.open; aGravarAbertos(); }
   else if (a === "no") { aFocus = { k, f: u.confirm.id === "*todas" ? "todas" : `${u.confirm.accao}:${u.confirm.id}` }; u.confirm = null; }
-  else if (a === "todas") { u.confirm = { accao: "aprovar", id: "*todas", sha: aFind(k)?.sha256 }; u.err = null; aFocus = { k, f: "ok" }; }
+  else if (a === "todas") { const p = aFind(k); if (!p || !aTodas(p, aOpen(u, p).length)) return; u.confirm = { accao: "aprovar", id: "*todas", sha: aFind(k)?.sha256 }; u.err = null; aFocus = { k, f: "ok" }; }
   else { u.confirm = { accao: a, id: b.dataset.id, sha: aFind(k)?.sha256 }; u.err = null; aFocus = { k, f: "ok" }; } // sha: a versão vista ao clicar
   renderApr();
 });

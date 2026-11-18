@@ -150,7 +150,8 @@ def test_get_sem_corpos_e_ilegiveis(amb):
     d = json.loads(body)
     assert d["v"] == 1 and d["escrita"] is True and d["projectos"] == ["loja", "blog"]
     assert d["modelos"] == [{"id": "observacao", "nome": "Observação", "lead": "plantao", "resumo": "Vigia",
-                             "agentes": ["plantao"]}]
+                             "agentes": ["plantao"], "negocio": False,
+                             "modelo_agentes": {"plantao": None}}]
     dev = d["squads"][0]
     assert dev["id"] == "dev" and dev["origem"] == "office" and dev["formato"] == "worktree"
     assert dev["lead"] == "tech-lead" and dev["sessao"] == {"modelo": "haiku", "fonte": "squad"}

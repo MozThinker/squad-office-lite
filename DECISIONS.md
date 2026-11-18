@@ -575,3 +575,107 @@ pedido, custo); o runner a editar o `office.yaml` (só de leitura no modo Docker
 **Consequências:** com o runner parado à hora, a rotina corre na 1.ª passagem desse dia depois da hora; sem passagem até à meia-noite, esse dia perde-se (não há recuperação). O formato do `.md` de rotina passa a ser
 contrato. Uma squad criada que não está no `office.yaml` aparece na vista mas não lança nem tem rotinas até se colar o
 bloco.
+
+## ADR-020 · Squad montada por conversa e modelos de negócio, com perfil só de leitura forçado pelo lançador (2026-11-18)
+**Contexto:** porte do Office #40 (o seu ADR-015). Os 4 modelos do ADR-019 servem trabalho técnico e pedem a missão
+escrita de uma vez; um negócio quer atendimento e qualificação de pedidos, e tem de poder descrever o que quer por
+palavras.
+
+**Decisão:**
+- Modelos `atendimento` (triagem, redactor, revisor, responsável) e `comercial` (comercial, pesquisador, qualificador)
+  em `modelos/squads/`, só de leitura: sem `Bash`, `Edit`, `Write`, `WebFetch`, `NotebookEdit` nem MCP; `WebSearch` só no
+  `comercial/pesquisador`, que recebe nome e domínio; cada agente com `## Nunca`. O `comercial` exige
+  `entrada/perfil-cliente-ideal.md`.
+- **Perfil de negócio no lançador, não no modelo:** o runner, ao lançar uma tarefa de uma squad de `squads.json` com
+  modelo de negócio, ignora `runner.permission_mode` e `runner.ferramentas` e corre com `--permission-mode dontAsk`,
+  `--allowedTools Read Grep Glob Agent` (e `WebSearch` no `comercial`) e `--disallowedTools Bash Edit Write WebFetch
+  NotebookEdit mcp__*` (mais `WebSearch` fora do `comercial`), com um prompt próprio que trata tudo o que vem de fora
+  como dado. A leitura fica limitada por negações `Read(//…)` à pasta de dados, às transcrições do `claude`, aos
+  outros projectos e aos outros worktrees existentes no arranque (o próprio worktree e a `entrada/` ficam legíveis).
+  A squad recebe `entrada/accoes.md` (acções ligadas, folhas, domínios; nunca remetentes). Uma squad de negócio não
+  sai deste perfil por configuração.
+- **Conversa de montagem:** acção `squad_conversa` (`squad`, `texto` de 1–1000 caracteres) na fila `agentes-fila`,
+  **contrato v1 sem «v» novo** (uma acção nova com chaves exactas, validada como as outras).
+  Cada volta é uma chamada `claude -p` sem ferramentas, sem sessão, `--disallowedTools mcp__*`, **0,15 US$**; o runner
+  guarda `agentes-rascunhos/squads/<id>/conversa.json` (só ele escreve) e reenvia a conversa como dados, entre marcas
+  com nonce novo. Máx. 3 rondas de perguntas (1–3 cada) e 4 chamadas; **tecto de 1,00 US$ por conversa**, somado pelo
+  runner; uma conversa em curso de cada vez; **limpeza às 24 h** sem mudança; conta para o tecto diário de 10 US$. A IA
+  escolhe de uma lista fechada: pergunta, propõe (modelo e missão) ou recusa com motivo.
+- A proposta só escreve a missão: os agentes são sempre os do modelo (a «Nunca» não vem de texto livre). Segue o
+  rascunho, ensaio e `squad_criar` do ADR-019. Se a missão do `comercial` não pediu o perfil de cliente ideal, a proposta
+  troca-se por essa pergunta.
+- Motivos novos na resposta do runner: `já há uma conversa em curso`, `tecto da conversa atingido`, `a conversa já
+  terminou`, `a IA não respondeu bem, envia de novo`, `não foi possível montar a squad`.
+- `squads.json` passa a `0644` (o serviço `accoes`, outro uid, lê-o: ADR-021). O `doctor` avisa (sem falhar) se há
+  squads de negócio com a credencial de um plano de consumidor.
+
+**Alternativas recusadas:** `settings.json` por modelo como no Office (o perfil ficaria num ficheiro da squad, e o
+runner monta os argumentos de cada tarefa: é aí que ele não se contorna); só o formulário de perguntas fixas (não
+escolhe o modelo nem recusa); `--resume` (sessões em disco, o tecto não soma, as voltas deixam de ser dados); a IA
+reescrever os agentes (podia apagar a «Nunca»).
+
+**Consequências:** até 4 chamadas por squad nova, dentro do tecto diário; livro de IA com `squad_conversa`; módulo
+novo `conversa.py`, partilhado pelo Office e pelo runner. O formato do `conversa.json` passa a contrato. **Reverter:**
+tirar `squad_conversa` do runner (recusa-a) e os dois modelos; as squads criadas com eles ficam, com o registo.
+
+## ADR-021 · Acções aprovadas uma a uma, executadas por um serviço com outro uid (2026-11-18)
+**Contexto:** porte do Office #42 (o seu ADR-016). As squads de negócio só entregam texto; o dono copia cada
+rascunho à mão. O ADR-020 fixou que nenhuma squad escreve ficheiros nem corre comandos, e isso mantém-se.
+
+**Decisão:**
+- A squad **propõe** acções no texto final (`=====ACCAO=====` … `=====FIM ACCAO=====`, um objecto JSON). **Catálogo
+  fechado:** `email_rascunho`, `email_responder`, `folha_linha`, `aviso_dono`, com campos exactos, tamanhos (assunto
+  200, corpo 4000, texto e valores 500), links só de domínios da squad, sem HTML nem anexos. Limites por dia e squad
+  50/20/100/20 (tentativas), que a configuração só pode baixar.
+- O runner (`runner/accoes_propor.py`, no fim de cada tarefa ou rotina da squad, sem IA nem credenciais) valida e
+  escreve, com `O_EXCL`, o registo `decisoes/.accoes/accoes-<squad>-<AAAAMMDD>-<n>.json` (definições canónicas, sha,
+  fuso) e depois o pedido `decisoes/accoes-<squad>-<AAAAMMDD>-<n>.md` (formato das Aprovações, ADR-001; máx. 10 linhas
+  `[A1]…[A10]`, texto citado com `> `, recusadas listadas). Aprova-se linha a linha; **sem «Aprovar todas»** nestes
+  pedidos (as outras aprovações não mudam).
+- **Serviço `accoes`, com outro uid e o `accoes.env` só dele** (`servico_accoes/`: colector, executor, arranque), sem
+  segredos no runner, no office nem no compose. O executor só executa com squad activa, acção ligada, `→ aprovado`,
+  secção do `.md` igual à re-renderizada do registo, sha igual, ≤ 48 h desde a criação, abaixo do limite do dia (no
+  fuso gravado no registo, porque o serviço não lê o `office.yaml`) e sha nunca executado (marcador `O_EXCL` antes da
+  chamada). Volta a passar o conteúdo pelas regras do gerador. `email_responder` vai só para o `From` registado pelo
+  colector, de mensagens autenticadas (`authserv_id` + `dmarc=pass` ou `dkim=pass` alinhados), espera 2 min com «anular».
+  Rascunho e linha de folha desfazem-se. Folhas só CSV em `<dir>/folhas/`, valores com fórmulas neutralizadas.
+- **Docker:** o serviço arranca `root` só para fazer `chown` das raízes dos 3 volumes (`accoes-segredos`,
+  `accoes-estado`, `accoes-entrada`) com `CHOWN`, `SETUID` e `SETGID`, e larga os privilégios para `ACCOES_UID:ACCOES_GID`
+  (omissão 10002; recusa arrancar se for o `OFFICE_UID`). `setgroups` só com o `OFFICE_GID`, para ler `decisoes` e
+  `agentes` (só de leitura). Sem `init`: o `tini` ficaria root a vida toda. Rede própria. `tools/verificar_compose_accoes.py`
+  falha na CI se outro serviço ver o `accoes.env`.
+- **VPS:** `sudo ./instalar-accoes.sh --dados <pasta>` cria o utilizador de sistema `office-accoes` (sem casa nem
+  shell), copia o código para `/opt/office-accoes` (do root), cria `/srv/office-accoes` (segredos `0700`), dá-lhe leitura
+  por ACL em `decisoes` e `agentes` e instala `office-accoes.timer` (uma passagem por minuto). O `install.sh` nunca usa sudo.
+- **Vista sem segredos:** o serviço publica `<dados>/accoes-entrada/<squad>/vista.json` (acções ligadas, domínios,
+  folhas e colunas, endereço da caixa e remetente de cada mensagem; nunca servidores, utilizadores nem credenciais) e
+  as mensagens recebidas em `…/mensagens/`. É o que o runner lê para validar propostas: o runner não monta `accoes-estado`.
+- **Perfil `lite`:** vêm ligadas 3 acções (`email_rascunho`, `folha_linha`, `aviso_dono`); `email_responder` liga-se à
+  mão, por squad, no `accoes.json`: quem instala o Lite não tem revisão por outra pessoa.
+- **Retenção:** pedidos e registos com mais de 90 dias perdem o texto citado, remetente e assunto (o `.md`) e o
+  registo `.accoes/`; mensagens e registos do colector com mais de 90 dias apagam-se. O livro mensal
+  `AAAA-MM.jsonl` não guarda corpo, assunto, endereços nem valores e leva o campo `aprovado`.
+
+**Aprovações sem máscara nos pedidos de acções:** um pedido `accoes-…md` com o registo `.accoes/` do runner é mostrado
+sem a máscara de segredos (o executor envia o texto inteiro; o dono tem de ver o que sai). Os outros pedidos, incluindo
+um `accoes-…md` sem registo, mantêm a máscara.
+
+**Risco residual S1:** quem escreve como o utilizador do runner pode forjar pedido + registo + marca `→ aprovado`
+(o runner escreve em `decisoes/`); a fronteira do serviço protege as credenciais e as regras de
+conteúdo e de destinatário, **não a aprovação**. Uma âncora fora do host (assinatura ou confirmação por outro canal)
+fica por decidir pelo dono do projecto; esta versão não a inclui.
+
+**Continua proibido:** squads com escrita, comandos ou MCP; «aprovar todas» nas acções; acções fora do catálogo;
+destinatários novos, CC/BCC, anexos, HTML, apagar no serviço (salvo o próprio «desfazer»), WhatsApp, redes sociais, CRM,
+pagamentos; o Office a ligar acções ou a editar o texto de uma acção.
+
+**Alternativas recusadas:** o runner a executar (teria as credenciais e o ambiente das squads); o `accoes-estado`
+montado no runner para ele ler a vista (daria ao runner o volume do serviço; por isso a vista vai para
+`accoes-entrada`); um serviço de preparação só para o `chown` (mais um serviço e uma imagem; o `root` curto e com três
+capacidades no próprio serviço chega); `init: true` (o `tini` ficava `root`); parser do texto citado em vez de
+re-render (ambíguo); estado num ficheiro único com contadores (o marcador `O_EXCL` e o livro chegam).
+
+**Consequências:** primeira escrita para fora da casa (e-mail, Telegram, folha), sempre com um clique por acção; um
+serviço e um uid novos (modo Docker: `ACCOES_UID/GID` no `.env`), e `acl` no VPS; no VPS, a cópia em `/opt/office-accoes`
+tem de acompanhar cada `git pull` (voltar a correr o `instalar-accoes.sh`). **Reverter:** parar o serviço (nada mais
+sai; no VPS `systemctl disable --now office-accoes.timer`); os pedidos e o livro ficam como registo.

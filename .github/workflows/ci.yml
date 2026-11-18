@@ -51,7 +51,7 @@ jobs:
         with:
           node-version: "22"
       - name: Python compila
-        run: python -m py_compile server.py aprovacoes.py reader.py biblioteca.py quadro.py push.py progresso.py lancar.py officecfg.py arquivo.py agentes.py entregas.py replay.py runner/*.py tools/gerar_icones.py tools/verificar_modelos.py
+        run: python -m py_compile server.py aprovacoes.py reader.py biblioteca.py quadro.py push.py progresso.py lancar.py officecfg.py arquivo.py agentes.py conversa.py accoes.py entregas.py replay.py runner/*.py servico_accoes/*.py tools/gerar_icones.py tools/verificar_modelos.py tools/verificar_compose_accoes.py
       - name: API responde com dados vazios
         run: |
           mkdir -p /tmp/t /tmp/c
@@ -96,8 +96,12 @@ jobs:
         run: node --test tests/*.mjs
       - name: Scripts shell
         run: shellcheck install.sh get.sh scripts/*.sh
+      - name: Script do serviço accoes (modo VPS)
+        run: shellcheck instalar-accoes.sh
       - name: Compose de exemplo válido
         run: OFFICE_UID=1000 OFFICE_GID=1000 OFFICE_SITE=:80 OFFICE_AUTH_USER=x OFFICE_AUTH_HASH=x OFFICE_PROXY_SEGREDO=x docker compose -f docker-compose.example.yml config -q
+      - name: Só o serviço accoes vê o accoes.env (CA-18c, CA-29)
+        run: python tools/verificar_compose_accoes.py compose.example.yaml
       - name: Genérico (AC-a6, AC-b1, AC-b4, AC-e4)
         run: |
           falha=0
@@ -266,6 +270,33 @@ jobs:
           ls -l "$u"
           [ -d "${XDG_RUNTIME_DIR:-/nonexistent}" ] || XDG_RUNTIME_DIR=$(mktemp -d) && export XDG_RUNTIME_DIR
           systemd-analyze --user verify "$u/office-runner.service" "$u/office-runner.timer"
+      - name: Serviço accoes no modo VPS (instalar-accoes.sh; CA-18a, CA-28, CA-30)
+        run: |
+          set -x   # com bash -e, mostra qual comando falhou
+          d=~/office-lite/dados
+          # --verificar: sem sudo e sem mudar nada
+          ./instalar-accoes.sh --dados "$d" --verificar
+          test ! -e /opt/office-accoes && test ! -e /srv/office-accoes && ! id office-accoes
+          sudo ./instalar-accoes.sh --dados "$d"
+          sudo ./instalar-accoes.sh --dados "$d"   # idempotente
+          getent passwd office-accoes | grep -q ':/usr/sbin/nologin$'
+          test ! -e /hom[e]/office-accoes   # o glob só expande se existir (forma hom[e]: filtro de caminhos pessoais)
+          test "$(stat -c '%U %a' /opt/office-accoes/accoes.py /opt/office-accoes/servico_accoes/servico.py | sort -u)" = "root 644"
+          test "$(stat -c '%U %a' /srv/office-accoes)" = "office-accoes 750"
+          test "$(sudo stat -c '%U %a' /srv/office-accoes/segredos /srv/office-accoes/accoes.json)" = "$(printf 'office-accoes 700\noffice-accoes 644')"
+          test "$(stat -c '%U %a' "$d/accoes-entrada")" = "office-accoes 755"
+          # acesso real pelas ACL: o `test` do uutils (26.04) só vê os bits de modo e ignora as ACL; o access(2) não
+          sudo -u office-accoes python3 -I -c 'import os,sys; d=sys.argv[1]; assert os.access(d+"/decisoes", os.R_OK|os.X_OK) and os.access(d+"/agentes", os.R_OK|os.X_OK); os.listdir(d+"/decisoes"); os.listdir(d+"/agentes")' "$d"
+          systemctl is-enabled office-accoes.timer
+          systemd-analyze verify /etc/systemd/system/office-accoes.service /etc/systemd/system/office-accoes.timer
+          # CA-18a: o accoes.env (0600 do office-accoes) não se lê com outro utilizador (nem o do runner)
+          printf 'TELEGRAM_TOKEN=x\n' | sudo -u office-accoes sh -c 'umask 077 && cat > /srv/office-accoes/segredos/accoes.env'
+          sudo python3 -m unittest -v tests.test_instalar_accoes
+          # CA-28 a sério: o arranque com root muda o dono e larga para ACCOES_UID (salta sem root)
+          sudo python3 -m unittest -v tests.test_compose_accoes
+          # uma passagem pela unit (ProtectSystem=strict, User=office-accoes)
+          sudo systemctl start office-accoes.service
+          test "$(systemctl show -p Result --value office-accoes.service)" = success
       - name: Modo Traefik (compose gerado válido)
         run: |
           docker network create t
@@ -278,6 +309,7 @@ jobs:
           docker compose -f ~/office-lite/docker-compose.yml logs --no-color --tail 200 || true
           ls -la ~/office-lite/dados/quadro-lancar ~/office-lite/dados/tasks || true
           tail -n 50 ~/office-lite/dados/runner/logs/*.log || true
+          sudo journalctl -u office-accoes.service --no-pager -n 100 || true
       - name: Parar e limpar
         if: always()
         run: |
@@ -494,6 +526,28 @@ jobs:
           estado=$(python3 "$RUNNER_TEMP/fumo.py" esperar "$tid" final)
           echo "estado final: $estado"
           test "$estado" != erro
+      - name: serviço accoes larga o root e só ele vê os seus volumes (CA-27, CA-28)
+        run: |
+          cd "$RUNNER_TEMP/pc"
+          python3 "$GITHUB_WORKSPACE/tools/verificar_compose_accoes.py" compose.yaml
+          for _ in $(seq 30); do [ -n "$(docker compose top accoes 2>/dev/null | awk 'NR > 1')" ] && break; sleep 2; done
+          docker compose top accoes
+          # pelo menos um processo e nenhum com root (nem o tini: o serviço não tem init)
+          test -n "$(docker compose top accoes | awk 'NR > 1')"
+          # a coluna UID pelo cabeçalho (o compose recente põe SERVICE e # antes do UID)
+          test -z "$(docker compose top accoes | awk 'NR == 1 { for (i = 1; i <= NF; i++) if ($i == "UID") c = i; next } $c != "10002"')"
+          test "$(docker compose exec -T accoes stat -c '%u:%g %a' /segredos-accoes)" = "10002:10002 700"
+          test "$(docker compose exec -T accoes stat -c '%u:%g %a' /dados/accoes)" = "10002:10002 700"
+          test "$(docker compose exec -T accoes stat -c '%u:%g %a' /dados/accoes-entrada)" = "10002:10002 755"
+          # o runner lê o accoes-entrada mas não o escreve
+          docker compose exec -T runner test -r /dados/accoes-entrada -a -x /dados/accoes-entrada
+          if docker compose exec -T runner touch /dados/accoes-entrada/x; then
+            echo "::error::o runner escreveu no accoes-entrada"; exit 1
+          fi
+          # ACCOES_UID = OFFICE_UID: o serviço recusa arrancar
+          if docker compose run --rm -T -e ACCOES_UID="$OFFICE_UID" accoes verificar; then
+            echo "::error::o accoes arrancou com o uid do runner"; exit 1
+          fi
       - name: exec runner doctor (linhas do modo Docker; sem gh o código de saída é 1)
         run: |
           cd "$RUNNER_TEMP/pc"
@@ -561,7 +615,7 @@ jobs:
         run: |
           cd "$RUNNER_TEMP/pc"
           # shellcheck disable=SC2046
-          docker inspect $(docker compose ps -q office caddy runner) > "$RUNNER_TEMP/inspect.json"
+          docker inspect $(docker compose ps -a -q office caddy runner accoes) > "$RUNNER_TEMP/inspect.json"
           python3 - "$RUNNER_TEMP/inspect.json" <<'EOF'
           import json, sys
           vistos = set()
@@ -571,7 +625,8 @@ jobs:
               hc, m = c["HostConfig"], c["Mounts"]
               assert not hc.get("Privileged") and hc.get("NetworkMode") != "host", (svc, hc)
               # no-new-privileges e cap_drop ALL em todos; cap_add só no Caddy (o configurar não fica a correr)
-              caps = {"caddy": {"NET_BIND_SERVICE", "DAC_OVERRIDE"}}.get(svc, set())
+              caps = {"caddy": {"NET_BIND_SERVICE", "DAC_OVERRIDE"},
+                      "accoes": {"CHOWN", "SETGID", "SETUID"}}.get(svc, set())
               assert {x.removeprefix("CAP_") for x in hc.get("CapAdd") or []} == caps, (svc, hc.get("CapAdd"))
               assert [x.removeprefix("CAP_") for x in hc.get("CapDrop") or []] == ["ALL"], (svc, hc.get("CapDrop"))
               assert "no-new-privileges:true" in (hc.get("SecurityOpt") or []), (svc, hc.get("SecurityOpt"))
@@ -592,7 +647,13 @@ jobs:
                   assert not dest & {"/segredos", "/home/office", "/projectos"}, (svc, dest)
               if svc == "office":
                   assert hc.get("ReadonlyRootfs") is True, svc
-          assert vistos == {"office", "caddy", "runner"}, vistos
+              # accoes-segredos e accoes-estado só no accoes (CA-27)
+              if svc == "accoes":
+                  assert vol == {"accoes-segredos", "accoes-estado", "accoes-entrada", "decisoes", "agentes"}, vol
+                  assert hc.get("ReadonlyRootfs") is True and not hc.get("Init"), svc
+              else:
+                  assert not vol & {"accoes-segredos", "accoes-estado"}, (svc, vol)
+          assert vistos == {"office", "caddy", "runner", "accoes"}, vistos
           EOF
           # nem a palavra-passe nem a credencial no ambiente ou no argv de algum contentor
           if grep -qF -f "$RUNNER_TEMP/entrada/pw" -f "$RUNNER_TEMP/entrada/cred" "$RUNNER_TEMP/inspect.json"; then

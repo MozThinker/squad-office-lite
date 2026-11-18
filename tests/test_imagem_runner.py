@@ -84,15 +84,17 @@ class ImagemRunner(unittest.TestCase):
         self.assertIn("for c in ciclo doctor parar; do", INSTR)
         self.assertIn("""printf '#!/bin/sh\\nexec python3 -I -u /app/runner/configurar.py "$@"\\n' """
                       "> /usr/local/bin/configurar", INSTR)
-        self.assertIn("chmod 0755 /usr/local/bin/ciclo /usr/local/bin/doctor /usr/local/bin/parar "
-                      "/usr/local/bin/configurar", INSTR)
+        self.assertIn("""printf '#!/bin/sh\\nexec python3 -I -u /app/servico_accoes/servico.py "$@"\\n' """
+                      "> /usr/local/bin/accoes", INSTR)   # serviço accoes (ADR-021)
+        self.assertRegex(INSTR, r"chmod 0755 /usr/local/bin/ciclo /usr/local/bin/doctor /usr/local/bin/parar "
+                                r"/usr/local/bin/configurar\s+/usr/local/bin/accoes\n")
 
     def test_python_isolado_da_casa(self):  # S1: ~/.local (volume runner-home) é do agente; o configurar é root
         wrappers = re.findall(r"exec (python3[^/]*)/app/", INSTR)
-        self.assertEqual(len(wrappers), 2)
+        self.assertEqual(len(wrappers), 3)
         for w in wrappers:
             self.assertEqual(w.split(), ["python3", "-I", "-u"])   # -u: o -I ignora o PYTHONUNBUFFERED
-        self.assertEqual(len(re.findall(r"\bpython3\b", INSTR)), 2)   # nenhum outro python3 na imagem
+        self.assertEqual(len(re.findall(r"\bpython3\b", INSTR)), 3)   # nenhum outro python3 na imagem
         env = dict(re.findall(r"([A-Z_]+)=(\S+)", " ".join(instrucoes("ENV"))))
         self.assertEqual(env.get("PYTHONNOUSERSITE"), "1")
 
@@ -109,8 +111,11 @@ class ImagemRunner(unittest.TestCase):
         self.assertIn("WORKDIR /app", INSTR)
         # arquivo.py: regras partilhadas da Biblioteca e do arquivo (o runner importa-o de /app, como o officecfg)
         # agentes.py (ADR-017): regras dos agentes partilhadas com o Office; modelos/: squads por modelo
-        self.assertIn("COPY officecfg.py arquivo.py agentes.py office.example.yaml ./", INSTR)
+        # conversa.py (ADR-020): o runner corre a squad_conversa; accoes.py e servico_accoes/ (ADR-021): o accoes
+        # usa a imagem do runner (e o runner importa o accoes.py no gancho das acções)
+        self.assertIn("COPY officecfg.py arquivo.py agentes.py conversa.py accoes.py office.example.yaml ./", INSTR)
         self.assertIn("COPY modelos ./modelos", INSTR)
+        self.assertIn("COPY servico_accoes ./servico_accoes", INSTR)
         self.assertIn("COPY runner/*.py ./runner/", INSTR)
         # /app/runner/office_runner.py importa officecfg de /app (pasta acima de runner/)
         self.assertIn("sys.path.insert(1, str(Path(__file__).resolve().parent.parent))",

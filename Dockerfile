@@ -5,7 +5,7 @@ RUN apk add --no-cache tzdata
 # dependências opcionais (ver requirements.txt): só wheel, versões fixas
 COPY requirements.txt ./
 RUN pip install --no-cache-dir --only-binary=:all: -r requirements.txt
-COPY server.py reader.py aprovacoes.py biblioteca.py arquivo.py agentes.py quadro.py push.py progresso.py lancar.py entregas.py replay.py officecfg.py office.example.yaml ./
+COPY server.py reader.py aprovacoes.py biblioteca.py arquivo.py agentes.py conversa.py quadro.py push.py progresso.py lancar.py entregas.py replay.py officecfg.py office.example.yaml ./
 COPY static ./static
 # modelos genéricos das squads (GET /api/agentes lista-os)
 COPY modelos ./modelos

@@ -66,11 +66,12 @@ def gravar(cfg, doc: dict) -> None:
     gravar_json(_base(cfg), REGISTO, {"v": 1, "rotinas": [r for r in doc["rotinas"] if id(r) not in fora]})
 
 
-def gravar_json(pasta: Path, nome: str, doc) -> None:
-    """tmp + rename por fd da pasta (sem seguir symlinks). OSError sobe."""
+def gravar_json(pasta: Path, nome: str, doc, modo: int = 0o600) -> None:
+    """tmp + rename por fd da pasta (sem seguir symlinks). OSError sobe. `squads.json` vai a 0644: o serviço `accoes`
+    (outro uid, ADR-021) lê-o para saber se a squad está activa; não tem segredos."""
     dfd = seguro.abrir_pasta(pasta)
     try:
-        seguro.substituir(dfd, nome, json.dumps(doc, ensure_ascii=False, indent=2).encode("utf-8"))
+        seguro.substituir(dfd, nome, json.dumps(doc, ensure_ascii=False, indent=2).encode("utf-8"), modo)
     finally:
         os.close(dfd)
 

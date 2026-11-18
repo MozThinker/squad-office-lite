@@ -31,14 +31,17 @@ def subpasta(dfd: int, nome: str) -> int:
     return abrir_pasta(nome, dir_fd=dfd)
 
 
-def escrever(dfd: int, nome: str, dados: bytes) -> None:
-    """Cria `nome` de novo (0600, O_EXCL|O_NOFOLLOW) dentro de `dfd`; o que lá estivesse (symlink incluído) sai antes."""
+def escrever(dfd: int, nome: str, dados: bytes, modo: int = 0o600) -> None:
+    """Cria `nome` de novo (`modo`, 0600 por omissão, O_EXCL|O_NOFOLLOW) dentro de `dfd`; o que lá estivesse (symlink
+    incluído) sai antes."""
     try:
         os.unlink(nome, dir_fd=dfd)
     except FileNotFoundError:
         pass
     fd = os.open(nome, _NOVO, 0o600, dir_fd=dfd)
     try:
+        if modo != 0o600:
+            os.fchmod(fd, modo)
         vista = memoryview(dados)
         while vista:
             vista = vista[os.write(fd, vista):]
@@ -52,11 +55,11 @@ def mover(src_fd: int, nome: str, dst_fd: int, destino: str | None = None) -> No
     os.rename(nome, destino or nome, src_dir_fd=src_fd, dst_dir_fd=dst_fd)
 
 
-def substituir(dfd: int, nome: str, dados: bytes) -> None:
+def substituir(dfd: int, nome: str, dados: bytes, modo: int = 0o600) -> None:
     """Troca `nome` dentro de `dfd` de forma atómica: tmp novo de nome aleatório (O_EXCL|O_NOFOLLOW) + rename (o
     rename substitui a entrada, nunca segue um symlink que lá esteja). Quem lê vê o antigo ou o novo, nunca meio."""
     tmp = f".{nome}.{os.urandom(8).hex()}.tmp"
-    escrever(dfd, tmp, dados)
+    escrever(dfd, tmp, dados, modo)
     try:
         mover(dfd, tmp, dfd, nome)
     except OSError:

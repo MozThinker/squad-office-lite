@@ -1,13 +1,13 @@
-# Squad Office Lite 0.4.0, modo Docker. Gerado por runner/gerar_compose.py --modo docker.
+# Squad Office Lite 0.5.0, modo Docker. Gerado por runner/gerar_compose.py --modo docker.
 # Primeiro: docker compose run --rm configurar
 # Depois: docker compose up -d e abre http://localhost:8080
 # Opcional: .env ao lado (ver env.example) com OFFICE_ENDERECO, OFFICE_PORTA, OFFICE_PROJECTOS,
-# OFFICE_UID e OFFICE_GID. Sem .env valem as omissões abaixo (${VAR:-omissão}).
+# OFFICE_UID, OFFICE_GID, ACCOES_UID e ACCOES_GID. Sem .env valem as omissões abaixo (${VAR:-omissão}).
 # Nome próprio (o modo VPS é office-lite): os dois modos podem coexistir no mesmo Linux.
 name: office-lite-pc
 services:
   office:
-    image: ghcr.io/mozthinker/squad-office-lite:0.4.0
+    image: ghcr.io/mozthinker/squad-office-lite:0.5.0
     restart: unless-stopped
     read_only: true
     # Pillow descodifica uma miniatura de cada vez (até ~330 MB) + tmpfs das miniaturas + servidor
@@ -165,7 +165,7 @@ services:
     networks:
       - office
   runner:
-    image: ghcr.io/mozthinker/squad-office-lite-runner:0.4.0
+    image: ghcr.io/mozthinker/squad-office-lite-runner:0.5.0
     restart: unless-stopped
     init: true
     read_only: true
@@ -271,6 +271,12 @@ services:
         read_only: true
         volume:
           nocopy: true
+      - type: volume
+        source: accoes-entrada
+        target: /dados/accoes-entrada
+        read_only: true
+        volume:
+          nocopy: true
       - type: bind
         source: "${OFFICE_PROJECTOS:-./projectos}"
         target: /projectos
@@ -279,7 +285,7 @@ services:
     networks:
       - runner
   configurar:
-    image: ghcr.io/mozthinker/squad-office-lite-runner:0.4.0
+    image: ghcr.io/mozthinker/squad-office-lite-runner:0.5.0
     profiles:
       - configurar
     entrypoint: ["configurar"]
@@ -409,6 +415,70 @@ services:
           create_host_path: true
     networks:
       - runner
+  accoes:
+    image: ghcr.io/mozthinker/squad-office-lite-runner:0.5.0
+    restart: unless-stopped
+    read_only: true
+    entrypoint: ["accoes"]
+    user: "0:0"
+    # outro uid (nunca o OFFICE_UID): o office e o runner (as squads) nunca lêem o accoes.env;
+    # recusa arrancar se ACCOES_UID = OFFICE_UID. As capacidades vão-se no setuid(). Sem o tini do
+    # init, que ficaria como root (o user do serviço) a vida toda: o serviço não lança subprocessos
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      # fchown das raízes dos volumes accoes-* para ACCOES_UID:ACCOES_GID
+      - CHOWN
+      # setgroups([OFFICE_GID]) e setgid(ACCOES_GID) ao largar o root
+      - SETGID
+      # setuid(ACCOES_UID) ao largar o root
+      - SETUID
+    environment:
+      ACCOES_PERFIL: lite
+      ACCOES_UID: "${ACCOES_UID:-10002}"
+      ACCOES_GID: "${ACCOES_GID:-10002}"
+      OFFICE_UID: "${OFFICE_UID:-10001}"
+      # grupo suplementar: ler decisoes e agentes (raízes 0750 do OFFICE_UID:OFFICE_GID)
+      OFFICE_GID: "${OFFICE_GID:-10001}"
+      ACCOES_DIR: /dados/accoes
+      ACCOES_SEGREDOS: /segredos-accoes
+      ACCOES_ENTRADA: /dados/accoes-entrada
+      ACCOES_DECISOES: /dados/decisoes
+      ACCOES_AGENTES: /dados/agentes
+    tmpfs:
+      - /tmp:mode=1777
+    volumes:
+      - type: volume
+        source: accoes-segredos
+        target: /segredos-accoes
+        volume:
+          nocopy: true
+      - type: volume
+        source: accoes-estado
+        target: /dados/accoes
+        volume:
+          nocopy: true
+      - type: volume
+        source: accoes-entrada
+        target: /dados/accoes-entrada
+        volume:
+          nocopy: true
+      - type: volume
+        source: decisoes
+        target: /dados/decisoes
+        read_only: true
+        volume:
+          nocopy: true
+      - type: volume
+        source: agentes
+        target: /dados/agentes
+        read_only: true
+        volume:
+          nocopy: true
+    networks:
+      - accoes
 configs:
   caddyfile:
     content: |
@@ -435,6 +505,7 @@ configs:
 networks:
   office:
   runner:
+  accoes:
 volumes:
   tasks:
   claude-projects:
@@ -457,3 +528,6 @@ volumes:
   proxy:
   caddy-data:
   caddy-config:
+  accoes-segredos:
+  accoes-estado:
+  accoes-entrada:

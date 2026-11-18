@@ -35,7 +35,8 @@ CHAVES = ["v", "id", "cartao_id", "squad", "projecto", "kind", "mode", "slug", "
 # ambiente()); nos testes em subprocesso usa-se claude_com()
 FAKE = ("FAKE_CLAUDE_ARGV", "FAKE_CLAUDE_STDIN", "FAKE_CLAUDE_FALHA", "FAKE_CLAUDE_EXIGE_CRED", "FAKE_CLAUDE_CRED",
         "FAKE_CLAUDE_SETTINGS", "FAKE_GH_ARGV", "FAKE_GH_SAIDA", "FAKE_GH_SAIDA_VIEW", "FAKE_GH_RC_VIEW",
-        "FAKE_CLAUDE_RESULTADO", "FAKE_CLAUDE_CUSTO", "FAKE_CLAUDE_DORME", "FAKE_CLAUDE_CWD")
+        "FAKE_CLAUDE_RESULTADO", "FAKE_CLAUDE_CUSTO", "FAKE_CLAUDE_DORME", "FAKE_CLAUDE_CWD",
+        "FAKE_CLAUDE_RESULTADOS")
 
 
 def gh_sem_sessao(tmp: Path) -> Path:
@@ -64,7 +65,8 @@ def ambiente(monkeypatch, tmp: Path, extra_bin: Path | None = None) -> None:
     for k in ("OFFICE_TELEGRAM_TOKEN", "OFFICE_TELEGRAM_CHAT", "OFFICE_TELEGRAM_API", "FAKE_CLAUDE_FALHA",
               "FAKE_CLAUDE_ARGV", "FAKE_CLAUDE_STDIN", "OFFICE_CONFIG", "FAKE_CLAUDE_EXIGE_CRED", "FAKE_CLAUDE_CRED",
               "ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN", "FAKE_CLAUDE_SETTINGS", "GH_TOKEN", "GITHUB_TOKEN",
-              "FAKE_CLAUDE_RESULTADO", "FAKE_CLAUDE_CUSTO", "FAKE_CLAUDE_DORME", "FAKE_CLAUDE_CWD"):
+              "FAKE_CLAUDE_RESULTADO", "FAKE_CLAUDE_CUSTO", "FAKE_CLAUDE_DORME", "FAKE_CLAUDE_CWD",
+              "FAKE_CLAUDE_RESULTADOS"):
         monkeypatch.delenv(k, raising=False)
     monkeypatch.setattr(lancador, "SEGREDOS", {})   # os segredos guardados no arranque, como os do processo
 

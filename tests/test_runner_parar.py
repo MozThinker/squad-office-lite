@@ -291,7 +291,7 @@ def test_sigterm_durante_a_entrega(ctx, monkeypatch, marca):
     # com o resultado (retomar seria gastar outra vez)
     cfg, path, _, tid = ctx
 
-    def _entrega(meta):
+    def _entrega(meta, sem_pr=False):
         if marca:
             (meta_path(cfg, tid).parent / "parar").touch()
         os.kill(os.getpid(), signal.SIGTERM)

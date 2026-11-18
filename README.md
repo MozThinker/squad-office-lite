@@ -51,17 +51,17 @@ O Lite instala-se de duas formas:
    depois de instalar (o instalador não o pede nem o guarda; ver [Credenciais do Claude](#credenciais-do-claude)).
    O `gh` instala-se pelas [instruções oficiais para Ubuntu](https://github.com/cli/cli/blob/trunk/docs/install_linux.md);
    no `gh auth login` usa de preferência um [token só para os repositórios do Office](#token-do-github).
-3. **Descarrega e instala o Office.** O endereço fica fixado à versão (`v0.4.0`), para leres sempre o mesmo script
+3. **Descarrega e instala o Office.** O endereço fica fixado à versão (`v0.5.0`), para leres sempre o mesmo script
    que o livro e este README descrevem.
    **Forma prudente** (recomendada: lês o script antes de o correr):
    ```bash
-   curl -fsSLO https://raw.githubusercontent.com/MozThinker/squad-office-lite/v0.4.0/get.sh
+   curl -fsSLO https://raw.githubusercontent.com/MozThinker/squad-office-lite/v0.5.0/get.sh
    less get.sh
-   bash get.sh --versao 0.4.0
+   bash get.sh --versao 0.5.0
    ```
    **Com um comando:**
    ```bash
-   curl -fsSL https://raw.githubusercontent.com/MozThinker/squad-office-lite/v0.4.0/get.sh | bash -s -- --versao 0.4.0
+   curl -fsSL https://raw.githubusercontent.com/MozThinker/squad-office-lite/v0.5.0/get.sh | bash -s -- --versao 0.5.0
    ```
    > Este comando descarrega um script da internet e corre-o no teu servidor, com o teu utilizador. Só o faças com
    > endereços em que confias, e de preferência lê-o primeiro. O `get.sh` confere o sha256 do pacote: isso apanha uma
@@ -74,14 +74,14 @@ O Lite instala-se de duas formas:
    prudente. Opções (depois de `bash -s --` no comando de uma linha, ou de `bash get.sh`):
    - `--sem-perguntas`: as respostas vêm do ambiente (ver o cabeçalho do `install.sh`; `OFFICE_GIT_NOME` e
      `OFFICE_GIT_EMAIL` para a identidade do git; sem elas, e sem identidade no git, só avisa). Ex.:
-     `curl -fsSL …/get.sh | bash -s -- --versao 0.4.0 --sem-perguntas`;
-   - `--versao X.Y.Z`: instala essa versão em vez da última (`… | bash -s -- --versao 0.4.0`);
+     `curl -fsSL …/get.sh | bash -s -- --versao 0.5.0 --sem-perguntas`;
+   - `--versao X.Y.Z`: instala essa versão em vez da última (`… | bash -s -- --versao 0.5.0`);
    - as outras opções passam ao `install.sh` (ex.: `--proxy traefik --rede <rede>`).
 
    **Verificação opcional da origem.** O sha256 só confirma que o pacote não se estragou. Para confirmar que foi
    construído pelo repositório público (atestação do GitHub; precisa do `gh` com sessão), descarrega o pacote à mão e:
    ```bash
-   gh attestation verify squad-office-lite-0.4.0.tar.gz --repo MozThinker/squad-office-lite
+   gh attestation verify squad-office-lite-0.5.0.tar.gz --repo MozThinker/squad-office-lite
    ```
    Só as versões publicadas com atestação passam. Uma falha aqui é motivo para não instalar e reportar (ver
    [`SECURITY.md`](SECURITY.md)).
@@ -121,7 +121,7 @@ de reinício. Se mudaste as `raizes`, corre outra vez `./install.sh` (não volta
 
 O mesmo `get.sh`, sem `--versao` (instala a última versão publicada; lê o aviso em «Instalação»):
 ```bash
-curl -fsSL https://raw.githubusercontent.com/MozThinker/squad-office-lite/v0.4.0/get.sh | bash
+curl -fsSL https://raw.githubusercontent.com/MozThinker/squad-office-lite/v0.5.0/get.sh | bash
 ```
 A versão instalada passa para `~/squad-office-lite.anterior-<data>` e a nova fica em `~/squad-office-lite`.
 `~/office-lite` (config, `.env`, credenciais e dados) não é tocada pelo `get.sh`; o `install.sh` só volta a
@@ -430,17 +430,17 @@ só neste PC. A squad só trabalha enquanto o PC está ligado e o Docker Desktop
    ```bash
    mkdir -p ~/office && cd ~/office
    ```
-3. **Descarrega o `compose.yaml`** da versão 0.4.0. As imagens do Office e do runner vêm fixadas por digest: o que
+3. **Descarrega o `compose.yaml`** da versão 0.5.0. As imagens do Office e do runner vêm fixadas por digest: o que
    corre é sempre o que foi publicado com esta versão.
    No PowerShell (é `curl.exe`, não `curl`):
    ```powershell
-   curl.exe -fsSLO https://github.com/MozThinker/squad-office-lite/releases/download/v0.4.0/compose.yaml
+   curl.exe -fsSLO https://github.com/MozThinker/squad-office-lite/releases/download/v0.5.0/compose.yaml
    ```
    No Terminal:
    ```bash
-   curl -fsSLO https://github.com/MozThinker/squad-office-lite/releases/download/v0.4.0/compose.yaml
+   curl -fsSLO https://github.com/MozThinker/squad-office-lite/releases/download/v0.5.0/compose.yaml
    ```
-   Também o podes descarregar pelo browser, na página da release `v0.4.0`, e guardá-lo nesta pasta com o nome
+   Também o podes descarregar pelo browser, na página da release `v0.5.0`, e guardá-lo nesta pasta com o nome
    `compose.yaml`. Para mudar a porta ou a pasta dos projectos, ver
    [Mudar a porta, o endereço ou a pasta dos projectos](#mudar-a-porta-o-endereço-ou-a-pasta-dos-projectos) (opcional).
    **No Linux**, cria já o `.env` com o teu utilizador e grupo, antes do passo 4, para os ficheiros dos projectos
@@ -517,7 +517,7 @@ Sem `.env` valem as omissões. Para mudar, descarrega o `env.example` da release
 `compose.yaml`, tira o `#` das linhas que queres mudar e corre `docker compose up -d` (no Linux já tens um `.env` do
 passo 3: não o substituas, acrescenta-lhe as linhas):
 ```powershell
-curl.exe -fsSLo .env https://github.com/MozThinker/squad-office-lite/releases/download/v0.4.0/env.example
+curl.exe -fsSLo .env https://github.com/MozThinker/squad-office-lite/releases/download/v0.5.0/env.example
 ```
 (no Terminal, `curl` em vez de `curl.exe`). O anexo chama-se `env.example` porque o GitHub muda o nome dos anexos que
 começam por ponto.
@@ -726,6 +726,29 @@ subscrição gastam os limites dela. As rotinas são tarefas normais: o tecto de
 `OFFICE_UID`/`OFFICE_GID`. Até lá a vista diz «A fila dos agentes está indisponível: corre o `configurar` uma vez (modo
 Docker)» e não aceita pedidos. Na VPS, o `get.sh` (ou `./install.sh`) cria as pastas novas e gera o compose com elas.
 
+**Squad por conversa e modelos de negócio (0.5.0):** em «+ Squad», descreve por palavras o que a squad deve fazer.
+A IA faz até 3 rondas de perguntas (1–3 cada) e propõe um modelo e a missão, ou recusa com o motivo; sem ferramentas,
+até 0,15 USD por volta e **1,00 USD por conversa** (conta para o tecto diário de 10 USD); uma conversa de cada vez, e
+uma conversa parada há 24 h é apagada. A proposta aparece como rascunho: «Criar squad» ou «Descartar». Há dois modelos
+novos em `modelos/squads/`: `atendimento` (triagem, redactor, revisor, responsável) e `comercial` (comercial,
+pesquisador, qualificador; precisa de `entrada/perfil-cliente-ideal.md`). **Squads de negócio só leem:** o runner
+ignora `runner.permission_mode` e `runner.ferramentas` nelas e corre-as só com `Read`, `Grep`, `Glob` e `Agent`
+(`WebSearch` só no `comercial`), sem `Bash`, `Edit`, `Write`, `WebFetch` nem MCP. Não há chaves novas no `office.yaml`.
+
+**Acções aprovadas:** estas squads podem *propor* acções (rascunho de e-mail, linha numa folha CSV, aviso no Telegram,
+e, se o ligares, enviar uma resposta). Cada uma aparece nas Aprovações e só é executada se a aprovares, uma a uma, por
+um serviço `accoes` com outro utilizador do sistema e as credenciais só dele. Como ligar (Docker e VPS), formato do
+`accoes.json` e do `accoes.env`, retenção, dados pessoais e o risco residual: [ACCOES.md](ACCOES.md).
+
+**Chave de API para squads de negócio:** tratam mensagens de terceiros e correm sem ninguém ao teclado, o que é uso
+comercial automático: usa uma chave de API da Anthropic (`ANTHROPIC_API_KEY` no `claude.env`), não o token de um plano
+de consumidor. O `doctor` avisa se for o caso.
+
+**Modo Docker:** o serviço `accoes` (imagem do runner, outro uid: `ACCOES_UID`/`ACCOES_GID` no `.env`, omissão 10002,
+nunca igual ao `OFFICE_UID`) e três volumes novos (`accoes-segredos`, `accoes-estado`, `accoes-entrada`) vêm no compose
+gerado. **VPS:** `sudo ./instalar-accoes.sh --dados <dados>` instala-o como utilizador de sistema `office-accoes` e
+timer systemd; o `install.sh` não muda e continua sem `sudo`.
+
 ---
 
 ## Referência
@@ -784,6 +807,10 @@ Lançáveis = cada squad `worktree` × cada projecto.
                                 squads.json e rotinas.json (registos); só o runner lá escreve
     agentes-rascunhos/          candidatos, rascunhos de squads e ensaios; só o runner lá escreve
     agentes-fila/               pedidos da vista «Squads e agentes» (JSON)
+    agentes-rascunhos/squads/<id>/conversa.json  conversa de montagem (só o runner escreve; apagada às 24 h)
+    accoes-entrada/<squad>/     mensagens recebidas (mensagens/m<16 hex>.txt) e vista.json (sem segredos); só o
+                                serviço accoes escreve (ver ACCOES.md)
+    decisoes/.accoes/           registo de cada pedido de acções (definições canónicas e sha); só o runner escreve
     push/                       chaves e subscrições Web Push (0700)
     biblioteca/<pasta>/         fontes da Biblioteca
     biblioteca/<pasta>/.arquivo/  o que se arquivou (mesmos caminhos) e o REGISTO.tsv; só o runner lá escreve
@@ -1225,6 +1252,7 @@ Sucesso: **202** `{"id", "accao"}`.
 | `squad_rascunho` | `squad, modelo` (`desenvolvimento`, `investigacao`, `observacao`, `conteudo`), `missao` | `squad:<squad>` | 0.50 USD |
 | `squad_criar` | `squad, sha256` (do `rascunho.json`) | idem | |
 | `squad_ensaio` | `squad, sha256` (do `.md` do lead), `projecto, tarefa` | idem | 2 USD |
+| `squad_conversa` | `squad, texto` (1–1000 caracteres; uma volta da conversa de montagem) | `squad:<squad>` | 0.15 USD |
 | `squad_descartar` / `squad_desactivar` | `squad` | idem | |
 | `rotina_pedir` | `squad, projecto, hora` (`HH:MM`), `dias` (1–7 inteiros, 1 = seg … 7 = dom, crescentes), `instrucoes`, `tecto_usd` (texto `0.10`–`5.00`), `max_turnos` (1–30) | `rotina:<squad>` | |
 | `rotina_retomar` / `rotina_cancelar` | `squad, rotina` | `rotina:<squad>/<rotina>` | |
@@ -1235,7 +1263,9 @@ inexistente`, `skill inexistente`, `modelo inválido`, `frontmatter inválido`, 
 rascunho mudou depois de ser visto`, `já existe`, `candidato inexistente`, `sem ensaio ok desta versão`, `o lead não
 pode ser removido`, `projecto inválido`, `modelo de squad inexistente`, `squad já tem agentes`, `rascunho inexistente`,
 `squad não registada`, `squad não lançável`, `limite de rotinas`, `rotina inexistente`, `rotina não pausada`, `tecto
-diário de IA atingido`, `a IA falhou`, `tempo esgotado`, `erro de escrita`). Pedido inválido: erro e nada escrito.
+diário de IA atingido`, `já há uma conversa em curso`, `tecto da conversa atingido`, `a conversa já
+terminou`, `a IA não respondeu bem, envia de novo`, `não foi possível montar a squad`, `a IA falhou`, `tempo
+esgotado`, `erro de escrita`). Pedido inválido: erro e nada escrito.
 **Rotação:** o pedido e a resposta vão para `feito/` quando a resposta tem mais de `runner.rotacao_dias`.
 
 **Contrato do runner** (a fila vem de um contentor e um agente com `Bash` pode escrever nela; o runner não confia

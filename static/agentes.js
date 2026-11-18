@@ -18,7 +18,7 @@ export const ACCOES = {
   agente_rascunho: ["squad", "nome", "descricao"], agente_criar: ["squad", "nome", "sha256", "md"],
   agente_ensaio: ["squad", "nome", "sha256", "projecto", "tarefa"], agente_activar: ["squad", "nome", "sha256"], agente_descartar: ["squad", "nome"],
   squad_rascunho: ["squad", "modelo", "missao"], squad_criar: ["squad", "sha256"], squad_ensaio: ["squad", "sha256", "projecto", "tarefa"],
-  squad_descartar: ["squad"], squad_desactivar: ["squad"],
+  squad_descartar: ["squad"], squad_desactivar: ["squad"], squad_conversa: ["squad", "texto"],
   rotina_pedir: ["squad", "projecto", "hora", "dias", "instrucoes", "tecto_usd", "max_turnos"],
   rotina_retomar: ["squad", "rotina"], rotina_cancelar: ["squad", "rotina"],
 };
@@ -26,7 +26,7 @@ export const ACCAO_ROT = {
   modelo: "mudar o modelo", skills: "mudar as skills", agente_remover: "remover o agente", agente_rascunho: "rascunho do agente",
   agente_criar: "guardar o agente", agente_ensaio: "ensaiar o agente", agente_activar: "activar o agente", agente_descartar: "descartar o agente",
   squad_rascunho: "rascunho da squad", squad_criar: "criar a squad", squad_ensaio: "ensaiar o lead", squad_descartar: "descartar o rascunho",
-  squad_desactivar: "desactivar a squad", rotina_pedir: "pedir a rotina", rotina_retomar: "retomar a rotina", rotina_cancelar: "cancelar a rotina",
+  squad_desactivar: "desactivar a squad", squad_conversa: "conversa da squad", rotina_pedir: "pedir a rotina", rotina_retomar: "retomar a rotina", rotina_cancelar: "cancelar a rotina",
 };
 export const ESTADO_ROT = { pendente: "pendente", ok: "feito", erro: "erro" };
 export const ROTINA_ROT = { pendente: "à espera de aprovação", aprovada: "activa", recusada: "recusada", pausada: "pausada (3 falhas seguidas)",
@@ -138,6 +138,38 @@ export function validarRotina(v, s, projectos) {
   return { args: { squad: s.id, projecto: v.projecto, hora: v.hora, dias, instrucoes: v.instrucoes, tecto_usd: tn.toFixed(2), max_turnos: +m } };
 }
 // bloco para colar na lista squads: do office.yaml (squad registada que lá não está; PLAN §3.5)
+// ---- conversa de montagem (ADR-020): «+ Squad» descreve o fim, a IA pergunta (até 3 rondas) e propõe um modelo
+export const CONVERSA_MAX = 1000, CONVERSA_ROT = { a_perguntar: "a IA fez perguntas", proposta: "proposta pronta", nao_da: "isto não dá",
+  falhou: "terminou sem squad" };
+export const AVISO_API = "Squad de negócio: recomendamos uma chave de API (ANTHROPIC_API_KEY no claude.env) em vez da sessão da subscrição: "
+  + "os termos do plano de consumidor não cobrem uso comercial automático.";
+// a conversa à espera de resposta (só há uma de cada vez; CA-11a)
+export const conversaActiva = (D) => (D?.conversas || []).find((c) => c?.estado === "a_perguntar") ?? null;
+export const conversaDe = (D, id) => (D?.conversas || []).find((c) => c?.squad === id) ?? null;
+export const ehNegocio = (D, modelo) => (D?.modelos || []).some((m) => m.id === modelo && m.negocio === true);
+// CA-33: recomendação de chave de API quando a proposta (ou a escolha à mão) é um modelo de negócio
+export const avisoNegocio = (D, modelo) => (ehNegocio(D, modelo) ? AVISO_API : null);
+export function custoTexto(c) {
+  const f = (x) => (Number(x) || 0).toFixed(2).replace(".", ",");
+  return `${f(c?.custo_usd)} de ${f(c?.tecto_usd ?? 1)} USD · chamada ${c?.chamadas ?? 0} de ${c?.chamadas_max ?? 4}`;
+}
+export function validarConversa(v, D) {
+  const id = String(v?.squad ?? "").trim();
+  if (!ID_SQUAD.test(id)) return { erro: "Id: minúsculas, dígitos e -, 2 a 20, a começar por letra." };
+  if ((D?.squads || []).find((x) => x.id === id)?.agentes?.length) return { erro: "Essa squad já tem agentes." };
+  const outra = conversaActiva(D), minha = conversaDe(D, id);
+  if (outra && outra.squad !== id) return { erro: `Já há uma conversa em curso (squad ${outra.squad}): responde-lhe ou descarta-a.` };
+  if (minha && minha.estado !== "a_perguntar") return { erro: "A conversa desta squad já terminou: descarta-a para começar outra." };
+  if (!minha && (D?.squads || []).some((x) => x.id === id && x.rascunho)) return { erro: "Essa squad já tem um rascunho: cria-a ou descarta-o." };
+  if (!textoOk(v?.texto, 1, CONVERSA_MAX, true)) return { erro: `Texto: 1 a ${CONVERSA_MAX} caracteres, sem caracteres de controlo nem invisíveis.` };
+  return { args: { squad: id, texto: v.texto } };
+}
+// «Escolher o modelo à mão» a partir de uma proposta: o formulário manual já preenchido (pede um rascunho novo)
+export function manualDaProposta(c, s) {
+  if (c?.estado !== "proposta" || !c.modelo_squad) return null;
+  return { modelo: c.modelo_squad, squad: c.squad, missao: s?.rascunho?.missao ?? "" };
+}
+
 export const blocoYaml = (s) => `  - id: ${s.id}\n    nome: "${String(s.nome).replace(/[\\"]/g, (c) => "\\" + c)}"\n    lead: ${s.lead}\n`;
 export const diasTexto = (ds) => (ds || []).map((d) => DIAS.find(([n]) => n === d)?.[1] ?? d).join(", ");
 
@@ -473,21 +505,79 @@ function rotinaEl(s, x) {
 }
 
 function novaSquadEl() {
+  return h("section", { class: "ag-sq", "aria-labelledby": "ag-h-nova" }, h("h3", { id: "ag-h-nova" }, "+ Squad"),
+    ...(D.conversas || []).filter((c) => c.estado !== "a_perguntar").map(conversaFimEl),
+    conversaEl(),
+    dets("nova", "Escolher o modelo à mão", manualEl()));
+}
+
+// uma volta: o que a pessoa escreveu e o que a IA respondeu (só texto)
+function voltaEl(v) {
+  const ia = v?.ia || {};
+  return h("li", { class: "ag-ag" }, h("p", { class: "ag-desc" }, v.utilizador),
+    ia.tipo === "perguntas" ? h("ol", {}, (ia.perguntas || []).map((q) => h("li", {}, q))) : null,
+    ia.tipo === "falhada" ? p("A IA não respondeu bem nesta volta.", "ag-erro") : null);
+}
+
+function conversaEl() {
+  const c = conversaActiva(D), fk = "conv", id = c ? c.squad : String(val(fk, "squad")).trim();
+  const al = alvo("squad_conversa", { squad: id }), st = estadoAlvo(al), dis = !escrita() || st.ocupado;
+  const enviar = () => enviarSe(fk, validarConversa({ squad: id, texto: val(fk, "texto") }, D),
+    (args) => pedir("squad_conversa", args, () => { F[fk] = {}; }));
+  if (!c) return h("div", { class: "ag-f" },
+    p("Descreve por palavras o que a squad deve fazer. A IA faz até 3 rondas de perguntas e propõe um modelo e a missão (sem ferramentas, até 0,15 USD por volta e 1,00 USD por conversa)."),
+    campo("Id da squad", fk, "squad", { autocomplete: "off", autocapitalize: "none", spellcheck: "false", maxlength: 20, disabled: dis }),
+    campo("O que queres que a squad faça?", fk, "texto", { rows: 4, maxlength: CONVERSA_MAX, disabled: dis }, "textarea"),
+    erroDe(fk), id ? st.el : null,
+    botao("Começar a conversa", enviar, { disabled: dis, "data-k": `${fk}:b` }));
+  const dal = alvo("squad_descartar", { squad: c.squad });
+  return h("div", { class: "ag-bloco" }, h("h4", {}, `Conversa da squad ${c.squad} · ronda ${c.ronda} de ${c.rondas_max}`),
+    p(custoTexto(c)),
+    h("ol", { class: "ag-l" }, (c.voltas || []).map(voltaEl)),
+    c.aviso ? h("p", { class: "ag-aviso" }, c.aviso) : null,
+    campo("Resposta", fk, "texto", { rows: 4, maxlength: CONVERSA_MAX, disabled: dis }, "textarea"),
+    erroDe(fk), st.el,
+    h("div", { class: "ag-bts" }, botao("Responder", enviar, { disabled: dis, "data-k": `${fk}:b` }),
+      botao("Descartar conversa", () => confirm("Descartar esta conversa?") && pedir("squad_descartar", { squad: c.squad }),
+        { class: "ag-btn ag-perigo", disabled: dis || estadoAlvo(dal).ocupado, "data-k": `${dal}:dc` })));
+}
+
+// conversa terminada: proposta (o rascunho aparece na squad, para criar ou descartar), recusa ou falha
+function conversaFimEl(c) {
+  const s = (D.squads || []).find((x) => x.id === c.squad), al = alvo("squad_descartar", { squad: c.squad }), st = estadoAlvo(al);
+  const m = (D.modelos || []).find((x) => x.id === c.modelo_squad), manual = manualDaProposta(c, s);
+  return h("div", { class: "ag-bloco" }, h("h4", {}, `Conversa da squad ${c.squad}: ${CONVERSA_ROT[c.estado] || c.estado}`),
+    p(custoTexto(c)),
+    c.estado === "proposta" ? p(`Modelo proposto: ${m?.nome || c.modelo_squad}. O rascunho está na squad ${c.squad}, acima: revê a missão e os agentes e cria-a ou descarta-a.`, "") : null,
+    c.estado === "proposta" && avisoNegocio(D, c.modelo_squad) ? h("p", { class: "ag-aviso" }, avisoNegocio(D, c.modelo_squad)) : null,
+    c.estado === "nao_da" ? h("p", { class: "ag-desc" }, `Porquê: ${c.motivo || "?"}`) : null,
+    c.estado === "nao_da" && c.alternativa ? h("p", { class: "ag-desc" }, `Alternativa: ${c.alternativa}`) : null,
+    c.estado === "falhou" ? h("p", { class: "ag-erro" }, c.motivo || "A conversa terminou sem squad.") : null,
+    c.aviso ? h("p", { class: "ag-aviso" }, c.aviso) : null,
+    st.el,
+    h("div", { class: "ag-bts" },
+      manual ? botao("Mudar à mão", () => { F.nova = { ...manual }; abertos.add("nova"); render(); }, { "data-k": `${al}:mm` }) : null,
+      botao(c.estado === "proposta" ? "Descartar conversa e rascunho" : "Descartar conversa",
+        () => confirm("Descartar esta conversa?") && pedir("squad_descartar", { squad: c.squad }),
+        { class: "ag-btn ag-perigo", disabled: st.ocupado || !escrita(), "data-k": `${al}:dc` })));
+}
+
+function manualEl() {
   const fk = "nova", ms = D.modelos || [], v = { modelo: val(fk, "modelo"), squad: String(val(fk, "squad")).trim(), missao: val(fk, "missao") };
   const al = alvo("squad_rascunho", { squad: v.squad }), st = estadoAlvo(al), dis = !escrita() || st.ocupado;
-  return h("section", { class: "ag-sq", "aria-labelledby": "ag-h-nova" }, h("h3", { id: "ag-h-nova" }, "Nova squad a partir de um modelo"),
-    !ms.length ? p("Não há modelos de squad neste servidor.") : h("div", { class: "ag-f" },
+  return !ms.length ? p("Não há modelos de squad neste servidor.") : h("div", { class: "ag-f" },
       h("fieldset", { disabled: dis }, h("legend", {}, "Modelo"),
         ms.map((m) => h("label", { class: "ag-c ag-mod" }, h("input", { type: "radio", name: "ag-modelo", value: m.id, checked: v.modelo === m.id,
           "data-f": `${fk}:m:${m.id}`, onchange: () => { F[fk] = { ...F[fk], modelo: m.id }; render(); } }),
         h("span", {}, h("strong", {}, m.nome), m.resumo ? ` — ${m.resumo}` : "", h("span", { class: "sub" }, ` (lead ${m.lead}; ${(m.agentes || []).join(", ")})`))))),
+      avisoNegocio(D, v.modelo) ? h("p", { class: "ag-aviso" }, avisoNegocio(D, v.modelo)) : null,
       p("Id: o de uma squad do office.yaml ainda sem agentes, ou um novo (depois colas o bloco no office.yaml)."),
       campo("Id da squad", fk, "squad", { autocomplete: "off", autocapitalize: "none", spellcheck: "false", maxlength: 20, disabled: dis }),
       campo("Missão", fk, "missao", { rows: 4, maxlength: TEXTO_MAX, disabled: dis }, "textarea"),
       erroDe(fk), v.squad ? st.el : null,
       p("O runner pede ao claude uma adaptação do modelo à missão (sem ferramentas, até 0,50 USD); o rascunho aparece na squad para criares ou descartares."),
       botao("Pedir rascunho", () => enviarSe(fk, validarSquadNova({ modelo: val(fk, "modelo"), squad: val(fk, "squad"), missao: val(fk, "missao") }, D),
-        (args) => pedir("squad_rascunho", args, () => { F[fk] = {}; })), { disabled: dis, "data-k": `${fk}:b` })));
+        (args) => pedir("squad_rascunho", args, () => { F[fk] = {}; })), { disabled: dis, "data-k": `${fk}:b` }));
 }
 
 function pedidosEl() {

@@ -4,7 +4,8 @@ Docker, pelo `ciclo` (processo principal do contentor runner).
 
     office_runner.py --uma-vez [--config FICH]            uma passagem: decisões → retomas → fila do Quadro → arquivo
                                                           da Biblioteca (fila e automático) → rotação → rotinas →
-                                                          fila dos agentes (a acção com IA no fim) → rotação dela
+                                                          fila dos agentes (a acção com IA no fim) → rotação dela →
+                                                          purga dos pedidos de acções com mais de 90 dias
     office_runner.py correr TASK_ID [--retomar] [--config FICH]   (interno) corre o claude numa tarefa já preparada
     office_runner.py parar TASK_ID [--config FICH]        pára uma tarefa «a correr» (fecha em erro; não é retomada)
     office_runner.py doctor [--config FICH]               diagnóstico: uma linha ✓/✗ por verificação (exit 0/1)
@@ -33,6 +34,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(1, str(Path(__file__).resolve().parent.parent))
+import accoes_propor
 import agentes_fila
 import arquivador
 import decisoes
@@ -181,6 +183,8 @@ def uma_vez(cfg, cfg_path: str, now: float | None = None) -> list[str]:
         linhas += rotinas.processar(cfg, cfg_path, now)
         linhas += agentes_fila.processar(cfg, cfg_path, now)
         linhas += agentes_fila.rodar(cfg, now)
+        accoes_propor.registo_legivel(cfg)
+        linhas += accoes_propor.purgar(cfg, time.time() if now is None else now)   # 90 dias (ADR-021)
     return linhas
 
 

@@ -289,6 +289,7 @@ ARGS = {
     "squad_ensaio": {"squad": "obs", "sha256": SHA, "projecto": "loja", "tarefa": "x"},
     "squad_descartar": {"squad": "obs"},
     "squad_desactivar": {"squad": "obs"},
+    "squad_conversa": {"squad": "obs", "texto": "Quero responder\naos clientes"},
     "rotina_pedir": {"squad": "dev", "projecto": "loja", "hora": "09:30", "dias": [1, 7], "instrucoes": "x",
                      "tecto_usd": "0.10", "max_turnos": 1},
     "rotina_retomar": {"squad": "dev", "rotina": "r1"},
@@ -303,7 +304,25 @@ def pedido(accao, args):
 
 def test_accoes_cobertas():
     assert set(ARGS) == set(ag.ACCOES) and set(ag.ACCOES_IA) <= set(ag.ACCOES)
-    assert len(ag.ERROS) == len(set(ag.ERROS)) == 27
+    assert len(ag.ERROS) == len(set(ag.ERROS)) == 32
+
+
+@pytest.mark.parametrize("texto,ok", [("x", True), ("a" * 1000, True), ("a" * 1001, False), ("", False),
+                                      ("   ", False), ("linha\ncom\ttab", True), ("bidi\u202e", False)])
+def test_squad_conversa_texto_limites(texto, ok):
+    erro = ag.validar_args("squad_conversa", {"squad": "obs", "texto": texto})
+    assert (erro is None) is ok and (ok or erro == "pedido ilegível")
+    assert ag.alvo("squad_conversa", {"squad": "obs", "texto": "x"}) == "squad:obs"
+    assert ag.ACCOES_IA["squad_conversa"] == 0.15
+
+
+def test_modelo_negocio():
+    reg = {"v": 1, "squads": [{"id": "apoio", "modelo": "atendimento"}, {"id": "vendas", "modelo": "comercial"},
+                              {"id": "obs", "modelo": "observacao"}]}
+    assert ag.MODELOS_NEGOCIO == ("atendimento", "comercial")
+    assert [ag.modelo_negocio(reg, s) for s in ("apoio", "vendas", "obs", "outra")] == [
+        "atendimento", "comercial", None, None]
+    assert ag.modelo_negocio({}, "apoio") is None and ag.modelo_negocio(None, "apoio") is None
 
 
 @pytest.mark.parametrize("accao", sorted(ARGS))

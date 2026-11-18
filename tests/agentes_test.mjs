@@ -15,8 +15,8 @@ const X = (n, c = "a") => c.repeat(n);
 const S = { id: "dev", nome: "Dev", formato: "worktree", agentes: [{ nome: "revisor" }], candidatos: [{ nome: "novo" }], rotinas: [] };
 const ROT = { projecto: "site", hora: "09:30", dias: ["3", "1", "1"], instrucoes: "Rever os PRs abertos.", tecto_usd: "0.50", max_turnos: "10" };
 
-test("ACCOES: as 16 acções do contrato v1 com as chaves exactas (PLAN §3.2)", () => {
-  assert.equal(Object.keys(ACCOES).length, 16);
+test("ACCOES: as 17 acções do contrato v1 com as chaves exactas (PLAN §3.2)", () => {
+  assert.equal(Object.keys(ACCOES).length, 17);
   assert.deepEqual(ACCOES.modelo, ["squad", "agente", "sha256", "modelo"]);
   assert.deepEqual(ACCOES.agente_criar, ["squad", "nome", "sha256", "md"]);
   assert.deepEqual(ACCOES.rotina_pedir, ["squad", "projecto", "hora", "dias", "instrucoes", "tecto_usd", "max_turnos"]);

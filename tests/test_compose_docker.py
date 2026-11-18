@@ -74,16 +74,16 @@ class ModoDocker(unittest.TestCase):
         self.assertIn("\nname: office-lite-pc\nservices:\n", self.out)
         servicos = self.out[self.out.index("services:"):self.out.index("\nconfigs:")]
         nomes = re.findall(r"(?m)^  ([a-z]+):\n    ", servicos)
-        self.assertEqual(nomes, ["office", "caddy", "runner", "configurar"])
+        self.assertEqual(nomes, ["office", "caddy", "runner", "configurar", "accoes"])
         conf = servico(self.out, "configurar")
         self.assertIn("    profiles:\n      - configurar\n", conf)
-        for s in ("office", "caddy", "runner"):
+        for s in ("office", "caddy", "runner", "accoes"):
             self.assertNotIn("profiles:", servico(self.out, s))
 
     def test_imagens_por_omissao(self):  # AC-c5: image com a tag da versão, nunca build
         v = officecfg.VERSAO
         self.assertIn(f"    image: ghcr.io/mozthinker/squad-office-lite:{v}\n", servico(self.out, "office"))
-        for s in ("runner", "configurar"):
+        for s in ("runner", "configurar", "accoes"):
             self.assertIn(f"    image: ghcr.io/mozthinker/squad-office-lite-runner:{v}\n", servico(self.out, s))
         self.assertNotIn("build:", self.out)
         self.assertIn("image: caddy:2.11.9-alpine@sha256:", servico(self.out, "caddy"))
@@ -94,6 +94,7 @@ class ModoDocker(unittest.TestCase):
         self.assertIn(f"    image: {o}\n", servico(out, "office"))
         self.assertIn(f"    image: {r}\n", servico(out, "runner"))
         self.assertIn(f"    image: {r}\n", servico(out, "configurar"))
+        self.assertIn(f"    image: {r}\n", servico(out, "accoes"))
 
     def test_imagens_invalidas(self):
         for ref in ("ghcr.io/dono/office", "ghcr.io/dono/office:latest", "ghcr.io/dono/office:stable",
@@ -150,19 +151,19 @@ class ModoDocker(unittest.TestCase):
         for pasta in ("agentes", "agentes-rascunhos", "agentes-fila"):
             self.assertIn(f"  {pasta}:\n", topo(self.out, "volumes"))
 
-    def test_volumes_do_runner(self):  # AC-c3: tudo rw salvo config e segredos (D5)
+    def test_volumes_do_runner(self):  # AC-c3: tudo rw salvo config, segredos e accoes-entrada (D5, CA-27)
         runner = volumes(servico(self.out, "runner"))
         esperado = {f"/dados/{officecfg.SUB[o]}": (officecfg.SUB[o], False)
                     for o, _, _, _ in officecfg.MOUNTS if o != "claude_projects"}
         esperado |= {f"{CASA}/.claude/projects": ("claude-projects", False), "/dados/runner": ("runner", False),
                      CASA: ("runner-home", False), "/config": ("config", True), "/segredos": ("segredos", True)}
-        self.assertEqual(runner, esperado)
-        conf = volumes(servico(self.out, "configurar"))
+        self.assertEqual(runner, esperado | {"/dados/accoes-entrada": ("accoes-entrada", True)})
+        conf = volumes(servico(self.out, "configurar"))   # o configurar não toca em nada do accoes (D9)
         self.assertEqual(conf, {d: (v, False) for d, (v, _) in esperado.items()} | {"/proxy": ("proxy", False)})
 
     def test_volumes_declarados(self):
         usados = set()
-        for s in ("office", "caddy", "runner", "configurar"):
+        for s in ("office", "caddy", "runner", "configurar", "accoes"):
             usados |= {v for v, _ in volumes(servico(self.out, s)).values()}
         self.assertEqual(set(re.findall(r"(?m)^  ([a-z-]+):$", topo(self.out, "volumes"))), usados)
 
@@ -183,10 +184,11 @@ class ModoDocker(unittest.TestCase):
 
     def test_redes(self):  # AC-c6
         redes = {s: re.findall(r"(?m)^    networks:\n((?:      - .*\n)+)", servico(self.out, s)) for s in
-                 ("office", "caddy", "runner", "configurar")}
+                 ("office", "caddy", "runner", "configurar", "accoes")}
         self.assertEqual(redes, {"office": ["      - office\n"], "caddy": ["      - office\n"],
-                                 "runner": ["      - runner\n"], "configurar": ["      - runner\n"]})
-        self.assertEqual(topo(self.out, "networks"), "  office:\n  runner:\n")
+                                 "runner": ["      - runner\n"], "configurar": ["      - runner\n"],
+                                 "accoes": ["      - accoes\n"]})
+        self.assertEqual(topo(self.out, "networks"), "  office:\n  runner:\n  accoes:\n")
 
     def test_endurecimento(self):  # AC-c7
         office, runner = servico(self.out, "office"), servico(self.out, "runner")
@@ -197,7 +199,7 @@ class ModoDocker(unittest.TestCase):
         self.assertIn("    init: true\n", runner)
         self.assertIn("      - /tmp:exec,mode=1777\n", runner)
         self.assertIn("/tmp/miniaturas:size=128m,uid=${OFFICE_UID:-10001},gid=${OFFICE_GID:-10001},mode=0700", office)
-        for s in ("office", "caddy", "runner"):
+        for s in ("office", "caddy", "runner", "accoes"):
             self.assertIn("    restart: unless-stopped\n", servico(self.out, s))
 
     def test_configurar(self):  # D2: root só para o chown; opções de `run --rm configurar --gh` chegam ao programa
@@ -207,7 +209,8 @@ class ModoDocker(unittest.TestCase):
         self.assertIn('      OFFICE_UID: "${OFFICE_UID:-10001}"\n      OFFICE_GID: "${OFFICE_GID:-10001}"\n', c)
         self.assertNotIn("restart:", c)
         self.assertNotIn("command:", c)
-        self.assertNotIn("entrypoint:", self.out.replace(c, ""))   # a imagem não tem ENTRYPOINT (exec runner …)
+        # a imagem não tem ENTRYPOINT (exec runner …): só o configurar e o accoes o dão
+        self.assertNotIn("entrypoint:", self.out.replace(c, "").replace(servico(self.out, "accoes"), ""))
 
     def test_nome_do_projecto(self):  # o modo VPS (office-lite) e o PC (office-lite-pc) coexistem no mesmo Linux
         nome = re.findall(r"(?m)^name: (\S+)$", self.out)
@@ -217,7 +220,7 @@ class ModoDocker(unittest.TestCase):
 
     def test_nocopy(self):  # o copy-up desfazia o chown do configurar a cada arranque (OFFICE_UID ≠ 10001)
         vistos = set()
-        for s in ("office", "caddy", "runner", "configurar"):
+        for s in ("office", "caddy", "runner", "configurar", "accoes"):
             for v, d, _, nocopy in itens_volumes(servico(self.out, s)):
                 vistos.add(v)
                 # os do Caddy precisam do conteúdo da imagem; todos os outros sem cópia
@@ -228,7 +231,8 @@ class ModoDocker(unittest.TestCase):
 
     def test_capacidades(self):  # AC-s1: tudo sem capacidades salvo o mínimo justificado do configurar e do Caddy
         esperado = {"office": [], "runner": [], "caddy": ["NET_BIND_SERVICE", "DAC_OVERRIDE"],
-                    "configurar": ["CHOWN", "DAC_OVERRIDE", "SETGID", "SETUID"]}
+                    "configurar": ["CHOWN", "DAC_OVERRIDE", "SETGID", "SETUID"],
+                    "accoes": ["CHOWN", "SETGID", "SETUID"]}
         for s, caps in esperado.items():
             b = servico(self.out, s)
             self.assertIn("    security_opt:\n      - no-new-privileges:true\n    cap_drop:\n      - ALL\n", b)
@@ -236,9 +240,9 @@ class ModoDocker(unittest.TestCase):
             self.assertEqual(re.findall(r"(?m)^      - (\S+)$", m.group(1)) if m else [], caps, s)
             if m:   # cada capacidade com o porquê num comentário
                 self.assertRegex(m.group(1), r"^(      # \S.*\n      - [A-Z_]+\n)+$")
-        self.assertEqual(self.out.count("security_opt:"), 4)
-        self.assertEqual(self.out.count("cap_drop:"), 4)
-        self.assertEqual(self.out.count("cap_add:"), 2)
+        self.assertEqual(self.out.count("security_opt:"), 5)
+        self.assertEqual(self.out.count("cap_drop:"), 5)
+        self.assertEqual(self.out.count("cap_add:"), 3)
 
     def test_sem_privilegios(self):  # AC-s1
         for proibido in ("docker.sock", "privileged", "network_mode", "pid:", "ipc:", "devices:", "/var/run",
@@ -270,7 +274,8 @@ class ModoDocker(unittest.TestCase):
         for v in vs:
             self.assertRegex(v, r"^[A-Z_]+:-[^}]+$", v)
         self.assertEqual({v.split(":-")[0] for v in vs},
-                         {"OFFICE_UID", "OFFICE_GID", "OFFICE_ENDERECO", "OFFICE_PORTA", "OFFICE_PROJECTOS"})
+                         {"OFFICE_UID", "OFFICE_GID", "OFFICE_ENDERECO", "OFFICE_PORTA", "OFFICE_PROJECTOS",
+                          "ACCOES_UID", "ACCOES_GID"})
         self.assertNotRegex(sem_comentarios, r"(?<!\$)\$[A-Za-z_]")   # nada de $VAR sem chavetas
 
     def test_caddyfile_em_linha(self):  # D3: configs.content = Caddyfile.docker com os $ escapados
@@ -315,12 +320,13 @@ class Ficheiros(unittest.TestCase):
         self.assertEqual((r.returncode, r.stdout), (2, ""))
         self.assertIn("--config", r.stderr)
 
-    def test_env_example(self):  # D9: sem ponto inicial; as 5 variáveis, todas comentadas, com as omissões do compose
+    def test_env_example(self):  # D9: sem ponto inicial; as 7 variáveis, todas comentadas, com as omissões do compose
         e = (ROOT / "env.example").read_text(encoding="utf-8")
         self.assertFalse(any(x.strip() and not x.startswith("#") for x in e.splitlines()))
-        valores = dict(re.findall(r"(?m)^# (OFFICE_[A-Z]+)=(\S+)$", e))
+        valores = dict(re.findall(r"(?m)^# ((?:OFFICE|ACCOES)_[A-Z]+)=(\S+)$", e))
         self.assertEqual(valores, {"OFFICE_ENDERECO": "127.0.0.1", "OFFICE_PORTA": "8080",
-                                   "OFFICE_PROJECTOS": "./projectos", "OFFICE_UID": "10001", "OFFICE_GID": "10001"})
+                                   "OFFICE_PROJECTOS": "./projectos", "OFFICE_UID": "10001", "OFFICE_GID": "10001",
+                                   "ACCOES_UID": "10002", "ACCOES_GID": "10002"})
         out = docker()
         for k, v in valores.items():
             self.assertIn(f"${{{k}:-{v}}}", out)

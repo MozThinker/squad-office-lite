@@ -21,6 +21,7 @@ from pathlib import Path
 
 import lancador
 
+import agentes
 import officecfg
 
 ESTADO = "estado.json"
@@ -51,25 +52,48 @@ def _aberto(path: Path) -> bool:
     return stat.S_ISREG(st.st_mode) and bool(st.st_mode & 0o077)
 
 
-def credencial(cfg_path: str) -> tuple[str, Path | None, str | None]:
-    """(ok|falta|modo, ficheiro a corrigir ou None, motivo sem valores ou None). Ordem do runner: claude.env, a
-    credencial do runner.env, o login do claude (~/.claude/.credentials.json, só se existe; nunca é lido)."""
+def _credencial(cfg_path: str) -> tuple[str, Path | None, str | None, str | None]:
+    """credencial() + o tipo da que o runner usaria: ANTHROPIC_API_KEY, CLAUDE_CODE_OAUTH_TOKEN, login (do claude)
+    ou None (nenhuma ou inválida). Nunca o valor."""
     cred = officecfg.credenciais_claude(cfg_path)
     if os.path.lexists(cred):
         try:
-            if lancador.credenciais(cred):
-                return "ok", cred, None
+            d = lancador.credenciais(cred)
+            if d:
+                return "ok", cred, None, next(iter(d))
         except lancador.Falha as e:   # a mensagem nunca leva o valor (lancador.credenciais)
-            return ("modo" if _aberto(cred) else "falta"), cred, str(e)
-        return "falta", cred, None
+            return ("modo" if _aberto(cred) else "falta"), cred, str(e), None
+        return "falta", cred, None, None
     renv = cred.parent / "runner.env"
     for k, rx in (("ANTHROPIC_API_KEY", lancador.CRED_API), ("CLAUDE_CODE_OAUTH_TOKEN", lancador.CRED_OAUTH)):
         v = lancador.segredo(k)
         if v and rx.fullmatch(v) and not (k == "ANTHROPIC_API_KEY" and v.startswith("sk-ant-oat")):
-            return ("modo" if _aberto(renv) else "ok"), renv, None
+            return ("modo" if _aberto(renv) else "ok"), renv, None, k
     if os.path.exists(Path.home() / ".claude" / ".credentials.json"):
-        return "ok", None, None
-    return "falta", None, None
+        return "ok", None, None, "login"
+    return "falta", None, None, None
+
+
+def credencial(cfg_path: str) -> tuple[str, Path | None, str | None]:
+    """(ok|falta|modo, ficheiro a corrigir ou None, motivo sem valores ou None). Ordem do runner: claude.env, a
+    credencial do runner.env, o login do claude (~/.claude/.credentials.json, só se existe; nunca é lido)."""
+    return _credencial(cfg_path)[:3]
+
+
+def aviso_negocio(cfg, cfg_path: str, corrige: str) -> str | None:
+    """Linha ⚠ (não conta para o código de saída) se há squads de negócio no registo (ADR-020) e a credencial do
+    Claude é a de um plano de consumidor (token da subscrição ou login): para uso comercial automático recomenda-se
+    uma chave de API (CA-33). None se não se aplica."""
+    tipo = _credencial(cfg_path)[3]
+    if cfg is None or tipo not in ("CLAUDE_CODE_OAUTH_TOKEN", "login"):
+        return None
+    registo = agentes.ler_registo(officecfg.caminho(cfg, "agentes") / "squads.json")
+    ids = [s["id"] for s in registo["squads"] if agentes.modelo_negocio(registo, s["id"])]
+    if not ids:
+        return None
+    via = "CLAUDE_CODE_OAUTH_TOKEN" if tipo == "CLAUDE_CODE_OAUTH_TOKEN" else "login do claude"
+    return (f"⚠ squads de negócio ({', '.join(ids)}) com a credencial de um plano de consumidor ({via}): para uso "
+            f"comercial automático usa uma chave de API (ANTHROPIC_API_KEY) → {corrige}")
 
 
 def estado_credencial(cfg_path: str) -> str:
@@ -301,8 +325,9 @@ def doctor(cfg_path: str) -> tuple[int, list[str]]:
         return doctor_docker(cfg_path)
     repo, eu = lancador.RUNNER_REPO, _eu()
     casa = Path(os.path.abspath(os.path.expanduser(cfg_path))).parent
+    cfg = None
     try:
-        officecfg.carregar(cfg_path, estrito=True)
+        cfg, _ = officecfg.carregar(cfg_path, estrito=True)
         linha(True, "office.yaml válido")
     except officecfg.ConfigErro as e:
         linha(False, f"office.yaml inválido ({e})", f"python3 {repo}/officecfg.py validar {cfg_path}")
@@ -342,6 +367,9 @@ def doctor(cfg_path: str) -> tuple[int, list[str]]:
         linha(False, f"credencial do Claude com permissões abertas ({ficheiro.name})", f"chmod 600 {ficheiro}")
     else:
         linha(False, f"credencial do Claude: {motivo or 'nenhuma'}", f"cd {repo} && ./install.sh --credenciais")
+    negocio = aviso_negocio(cfg, cfg_path, f"cd {repo} && ./install.sh --credenciais")
+    if negocio:
+        linhas.append(negocio)
     if shutil.which("gh") is None:
         linha(False, "gh não está instalado", "https://github.com/cli/cli/blob/trunk/docs/install_linux.md")
     else:
@@ -387,7 +415,7 @@ def _estado_idade(cfg_path: str, now: float) -> float | None:
 
 def doctor_docker(cfg_path: str, now: float | None = None) -> tuple[int, list[str]]:
     """Doctor do contentor runner: sem linger, timer, docker, DNS nem portas (não há socket do Docker nem systemd).
-    Cada ✗ traz o comando `docker compose …` que corrige; as linhas ℹ não contam para o código de saída."""
+    Cada ✗ traz o comando `docker compose …` que corrige; as linhas ℹ e ⚠ não contam para o código de saída."""
     now = time.time() if now is None else now
     linhas: list[str] = []
 
@@ -412,6 +440,9 @@ def doctor_docker(cfg_path: str, now: float | None = None) -> tuple[int, list[st
         linha(False, f"credencial do Claude com permissões abertas ({ficheiro.name})", f"{CONFIGURAR} --credenciais")
     else:
         linha(False, f"credencial do Claude: {motivo or 'nenhuma'}", f"{CONFIGURAR} --credenciais")
+    negocio = aviso_negocio(cfg, cfg_path, f"{CONFIGURAR} --credenciais")
+    if negocio:
+        linhas.append(negocio)
     if shutil.which("gh") is None:
         linha(False, "gh não está instalado", ACTUALIZAR)
     else:

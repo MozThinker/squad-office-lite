@@ -35,6 +35,7 @@ import rotinas
 import seguro
 
 import agentes
+import conversa
 import officecfg
 
 RASCUNHO_S = 120
@@ -559,6 +560,22 @@ def _texto_modelo(mid: str, rel: str) -> str:
     return raw.decode("utf-8")
 
 
+def _ficheiros_modelo(m: dict, missao: str) -> dict:
+    """CLAUDE.md do modelo com a missão e os agentes do modelo tal e qual (a «Nunca» nunca vem de texto livre)."""
+    out = {"CLAUDE.md": _texto_modelo(m["id"], "CLAUDE.md").replace("{{MISSAO}}", missao)}
+    for n in m["agentes"]:
+        out[f"agents/{n}.md"] = _texto_modelo(m["id"], f"agents/{n}.md")
+    return out
+
+
+def _gravar_rascunho(ctx: _Ctx, sq: str, m: dict, missao: str, ficheiros: dict) -> None:
+    office = next((s for s in ctx.cfg["squads"] if s["id"] == sq), None)
+    doc = {"v": 1, "squad": sq, "modelo": m["id"], "nome": office["nome"] if office else m["nome"], "lead": m["lead"],
+           "missao": missao, "ficheiros": ficheiros, "criado_em": ctx.dt.isoformat(timespec="seconds")}
+    with _pasta(ctx.rasc, "squads", sq, criar=True) as dfd:
+        seguro.substituir(dfd, "rascunho.json", _json_bytes(doc))
+
+
 def a_squad_rascunho(ctx: _Ctx, a: dict) -> None:
     m = _modelo_squad(a["modelo"])
     sq = a["squad"]
@@ -593,11 +610,7 @@ def a_squad_rascunho(ctx: _Ctx, a: dict) -> None:
         x = novos.get(n) if isinstance(novos.get(n), dict) else {}   # nomes fora do modelo: ignorados
         md = _trocar_agente(original, _descricao(x.get("description")), _corpo(x.get("corpo")))
         ficheiros[f"agents/{n}.md"] = md if agentes.validar_md(md, n, set()) is None else original
-    office = next((s for s in ctx.cfg["squads"] if s["id"] == sq), None)
-    doc = {"v": 1, "squad": sq, "modelo": m["id"], "nome": office["nome"] if office else m["nome"], "lead": m["lead"],
-           "missao": missao, "ficheiros": ficheiros, "criado_em": ctx.dt.isoformat(timespec="seconds")}
-    with _pasta(ctx.rasc, "squads", sq, criar=True) as dfd:
-        seguro.substituir(dfd, "rascunho.json", _json_bytes(doc))
+    _gravar_rascunho(ctx, sq, m, missao, ficheiros)
 
 
 def _rascunho_visto(ctx: _Ctx, a: dict) -> dict:
@@ -646,17 +659,17 @@ def a_squad_criar(ctx: _Ctx, a: dict) -> None:
                 with _pasta(ctx.base, novo, "agents", criar=True) as afd:
                     for n in m["agentes"]:
                         seguro.escrever(afd, f"{n}.md", r["ficheiros"][f"agents/{n}.md"].encode("utf-8"))
-            rotinas.gravar_json(ctx.base, "squads.json", {"v": 1, "squads": registo["squads"] + [entrada]})
+            rotinas.gravar_json(ctx.base, "squads.json", {"v": 1, "squads": registo["squads"] + [entrada]}, 0o644)
             try:
                 _instalar(bfd, novo, sq)
             except OSError:
-                rotinas.gravar_json(ctx.base, "squads.json", registo)   # tudo-ou-nada: o registo volta ao que era
+                rotinas.gravar_json(ctx.base, "squads.json", registo, 0o644)   # tudo-ou-nada: o registo volta ao que era
                 raise
         finally:
             shutil.rmtree(ctx.base / novo, ignore_errors=True)
     try:
         with _pasta(ctx.rasc, "squads", sq) as dfd:
-            _apagar(dfd, "rascunho.json", "ensaio.json")
+            _apagar(dfd, "rascunho.json", "ensaio.json", conversa.NOME)
     except OSError:
         pass
 
@@ -710,11 +723,11 @@ def a_squad_ensaio(ctx: _Ctx, a: dict) -> None:
 
 
 def a_squad_descartar(ctx: _Ctx, a: dict) -> None:
-    if not _existe(ctx.rasc, ["squads", a["squad"]], "rascunho.json"):
+    if not any(_existe(ctx.rasc, ["squads", a["squad"]], n) for n in ("rascunho.json", conversa.NOME)):
         raise Erro("rascunho inexistente")
     with _pasta(ctx.rasc, "squads") as dfd:
         with _pasta(ctx.rasc, "squads", a["squad"]) as sfd:
-            _apagar(sfd, "rascunho.json")
+            _apagar(sfd, "rascunho.json", conversa.NOME)
         try:
             os.rmdir(a["squad"], dir_fd=dfd)
         except OSError:
@@ -730,8 +743,102 @@ def a_squad_desactivar(ctx: _Ctx, a: dict) -> None:
         with _pasta(ctx.base, a["squad"]) as dfd:
             seguro.mover(dfd, "agents", dfd, f"agents.bak-{ctx.carimbo}")
     rotinas.gravar_json(ctx.base, "squads.json",
-                        {"v": 1, "squads": [s for s in registo["squads"] if s["id"] != a["squad"]]})
+                        {"v": 1, "squads": [s for s in registo["squads"] if s["id"] != a["squad"]]}, 0o644)
     rotinas.cancelar_squad(ctx.cfg, a["squad"])
+
+
+def _gravar_conversa(ctx: _Ctx, sq: str, conv: dict) -> None:
+    with _pasta(ctx.rasc, "squads", sq, criar=True) as dfd:
+        seguro.substituir(dfd, conversa.NOME, json.dumps(conversa.caber(conv), ensure_ascii=False).encode("utf-8"))
+
+
+def _conversa_argv(ctx: _Ctx, sq: str) -> list[str]:
+    # CA-5: o --disallowedTools é variádico: nunca no fim (fica antes do --max-budget-usd)
+    argv = ["-p", "--tools", "", "--max-turns", "1", "--strict-mcp-config", "--no-session-persistence",
+            "--output-format", "json", "--disallowedTools", "mcp__*", "--max-budget-usd",
+            f"{agentes.ACCOES_IA['squad_conversa']:.2f}"]
+    modelo = ctx.modelo_sessao(sq)
+    return argv + (["--model", modelo] if modelo else [])
+
+
+def a_squad_conversa(ctx: _Ctx, a: dict) -> None:
+    """Uma volta da conversa de montagem (ADR-020): revalida, chama o claude uma vez (sem ferramentas, texto só no
+    stdin entre marcas com nonce) e grava o `rascunho.json` (se houver proposta) e por fim o `conversa.json`."""
+    sq, texto = a["squad"], a["texto"]
+    if sq in {s["id"] for s in ctx.registo["squads"]}:
+        raise Erro("já existe")
+    if agentes.agentes_de(ctx.base / sq):
+        raise Erro("squad já tem agentes")
+    conv = conversa.ler(ctx.rasc, sq)
+    if conv is None and _existe(ctx.rasc, ["squads", sq], conversa.NOME):
+        raise Erro("a conversa já terminou")   # ilegível: só o squad_descartar a tira
+    if conv is None and _existe(ctx.rasc, ["squads", sq], "rascunho.json"):
+        raise Erro("já existe")
+    if conv is not None and conv["estado"] != "a_perguntar":
+        raise Erro("a conversa já terminou")
+    if any(x != sq for x in conversa.em_curso(ctx.rasc)):
+        raise Erro("já há uma conversa em curso")
+    em = ctx.dt.isoformat(timespec="seconds")
+    if conversa.tecto_atingido(conv):   # CA-9: recusada sem chamar o claude; a conversa fecha
+        _gravar_conversa(ctx, sq, conversa.fechar(conv, conversa.MSG_TECTO, em))
+        raise Erro(conversa.MSG_TECTO)
+    _tecto(ctx, "squad_conversa")
+    modelos = agentes.modelos_squad(agentes.MODELOS_DIR)
+    nonce = secrets.token_hex(8)
+    if not conversa.nonce_ok(conv, texto, nonce):
+        raise Erro("pedido ilegível")
+    entrada = conversa.prompt(conv, texto, nonce, modelos)
+    tmp = tempfile.mkdtemp(prefix="office-conversa-")
+    try:
+        erro, res, custo, arrancou = claude(ctx, _conversa_argv(ctx, sq), entrada, tmp, RASCUNHO_S)
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+    if not arrancou:   # nada gasto: a conversa não muda
+        raise Erro(erro or "a IA falhou")
+    _livro_add(ctx, "squad_conversa", custo, conversa.VOLTA_USD)
+    custo = custo if custo is not None else conversa.VOLTA_USD   # sem custo conhecido conta o tecto da volta
+    conv, resp = conversa.avancar(conv, sq, texto, erro is None, res, custo, em, {m["id"] for m in modelos})
+    if conv["estado"] == "proposta":   # CA-11: rascunho com o modelo e a missão; agentes sempre os do modelo
+        m = _modelo_squad(resp["modelo"])
+        _gravar_rascunho(ctx, sq, m, resp["missao"], _ficheiros_modelo(m, resp["missao"]))
+    _gravar_conversa(ctx, sq, conv)   # o conversa.json por último
+    if conv["estado"] == "falhou":
+        raise Erro(conversa.MSG_SEM_SQUAD)
+    if resp is None:
+        raise Erro(conversa.MSG_MAL)
+
+
+def _ilegivel_parado(rasc: Path, sq: str, t: float) -> bool:
+    """`squads/<sq>/conversa.json` regular (pasta sem symlink) sem mudança há mais de PARADA_S."""
+    pasta = rasc / "squads" / sq
+    try:
+        st = os.lstat(pasta / conversa.NOME)
+    except OSError:
+        return False
+    return agentes._pasta(pasta) and stat.S_ISREG(st.st_mode) and t - st.st_mtime > conversa.PARADA_S
+
+
+def limpar_conversas(cfg, t: float, pendentes: set[str]) -> list[str]:
+    """CA-11a / D13: apaga o `conversa.json` sem mudança há 24 h (qualquer estado; o rascunho fica) das squads sem
+    `squad_conversa` pendente na fila; um `conversa.json` ilegível (C3) conta pela data do ficheiro. Uma linha por
+    conversa apagada."""
+    rasc, linhas = officecfg.caminho(cfg, "agentes_rascunhos"), []
+    for sq in conversa._nomes(rasc):
+        c = conversa.ler(rasc, sq)
+        if sq in pendentes or not (conversa.parada(c, t) if c is not None else _ilegivel_parado(rasc, sq, t)):
+            continue
+        try:
+            with _pasta(rasc, "squads", sq) as sfd:
+                _apagar(sfd, conversa.NOME)
+            with _pasta(rasc, "squads") as dfd:
+                try:
+                    os.rmdir(sq, dir_fd=dfd)
+                except OSError:
+                    pass
+            linhas.append(f"agentes: conversa da squad {sq} apagada (parada há mais de 24 h)")
+        except OSError:
+            linhas.append(f"agentes: conversa da squad {sq} não apagada (erro de escrita)")
+    return linhas
 
 
 def _rotina(f):
@@ -747,7 +854,7 @@ ACCOES = {
     "agente_rascunho": a_agente_rascunho, "agente_criar": a_agente_criar, "agente_ensaio": a_agente_ensaio,
     "agente_activar": a_agente_activar, "agente_descartar": a_agente_descartar,
     "squad_rascunho": a_squad_rascunho, "squad_criar": a_squad_criar, "squad_ensaio": a_squad_ensaio,
-    "squad_descartar": a_squad_descartar, "squad_desactivar": a_squad_desactivar,
+    "squad_descartar": a_squad_descartar, "squad_desactivar": a_squad_desactivar, "squad_conversa": a_squad_conversa,
     "rotina_pedir": _rotina(lambda ctx, a: rotinas.pedir(ctx.cfg, a, ctx.t)),
     "rotina_retomar": _rotina(lambda ctx, a: rotinas.retomar(ctx.cfg, a)),
     "rotina_cancelar": _rotina(lambda ctx, a: rotinas.cancelar(ctx.cfg, a)),
@@ -796,8 +903,11 @@ def processar(cfg, cfg_path: str | None, now: float | None = None) -> list[str]:
                 pedidos.append((n[:-5], None))
     finally:
         os.close(dfd)
+    pend_conv = {p["args"].get("squad") for _, p in pedidos if isinstance(p, dict) and p.get("accao") ==
+                 "squad_conversa" and isinstance(p.get("args"), dict)}
+    linhas += limpar_conversas(cfg, t, pend_conv)
     if not pedidos:
-        return []
+        return linhas
     ctx, vistos, ia = _Ctx(cfg, cfg_path, t), set(), None
     for stem, p in pedidos:
         erro = agentes.validar_pedido(p, stem)

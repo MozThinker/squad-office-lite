@@ -1,8 +1,9 @@
 """Agentes, skills, squads por modelo e rotinas (ADR-017…019): regras partilhadas pelo Office e pelo runner.
 
-Sem estado global e sem imports do projecto: o Office (`server.py`) e o runner (`runner/agentes_fila.py`,
-`runner/rotinas.py`, `runner/agentes_copia.py`, no host ou no contentor `runner`) importam este módulo, por isso o
-parser de frontmatter, a validação dos pedidos e a reescrita dos `.md` nunca divergem. Só stdlib, Python ≥ 3.10.
+Sem estado global e sem imports do projecto no topo (o `conversa`, que importa este, só dentro das funções): o
+Office (`server.py`) e o runner (`runner/agentes_fila.py`, `runner/rotinas.py`, `runner/agentes_copia.py`, no host ou
+no contentor `runner`) importam este módulo, por isso o parser de frontmatter, a validação dos pedidos e a reescrita
+dos `.md` nunca divergem. Só stdlib, Python ≥ 3.10.
 
 Pastas: `<dados>/agentes/<squad>/agents/<nome>.md`, `<dados>/agentes/<squad>/skills/<skill>/SKILL.md`,
 `<dados>/agentes/<squad>/CLAUDE.md`; registos `<dados>/agentes/squads.json` e `rotinas.json` (só o runner escreve);
@@ -37,6 +38,7 @@ FEITO = re.compile(r"(\d{8}T\d{6}-[0-9a-f]{8})\.feito\.json")          # fullmat
 TECTO = re.compile(r"[0-9]\.[0-9][0-9]")
 
 MODELOS_AGENTE = ("inherit", "sonnet", "opus", "haiku")
+MODELOS_NEGOCIO = ("atendimento", "comercial")   # squads de negócio (ADR-020); = accoes.MODELOS_NEGOCIO
 CHAVES_FM = ("name", "description", "tools", "model", "skills", "permissionMode")
 PERMISSION_OK = ("default", "acceptEdits", "plan", "dontAsk")
 CHAVES = ("v", "id", "accao", "args", "pedido_em", "ip", "ua")         # exactas e por esta ordem
@@ -53,12 +55,14 @@ ACCOES: dict[str, tuple[str, ...]] = {
     "squad_criar": ("squad", "sha256"),
     "squad_ensaio": ("squad", "sha256", "projecto", "tarefa"),
     "squad_descartar": ("squad",),
+    "squad_conversa": ("squad", "texto"),
     "squad_desactivar": ("squad",),
     "rotina_pedir": ("squad", "projecto", "hora", "dias", "instrucoes", "tecto_usd", "max_turnos"),
     "rotina_retomar": ("squad", "rotina"),
     "rotina_cancelar": ("squad", "rotina"),
 }
-ACCOES_IA = {"agente_rascunho": 0.50, "squad_rascunho": 0.50, "agente_ensaio": 2.0, "squad_ensaio": 2.0}
+ACCOES_IA = {"agente_rascunho": 0.50, "squad_rascunho": 0.50, "agente_ensaio": 2.0, "squad_ensaio": 2.0,
+             "squad_conversa": 0.15}
 IA_DIA_USD = 10.0
 PENDENTES_MAX = 50
 MD_MAX = 80 * 1024           # .md de um agente activo (leitura)
@@ -66,6 +70,7 @@ CAND_MAX = 64 * 1024         # candidato (md de agente_criar, rascunhos)
 PEDIDO_MAX = 96 * 1024       # ficheiro da fila
 FM_MAX = 8192                # frontmatter
 TEXTO_MAX = 2000             # descricao, missao, tarefa, instrucoes
+CONVERSA_MAX = 1000          # texto de uma volta da conversa (= conversa.TEXTO_MAX)
 SKILLS_MAX = 20
 DESC_MAX = 300
 LISTA_MAX = 20
@@ -79,7 +84,9 @@ ERROS = ("pedido ilegível", "versão desconhecida", "pedido repetido nesta pass
          "candidato inexistente", "sem ensaio ok desta versão", "o lead não pode ser removido", "projecto inválido",
          "modelo de squad inexistente", "squad já tem agentes", "rascunho inexistente", "squad não registada",
          "squad não lançável", "limite de rotinas", "rotina inexistente", "rotina não pausada",
-         "tecto diário de IA atingido", "a IA falhou", "tempo esgotado", "erro de escrita")
+         "tecto diário de IA atingido", "a IA falhou", "tempo esgotado", "erro de escrita",
+         "já há uma conversa em curso", "tecto da conversa atingido", "a conversa já terminou",
+         "a IA não respondeu bem, envia de novo", "não foi possível montar a squad")
 MODELOS_DIR = Path(__file__).resolve().parent / "modelos" / "squads"
 ZWJ = "\u200d"
 
@@ -532,6 +539,15 @@ def modelos_squad(raiz: Path = MODELOS_DIR) -> list[dict]:
     return out
 
 
+def modelo_negocio(registo: dict, sid: str) -> str | None:
+    """Modelo da entrada `sid` de `squads.json` (já lido por `ler_registo`) se for de negócio (MODELOS_NEGOCIO);
+    senão None (squad fora do registo ou de outro modelo)."""
+    for s in registo.get("squads", []) if isinstance(registo, dict) else []:
+        if isinstance(s, dict) and s.get("id") == sid:
+            return s.get("modelo") if s.get("modelo") in MODELOS_NEGOCIO else None
+    return None
+
+
 def lead_de(cfg, registo: dict, squad: str) -> str | None:
     """Lead da squad: o do registo (squad criada por modelo) ganha ao do office.yaml; None se não existir."""
     for s in registo.get("squads", []):
@@ -565,6 +581,8 @@ def _arg_ok(accao: str, k: str, v) -> str | None:
         ok = (isinstance(v, list) and len(v) <= SKILLS_MAX and len(set(map(str, v))) == len(v)
               and all(isinstance(s, str) and ID_AGENTE.fullmatch(s) for s in v))
         return None if ok else "pedido ilegível"
+    if k == "texto":
+        return None if texto_ok(v, 1, CONVERSA_MAX, True) and v.strip() else "pedido ilegível"
     if k in ("descricao", "missao", "tarefa", "instrucoes"):
         return None if texto_ok(v, 1, TEXTO_MAX, True) and v.strip() else "pedido ilegível"
     if k == "md":
@@ -800,6 +818,11 @@ def _sessao(cfg, s: dict | None) -> dict:
     return {"modelo": None, "fonte": "omissao"}
 
 
+def _modelo_agentes(pasta: Path) -> dict:
+    """{agente: model do frontmatter ou None} de um modelo de squad (CA-1)."""
+    return {a["nome"]: a["model"] for a in (agente_publico(f, r) for f, r in agentes_de(pasta)) if "nome" in a}
+
+
 def resposta(cfg, base: Path, rasc: Path, fila: Path, tz, now: float) -> dict:
     """Corpo do GET /api/agentes (§3.5): só frontmatter permitido, caminhos relativos e sha256; nunca corpos."""
     base, rasc, fila = Path(base), Path(rasc), Path(fila)
@@ -839,8 +862,12 @@ def resposta(cfg, base: Path, rasc: Path, fila: Path, tz, now: float) -> dict:
         estado = "pendente" if f is None else "ok" if f.get("ok") else "erro"
         pedidos.append({"id": stem, "accao": p["accao"], "alvo": alvo(p["accao"], p["args"]), "estado": estado,
                         "erro": (f or {}).get("erro"), "pedido_em": p["pedido_em"]})
-    return {"v": 1, "escrita": fila.is_dir() and os.access(fila, os.W_OK), "modelos": modelos_squad(MODELOS_DIR),
-            "projectos": [p["id"] for p in cfg["projectos"]], "squads": squads, "pedidos": pedidos}
+    import conversa
+    modelos = [{**m, "negocio": m["id"] in MODELOS_NEGOCIO, "modelo_agentes": _modelo_agentes(MODELOS_DIR / m["id"])}
+               for m in modelos_squad(MODELOS_DIR)]
+    return {"v": 1, "escrita": fila.is_dir() and os.access(fila, os.W_OK), "modelos": modelos,
+            "projectos": [p["id"] for p in cfg["projectos"]], "squads": squads, "pedidos": pedidos,
+            "conversas": conversa.lista(rasc)}
 
 
 def candidato(rasc: Path, squad: str, nome: str) -> dict | None:
@@ -911,9 +938,23 @@ def _semantica(cfg, base: Path, rasc: Path, accao: str, a: dict) -> str | None:
             return "modelo de squad inexistente"
         if agentes_de(bs):
             return "squad já tem agentes"
-    elif accao in ("squad_criar", "squad_descartar"):
+    elif accao == "squad_criar":
         if _rascunho(rasc, sid) is None:
             return "rascunho inexistente"
+    elif accao == "squad_descartar":   # o rascunho e/ou a conversa (ADR-020)
+        if _rascunho(rasc, sid) is None and not os.path.lexists(rasc / "squads" / sid / "conversa.json"):
+            return "rascunho inexistente"
+    elif accao == "squad_conversa":
+        import conversa
+        if sid in reg:
+            return "já existe"
+        if agentes_de(bs):
+            return "squad já tem agentes"
+        conv = conversa.ler(rasc, sid)
+        if conv is None and _rascunho(rasc, sid) is not None:
+            return "já existe"
+        if conv is not None and conv["estado"] != "a_perguntar":
+            return "a conversa já terminou"
     elif accao in ("squad_ensaio", "squad_desactivar"):
         if sid not in reg:
             return "squad não registada"
@@ -941,6 +982,13 @@ def _semantica(cfg, base: Path, rasc: Path, accao: str, a: dict) -> str | None:
     return None
 
 
+def _outra_conversa(rasc: Path, pendentes: list[dict], sid: str) -> bool:
+    """CA-11a: uma conversa de cada vez — outra squad em `a_perguntar` ou com `squad_conversa` pendente na fila."""
+    import conversa
+    outras = set(conversa.em_curso(rasc)) | {p["args"]["squad"] for p in pendentes if p["accao"] == "squad_conversa"}
+    return bool(outras - {sid})
+
+
 def pedir(fila: Path, base: Path, cfg, data: dict, ip: str, ua: str, tz, now: float, rasc: Path | None = None
           ) -> tuple[int, dict]:
     """POST /api/agentes/pedido já com token/origem verificados: corpo {"token","accao","args"} → pedido v1 na fila.
@@ -965,6 +1013,8 @@ def pedir(fila: Path, base: Path, cfg, data: dict, ip: str, ua: str, tz, now: fl
         meu = alvo(accao, args)
         if any(alvo(p["accao"], p["args"]) == meu for p in pendentes):
             return 409, {"error": "já há um pedido pendente para este alvo"}
+        if accao == "squad_conversa" and _outra_conversa(rasc, pendentes, args["squad"]):
+            return 409, {"error": "já há uma conversa em curso"}
         if len(pendentes) >= PENDENTES_MAX:
             return 409, {"error": "fila cheia"}
         dt = datetime.fromtimestamp(now, tz)

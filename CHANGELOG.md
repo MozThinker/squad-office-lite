@@ -1,5 +1,37 @@
 # Changelog
 
+## Lite 0.5.0 (2026-11-18)
+
+Squads de negócio e acções aprovadas (porte do Squad Office #40 e #42; ADR-020 e ADR-021). `versao: 1` sem chaves
+novas no `office.yaml`; a fila `agentes-fila` ganha a acção `squad_conversa` (contrato v1, sem `"v"` novo) e os
+contratos existentes não mudam. Documentação das acções na raiz: `ACCOES.md` e `ACCOES.en.md`.
+
+- **Squad por conversa (#40):** «+ Squad» descreve o fim por palavras; a IA pergunta (até 3 rondas), propõe um modelo e
+  a missão ou recusa com motivo. Sem ferramentas, 0,15 US$ por volta e 1,00 US$ por conversa, uma de cada vez, limpeza
+  às 24 h. Segue o rascunho, ensaio e criar do 0.4.0.
+- **Modelos `atendimento` e `comercial`:** só de leitura (sem `Bash`, `Edit`, `Write`, `WebFetch` nem MCP; `WebSearch`
+  só no pesquisador do `comercial`). O lançador força este perfil nas squads de negócio, por cima de
+  `runner.permission_mode` e `runner.ferramentas`; as mensagens recebidas vão para `entrada/mensagens/` do worktree.
+- **Acções aprovadas (#42):** a squad propõe (catálogo fechado: `email_rascunho`, `email_responder`, `folha_linha`,
+  `aviso_dono`), o runner cria o pedido nas Aprovações e só o que aprovares, linha a linha, é executado, por um serviço
+  `accoes` com outro uid e as credenciais só dele. 3 acções ligadas por omissão; `email_responder` liga-se à mão.
+  Pedidos válidos 48 h, limites por dia, retenção de 90 dias, livro mensal sem conteúdo.
+- **Adaptado ao Lite:** o runner propõe e purga (em vez do script do host), o dia e o fuso vêm do `office.yaml` e ficam
+  no registo do pedido, o runner lê `squads.json` (agora `0644`) e uma vista sem segredos (`accoes-entrada/…/vista.json`)
+  em vez do volume do serviço, purgas automáticas, e serviço nos dois modos: Docker (arranca root só para o `chown`,
+  larga para `ACCOES_UID:ACCOES_GID`, sem `init`) e VPS (`sudo ./instalar-accoes.sh`, utilizador `office-accoes`,
+  timer systemd). `tools/verificar_compose_accoes.py` verifica que só o `accoes` vê o `accoes.env`. O `doctor` avisa
+  de squads de negócio com a credencial de um plano de consumidor: para uso comercial automático, chave de API.
+- **Risco residual S1 (ADR-021):** quem escreve como o utilizador do runner pode forjar pedido, registo e aprovação;
+  a fronteira protege credenciais, conteúdo e destinatários, não a aprovação. Sem âncora fora do host nesta versão.
+- **Fica de fora** (e porquê): Google Sheets (só folhas CSV locais; sem APIs de terceiros com credenciais); botões
+  «anular» e «desfazer» e vista do livro nas Aprovações (fazem-se por `accoes anular|desfazer <sha>`); solução para o
+  S1 (decisão do dono do projecto); avaliação real dos modelos com o `claude` verdadeiro e fixtures da casa (nunca na
+  CI, que não tem credenciais); IMAP, SMTP e Telegram reais na CI (a CI usa falsos); credenciais das acções pelo
+  `configurar` (escrevem-se com `accoes escrever-segredos`, sem eco); verificador de modelos com o argumento `modelos`.
+- **Actualizar:** no modo Docker, `docker compose up -d` com o compose novo e `docker compose run --rm configurar`
+  uma vez; no VPS, `git pull`, e `sudo ./instalar-accoes.sh --dados …` só se quiseres as acções.
+
 ## Lite 0.4.0 (2026-11-18)
 
 Squads e agentes (porte do Squad Office #31, #33, #34, #36 e #37; ADR-017…019). `versao: 1` com uma chave opcional

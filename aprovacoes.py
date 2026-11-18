@@ -81,6 +81,22 @@ def _paragrafo(lines: list[str]) -> str:
     return "\n".join(out)
 
 
+_PEDIDO_ACCOES = re.compile(r"accoes-[a-z][a-z0-9-]{1,19}-\d{8}-\d{1,2}\.md")   # = accoes.PEDIDO (ADR-021)
+
+
+def _mascara(root, nome: str):
+    """Pedidos de acções (ADR-021) vão sem máscara: o dono tem de ver exactamente o texto que o serviço `accoes` envia
+    se aprovar (um segredo tapado na vista sairia inteiro). Só conta como pedido de acções o nome do runner com o
+    registo `.accoes/<pedido>.json` (ficheiro regular, escrito só pelo runner); tudo o resto mantém a máscara."""
+    if _PEDIDO_ACCOES.fullmatch(nome):
+        try:
+            if stat.S_ISREG(os.lstat(Path(root) / ".accoes" / (nome[:-3] + ".json")).st_mode):
+                return lambda s: s
+        except OSError:
+            pass
+    return reader.mask
+
+
 def pendente(estado: str) -> bool:
     return estado.startswith(("pendente", "parcial"))   # com maiúsculas não conta (como no aplicador)
 
@@ -212,10 +228,11 @@ def listar(dirs: dict[str, Path], fila: Path, tz, now: float) -> list[dict]:
             except ValueError:
                 criado = datetime.fromtimestamp(st.st_mtime, tz).date()
             decisoes = []
+            msk = _mascara(root, nome)
             for d in p["decisoes"]:
                 rcb = d["feito"] is None and _recebido(rec, fonte, nome, d["id"], sha)
-                decisoes.append({"id": d["id"], "texto": reader.mask(d["texto"]),
-                                 "valor": reader.mask(d["valor"]) if d["valor"] else None,
+                decisoes.append({"id": d["id"], "texto": msk(d["texto"]),
+                                 "valor": msk(d["valor"]) if d["valor"] else None,
                                  "feito": d["feito"], "data": d["data"], "recebido": rcb,
                                  "aberta": d["feito"] is None and not rcb})
             abertas = sum(d["aberta"] for d in decisoes)
@@ -239,7 +256,7 @@ def corpo(dirs: dict[str, Path], fonte, ficheiro) -> tuple[int, dict]:
     if got is None or not pendente(got[0]["estado"]):
         return 404, {"error": "não encontrado"}
     p, sha, _ = got
-    texto = reader.mask(p["corpo"])
+    texto = _mascara(root, ficheiro)(p["corpo"])
     return 200, {"fonte": fonte, "ficheiro": ficheiro, "titulo": reader.mask(p["titulo"]), "sha256": sha,
                  "corpo": texto[:CORPO_MAX], "cortado": len(texto) > CORPO_MAX}
 

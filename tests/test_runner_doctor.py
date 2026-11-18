@@ -1,6 +1,7 @@
 """D16: `office_runner.py doctor` — uma linha `✓ <o quê>` ou `✗ <o quê> → <comando>` por verificação, exit 0/1,
 segue com o office.yaml inválido e nunca mostra o valor da credencial. `claude` falso de tests/bin; `gh`, `docker`,
 `systemctl`, `loginctl`, `getent` e `hostname` falsos num PATH temporário; HOME temporário; portas simuladas."""
+import json
 import os
 import subprocess
 import sys
@@ -351,3 +352,71 @@ def test_env_uid_so_digitos(tmp_path):
     (tmp_path / ".env").write_text("OFFICE_UID='0'\nOFFICE_GID='$(id)'\n", encoding="utf-8")
     assert diagnostico.env_uid(tmp_path) == ("0", None)
     assert diagnostico.env_uid(tmp_path / "nada") == (None, None)
+
+
+# ---------------------------------------------------------------- CA-33: squads de negócio pedem chave de API
+
+def registo(path, *modelos):
+    """agentes/squads.json com uma squad por modelo (ids inventados: s1, s2, …)."""
+    cfg, _ = officecfg.carregar(str(path))
+    pasta = officecfg.caminho(cfg, "agentes")
+    pasta.mkdir(parents=True, exist_ok=True)
+    squads = [{"id": f"s{i}", "modelo": m, "nome": f"Squad {i}", "lead": "lead", "criada_em": "2026-11-18T10:00:00Z"}
+              for i, m in enumerate(modelos, 1)]
+    (pasta / "squads.json").write_text(json.dumps({"v": 1, "squads": squads}), encoding="utf-8")
+
+
+AVISO = "⚠ squads de negócio ("
+
+
+def test_negocio_com_token_avisa_sem_falhar(tmp_path, monkeypatch):
+    path = preparar(tmp_path, monkeypatch, cred=f"CLAUDE_CODE_OAUTH_TOKEN={TOKEN}\n")
+    registo(path, "atendimento", "dev", "comercial")
+    codigo, linhas = doctor(path)
+    assert codigo == 0, linhas
+    (aviso,) = [x for x in linhas if x.startswith(AVISO)]
+    assert aviso == ("⚠ squads de negócio (s1, s3) com a credencial de um plano de consumidor "
+                     "(CLAUDE_CODE_OAUTH_TOKEN): para uso comercial automático usa uma chave de API "
+                     f"(ANTHROPIC_API_KEY) → cd {lancador.RUNNER_REPO} && ./install.sh --credenciais")
+    assert linhas.index(aviso) == next(i for i, x in enumerate(linhas) if "credencial do Claude" in x) + 1
+    assert TOKEN not in "\n".join(linhas)
+
+
+def test_negocio_com_login_avisa(tmp_path, monkeypatch):
+    path = preparar(tmp_path, monkeypatch, cred=None)
+    login = tmp_path / "casa" / ".claude" / ".credentials.json"
+    login.parent.mkdir(parents=True)
+    login.write_text("{}", encoding="utf-8")
+    registo(path, "comercial")
+    _, linhas = doctor(path)
+    assert any(x.startswith(AVISO) and "(login do claude)" in x for x in linhas), linhas
+
+
+@pytest.mark.parametrize("cred, modelos", [
+    (f"ANTHROPIC_API_KEY={CHAVE}\n", ("atendimento", "comercial")),   # chave de API: nada a recomendar
+    (f"CLAUDE_CODE_OAUTH_TOKEN={TOKEN}\n", ("dev",)),                 # sem squads de negócio
+    (f"CLAUDE_CODE_OAUTH_TOKEN={TOKEN}\n", ()),
+])
+def test_sem_aviso(tmp_path, monkeypatch, cred, modelos):
+    path = preparar(tmp_path, monkeypatch, cred=cred)
+    registo(path, *modelos)
+    codigo, linhas = doctor(path)
+    assert codigo == 0 and not [x for x in linhas if x.startswith(AVISO)], linhas
+
+
+def test_registo_ilegivel_nao_avisa_nem_falha(tmp_path, monkeypatch):
+    path = preparar(tmp_path, monkeypatch, cred=f"CLAUDE_CODE_OAUTH_TOKEN={TOKEN}\n")
+    registo(path)
+    cfg, _ = officecfg.carregar(str(path))
+    (officecfg.caminho(cfg, "agentes") / "squads.json").write_text("{nada", encoding="utf-8")
+    codigo, linhas = doctor(path)
+    assert codigo == 0 and not [x for x in linhas if x.startswith(AVISO)]
+
+
+def test_negocio_no_doctor_do_modo_docker(tmp_path, monkeypatch):
+    path = preparar(tmp_path, monkeypatch, cred=f"CLAUDE_CODE_OAUTH_TOKEN={TOKEN}\n")
+    registo(path, "atendimento")
+    _, linhas = diagnostico.doctor_docker(str(path))
+    (aviso,) = [x for x in linhas if x.startswith(AVISO)]
+    assert aviso.endswith("→ docker compose run --rm configurar --credenciais")
+    assert "(s1)" in aviso

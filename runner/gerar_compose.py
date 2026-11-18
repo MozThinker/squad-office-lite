@@ -13,7 +13,8 @@ O docker-compose.example.yml do repo é esta saída para o office.example.yaml c
     python3 runner/gerar_compose.py --modo docker [--imagem-office REF] [--imagem-runner REF] > compose.yaml
 
 Modo Docker (ADR-008): compose do PC com office, caddy, runner e configurar, independente do office.yaml (dados em
-volumes nomeados, projectos num bind). Todas as variáveis têm omissão (o ficheiro funciona sem .env). O
+volumes nomeados, projectos num bind) e o serviço accoes das acções aprovadas (ADR-021: outro uid, o único que
+monta o accoes.env). Todas as variáveis têm omissão (o ficheiro funciona sem .env). O
 compose.example.yaml do repo é esta saída com as refs por omissão (ver tests/test_compose_docker.py).
 """
 import argparse
@@ -140,6 +141,8 @@ def _dados_runner(configurar):
     out += _volume("config", "/config", not configurar) + _volume("segredos", "/segredos", not configurar)
     if configurar:
         out += _volume("proxy", "/proxy")
+    else:   # mensagens e vista que o serviço accoes escreve (o configurar não lhe toca: o accoes faz o próprio chown)
+        out += _volume("accoes-entrada", "/dados/accoes-entrada", True)
     out += ["      - type: bind", '        source: "${OFFICE_PROJECTOS:-./projectos}"', "        target: /projectos",
             "        bind:", "          create_host_path: true"]
     return out
@@ -156,6 +159,37 @@ def _endurecer(*capacidades):
     return out
 
 
+ACCOES_UID = "${ACCOES_UID:-10002}"
+ACCOES_GID = "${ACCOES_GID:-10002}"
+ACCOES_VOLUMES = ("accoes-segredos", "accoes-estado", "accoes-entrada")
+
+
+def _accoes(imagem_runner):
+    """Serviço accoes (ADR-021): colector e executor das acções aprovadas, o único que monta o accoes-segredos.
+    Root só para o chown das raízes dos 3 volumes dele (servico_accoes/arranque.py), depois ACCOES_UID:ACCOES_GID."""
+    out = ["  accoes:", f"    image: {imagem_runner}", "    restart: unless-stopped",
+           "    read_only: true", '    entrypoint: ["accoes"]', '    user: "0:0"',
+           "    # outro uid (nunca o OFFICE_UID): o office e o runner (as squads) nunca lêem o accoes.env;",
+           "    # recusa arrancar se ACCOES_UID = OFFICE_UID. As capacidades vão-se no setuid(). Sem o tini do",
+           "    # init, que ficaria como root (o user do serviço) a vida toda: o serviço não lança subprocessos"]
+    out += _endurecer("CHOWN: fchown das raízes dos volumes accoes-* para ACCOES_UID:ACCOES_GID",
+                      "SETGID: setgroups([OFFICE_GID]) e setgid(ACCOES_GID) ao largar o root",
+                      "SETUID: setuid(ACCOES_UID) ao largar o root")
+    out += ["    environment:", "      ACCOES_PERFIL: lite", f'      ACCOES_UID: "{ACCOES_UID}"',
+            f'      ACCOES_GID: "{ACCOES_GID}"', f'      OFFICE_UID: "{UID}"',
+            "      # grupo suplementar: ler decisoes e agentes (raízes 0750 do OFFICE_UID:OFFICE_GID)",
+            f'      OFFICE_GID: "{GID}"', "      ACCOES_DIR: /dados/accoes",
+            "      ACCOES_SEGREDOS: /segredos-accoes", "      ACCOES_ENTRADA: /dados/accoes-entrada",
+            "      ACCOES_DECISOES: /dados/decisoes", "      ACCOES_AGENTES: /dados/agentes",
+            "    tmpfs:", "      - /tmp:mode=1777", "    volumes:"]
+    out += (_volume("accoes-segredos", "/segredos-accoes") + _volume("accoes-estado", "/dados/accoes")
+            + _volume("accoes-entrada", "/dados/accoes-entrada") + _volume("decisoes", "/dados/decisoes", True)
+            + _volume("agentes", "/dados/agentes", True))
+    # rede própria: fala com IMAP/SMTP/Telegram lá fora, nunca com o office nem com o runner
+    out += ["    networks:", "      - accoes"]
+    return out
+
+
 def gerar_docker(imagem_office=IMAGEM_OFFICE, imagem_runner=IMAGEM_RUNNER):
     """Compose do modo Docker; não depende do office.yaml nem do host (mesmas refs -> mesmos bytes)."""
     if not (imagem_valida(imagem_office) and imagem_valida(imagem_runner)):
@@ -165,7 +199,8 @@ def gerar_docker(imagem_office=IMAGEM_OFFICE, imagem_runner=IMAGEM_RUNNER):
            "# Primeiro: docker compose run --rm configurar",
            "# Depois: docker compose up -d e abre http://localhost:8080",
            "# Opcional: .env ao lado (ver env.example) com OFFICE_ENDERECO, OFFICE_PORTA, OFFICE_PROJECTOS,",
-           "# OFFICE_UID e OFFICE_GID. Sem .env valem as omissões abaixo (${VAR:-omissão}).",
+           "# OFFICE_UID, OFFICE_GID, ACCOES_UID e ACCOES_GID."
+           " Sem .env valem as omissões abaixo (${VAR:-omissão}).",
            "# Nome próprio (o modo VPS é office-lite): os dois modos podem coexistir no mesmo Linux.",
            "name: office-lite-pc", "services:",
            "  office:", f"    image: {imagem_office}", "    restart: unless-stopped", "    read_only: true",
@@ -205,7 +240,7 @@ def gerar_docker(imagem_office=IMAGEM_OFFICE, imagem_runner=IMAGEM_RUNNER):
     out += ["    networks:", "      - runner"]
     # configurar: root só para o chown das raízes dos volumes, depois larga para OFFICE_UID:OFFICE_GID (D2)
     out += ["  configurar:", f"    image: {imagem_runner}", "    profiles:", "      - configurar",
-            # entrypoint só aqui: `run --rm configurar --gh` passa as opções ao configurar (e ignora o CMD ciclo)
+            # entrypoint (como no accoes): `run --rm configurar --gh` passa as opções ao configurar (sem o CMD ciclo)
             '    entrypoint: ["configurar"]', '    user: "0:0"', "    read_only: true", "    stdin_open: true",
             "    tty: true"]
     out += ["    # o no-new-privileges não impede o setuid() para baixo; o chmod das raízes é feito já sem root (sem FOWNER)"]
@@ -217,12 +252,13 @@ def gerar_docker(imagem_office=IMAGEM_OFFICE, imagem_runner=IMAGEM_RUNNER):
             "    tmpfs:", "      - /tmp:mode=1777", "    volumes:"]
     out += _dados_runner(True)
     out += ["    networks:", "      - runner"]
+    out += _accoes(imagem_runner)
     out += ["configs:", "  caddyfile:", "    content: |"]
     out += [f"      {linha}".rstrip(" ") if linha else "" for linha in caddyfile.replace("$", "$$").splitlines()]
-    out += ["networks:", "  office:", "  runner:", "volumes:"]
+    out += ["networks:", "  office:", "  runner:", "  accoes:", "volumes:"]
     out += [f"  {v}:" for v in [_vol(o) for o, _, _, _ in officecfg.MOUNTS] + ["runner", "runner-home", "config",
                                                                              "segredos", "proxy", "caddy-data",
-                                                                             "caddy-config"]]
+                                                                             "caddy-config", *ACCOES_VOLUMES]]
     return "\n".join(out) + "\n"
 
 

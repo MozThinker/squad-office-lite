@@ -3,7 +3,8 @@
 Docker, pelo `ciclo` (processo principal do contentor runner).
 
     office_runner.py --uma-vez [--config FICH]            uma passagem: decisões → retomas → fila do Quadro → arquivo
-                                                          da Biblioteca (fila e automático) → rotação
+                                                          da Biblioteca (fila e automático) → rotação → rotinas →
+                                                          fila dos agentes (a acção com IA no fim) → rotação dela
     office_runner.py correr TASK_ID [--retomar] [--config FICH]   (interno) corre o claude numa tarefa já preparada
     office_runner.py parar TASK_ID [--config FICH]        pára uma tarefa «a correr» (fecha em erro; não é retomada)
     office_runner.py doctor [--config FICH]               diagnóstico: uma linha ✓/✗ por verificação (exit 0/1)
@@ -32,10 +33,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(1, str(Path(__file__).resolve().parent.parent))
+import agentes_fila
 import arquivador
 import decisoes
 import diagnostico
 import lancador
+import rotinas
 import seguro
 
 import officecfg
@@ -63,30 +66,32 @@ def cfg_parar(cfg_path: str) -> dict:
 
 
 def limpar_settings(cfg, limite: float) -> None:
-    """Apaga as <dados>/runner/settings/<tid>.json de tarefas fechadas antes de `limite` (o correr já as apaga ao
-    fechar; isto apanha as que ficaram, ex.: tarefa fechada pelo retomas()). Sem meta, conta a data do ficheiro."""
-    pasta = officecfg.caminho(cfg, "runner") / "settings"
+    """Apaga as <dados>/runner/settings/<tid>.json e o estado <dados>/runner/tarefas/<tid>.json de tarefas fechadas
+    antes de `limite` (o correr já apaga as settings ao fechar; isto apanha as que ficaram, ex.: tarefa fechada pelo
+    retomas()). Sem meta, conta a data do ficheiro."""
     tasks = officecfg.caminho(cfg, "tasks")
-    try:
-        nomes = [e.name for e in os.scandir(pasta) if e.name.endswith(".json")]
-    except OSError:
-        return
-    for nome in nomes:
-        tid = nome[: -len(".json")]
-        if not lancador.TID.fullmatch(tid):
-            continue
-        meta = lancador.ler_meta(tasks / tid / "meta.json")
+    for sub in ("settings", "tarefas"):
+        pasta = officecfg.caminho(cfg, "runner") / sub
         try:
-            if meta is None:
-                velho = (pasta / nome).lstat().st_mtime < limite
-            else:
-                fim = meta.get("finished_at")
-                velho = (meta.get("status") != "a correr" and isinstance(fim, str)
-                         and datetime.fromisoformat(fim).timestamp() < limite)
-            if velho:
-                (pasta / nome).unlink()
-        except (OSError, ValueError, TypeError):
+            nomes = [e.name for e in os.scandir(pasta) if e.name.endswith(".json")]
+        except OSError:
             continue
+        for nome in nomes:
+            tid = nome[: -len(".json")]
+            if not lancador.TID.fullmatch(tid):
+                continue
+            meta = lancador.ler_meta(tasks / tid / "meta.json")
+            try:
+                if meta is None:
+                    velho = (pasta / nome).lstat().st_mtime < limite
+                else:
+                    fim = meta.get("finished_at")
+                    velho = (meta.get("status") != "a correr" and isinstance(fim, str)
+                             and datetime.fromisoformat(fim).timestamp() < limite)
+                if velho:
+                    (pasta / nome).unlink()
+            except (OSError, ValueError, TypeError):
+                continue
 
 
 def rodar(cfg, now: float | None = None) -> list[str]:
@@ -173,6 +178,9 @@ def uma_vez(cfg, cfg_path: str, now: float | None = None) -> list[str]:
         linhas += arquivador.automatico(cfg, now)
         linhas += rodar(cfg, now)
         linhas += arquivador.rodar(cfg, now)
+        linhas += rotinas.processar(cfg, cfg_path, now)
+        linhas += agentes_fila.processar(cfg, cfg_path, now)
+        linhas += agentes_fila.rodar(cfg, now)
     return linhas
 
 

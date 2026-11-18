@@ -26,8 +26,10 @@ from zoneinfo import ZoneInfo
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 sys.path.insert(1, str(Path(__file__).resolve().parent))
+import agentes_copia
 import seguro
 
+import agentes
 import officecfg
 
 NOME = re.compile(r"\d{8}T\d{6}-[0-9a-f]{8}\.json")
@@ -357,7 +359,9 @@ def a_correr(cfg, now: float) -> int:
 
 
 def processar_fila(cfg, cfg_path: str, now: float | None = None) -> list[str]:
-    """Uma passagem pela fila do Quadro. Devolve uma linha por pedido tratado (journal)."""
+    """Uma passagem pela fila do Quadro. Devolve uma linha por pedido tratado (journal). O tecto diário conta também
+    as rotinas lançadas hoje."""
+    import rotinas   # aqui: o rotinas importa este módulo
     fila, linhas = officecfg.caminho(cfg, "quadro_lancar"), []
     tecto = cfg["runner"]["tecto_diario"]
     for path in pendentes(fila):
@@ -371,7 +375,7 @@ def processar_fila(cfg, cfg_path: str, now: float | None = None) -> list[str]:
             _responder(fila, stem, {"erro": str(e)}, linhas)
             linhas.append(f"pedido {stem} recusado: {e}")
             continue
-        if lancados_hoje(cfg, fila, t) >= tecto:
+        if lancados_hoje(cfg, fila, t) + rotinas.lancadas_hoje(cfg, t) >= tecto:
             _responder(fila, stem, {"erro": "tecto diário"}, linhas)
             linhas.append(f"pedido {stem} recusado: tecto diário ({tecto})")
             avisar(f"Squad Office: pedido não lançado, tecto diário de {tecto} lançamentos atingido.")
@@ -525,8 +529,10 @@ def _delimitar(s: str) -> str:
     return s.replace("<<<PEDIDO", "<<< PEDIDO").replace("PEDIDO>>>", "PEDIDO >>>")
 
 
-def preparar(cfg, p: dict, now: float) -> str:
-    """Cria worktree, task.md, meta.json («a correr») e heartbeat. Devolve o task_id. Falha sem lançar nada."""
+def preparar(cfg, p: dict, now: float, extra: dict | None = None) -> str:
+    """Cria worktree, task.md, meta.json («a correr») e heartbeat. Devolve o task_id. Falha sem lançar nada.
+    Copia os agentes da squad para o worktree (agentes_copia); `extra` (rotinas: rotina, max_usd, max_turnos) entra
+    na meta."""
     proj = next(x for x in cfg["projectos"] if x["id"] == p["projecto"])
     repo = officecfg.raiz(cfg, "projectos") / proj["repo"]
     if not repo.is_dir() or git(["rev-parse", "--git-dir"], repo).returncode != 0:
@@ -551,6 +557,9 @@ def preparar(cfg, p: dict, now: float) -> str:
     if r.returncode != 0:
         raise Falha("git worktree add falhou")
     workdir.mkdir(parents=True, mode=0o750)
+    copiados, avisos = agentes_copia.copiar(cfg, p["squad"], wt, [])
+    gravar_estado(cfg, tid, {"squad": p["squad"], "projecto": p["projecto"], "worktree": str(wt),
+                             "agentes_copiados": copiados, "avisos": avisos, **(extra or {})})
     task = f"# {p['titulo'].strip()}\n\n{p['brief'].strip()}\n"
     (workdir / "task.md").write_text(task, encoding="utf-8")
     meta = {"id": tid, "squad": p["squad"], "project": p["projecto"], "repo": url, "task": task,
@@ -560,10 +569,74 @@ def preparar(cfg, p: dict, now: float) -> str:
             "session_id": None, "claude_dir": officecfg.mangle(str(wt)), "pr": None, "pr_url": None,
             "cost_usd": None,
             "turns": None, "duration_s": None, "result": None, "issues": [], "auto_resumes": 0, "pid": None,
-            "pedido": p["id"]}
+            "pedido": p["id"], "agentes_copiados": copiados, "avisos_agentes": avisos, **(extra or {})}
     escrever_json(workdir / "meta.json", meta)
     (workdir / "heartbeat").touch()
     return tid
+
+
+def gravar_estado(cfg, tid: str, doc: dict) -> None:
+    """Estado da tarefa que só o runner escreve, em <dados>/runner/tarefas/<tid>.json (fora do workdir, que o agente
+    edita): squad, projecto, worktree, cópias dos agentes e limites da rotina. A retoma e o argv confiam só nele."""
+    runner = officecfg.caminho(cfg, "runner")
+    runner.mkdir(parents=True, exist_ok=True)
+    rfd = seguro.abrir_pasta(runner)
+    try:
+        tfd = seguro.subpasta(rfd, "tarefas")
+        try:
+            seguro.substituir(tfd, f"{tid}.json", json.dumps(doc, ensure_ascii=False).encode("utf-8"))
+        finally:
+            os.close(tfd)
+    finally:
+        os.close(rfd)
+
+
+def ler_estado(cfg, tid) -> dict:
+    """O estado de gravar_estado, ou {} (tarefa de antes da 0.4.0, id inválido, ficheiro ilegível)."""
+    if not isinstance(tid, str) or not TID.fullmatch(tid):
+        return {}
+    raw = agentes.ler_bytes(officecfg.caminho(cfg, "runner") / "tarefas" / f"{tid}.json", 256 * 1024)
+    try:
+        d = json.loads(raw.decode("utf-8")) if raw is not None else None
+    except ValueError:
+        return {}
+    return d if isinstance(d, dict) else {}
+
+
+def worktree_esperado(cfg, tid: str, projecto) -> Path | None:
+    """<repo do projecto>/.worktrees/<tid>, calculado da config (nunca da meta)."""
+    proj = next((x for x in cfg["projectos"] if x["id"] == projecto), None)
+    return None if proj is None else (officecfg.raiz(cfg, "projectos") / proj["repo"]).resolve() / ".worktrees" / tid
+
+
+DIFERENTE = "a meta da tarefa não bate com o runner"
+
+
+def confiar(cfg, tid: str, meta: dict) -> bool:
+    """A meta.json (no workdir, que o agente edita) tem o workdir e o worktree que o runner calcula? Tarefas com
+    estado: o worktree do estado e o recalculado da config; antigas (sem estado): só o recalculado."""
+    est = ler_estado(cfg, tid)
+    wt = worktree_esperado(cfg, tid, est.get("projecto") if est else meta.get("project"))
+    workdir = str(officecfg.caminho(cfg, "tasks") / tid)
+    return (wt is not None and (not est or est.get("worktree") == str(wt)) and meta.get("worktree") == str(wt)
+            and meta.get("workdir") == workdir)
+
+
+def sessao_de(cfg, tid: str, meta: dict):
+    """session_id para o --resume: o do estado do runner; o da meta só em tarefas antigas (sem estado)."""
+    est = ler_estado(cfg, tid)
+    sid = est.get("session_id") if est else meta.get("session_id")
+    return sid if isinstance(sid, str) else None
+
+
+def guardar_sessao(cfg, tid: str, sid) -> None:
+    est = ler_estado(cfg, tid)
+    if est and isinstance(sid, str) and est.get("session_id") != sid:
+        est["session_id"] = sid
+        try:
+            gravar_estado(cfg, tid, est)
+        except OSError:
+            pass
 
 
 def destacar(cfg, cfg_path: str, tid: str, retomar: bool = False) -> int:
@@ -740,14 +813,32 @@ def prompt(meta: dict, cfg) -> str:
                          permissoes=_permissoes(meta, cfg))
 
 
+def _tecto_rotina(est: dict) -> tuple[str | None, int | None]:
+    # (max_usd, max_turnos) de uma rotina, do estado do runner (nunca da meta, que o agente edita); nos limites
+    if not isinstance(est.get("rotina"), str):
+        return None, None
+    usd, turnos = est.get("max_usd"), est.get("max_turnos")
+    usd = usd if isinstance(usd, str) and agentes.TECTO.fullmatch(usd) and 0.10 <= float(usd) <= 5.00 else None
+    turnos = turnos if type(turnos) is int and 1 <= turnos <= 30 else None
+    return usd, turnos
+
+
 def comando(cfg, meta: dict, claude: str, retomar: str | None, settings: str) -> list[str]:
+    """argv do claude: `--model` = squads[].modelo da squad, senão runner.modelo; `--max-budget-usd` e `--max-turns`
+    da rotina ganham ao runner.max_usd. Squad e limites vêm do estado do runner (ler_estado), não da meta."""
+    est = ler_estado(cfg, meta.get("id"))
     cmd = [claude, "-p", "--output-format", "stream-json", "--verbose",
            "--permission-mode", cfg["runner"]["permission_mode"], "--add-dir", meta["workdir"],
            "--settings", settings]   # caminho de gravar_settings (negado ao Edit); o JSON nunca vai em argv
-    if cfg["runner"]["modelo"]:
-        cmd += ["--model", cfg["runner"]["modelo"]]
-    if cfg["runner"]["max_usd"]:
-        cmd += ["--max-budget-usd", cfg["runner"]["max_usd"]]
+    squad = next((s for s in cfg["squads"] if s["id"] == est.get("squad", meta.get("squad"))), {})
+    modelo = squad.get("modelo") or cfg["runner"]["modelo"]
+    if modelo:
+        cmd += ["--model", modelo]
+    usd, turnos = _tecto_rotina(est)
+    if usd or cfg["runner"]["max_usd"]:
+        cmd += ["--max-budget-usd", usd or cfg["runner"]["max_usd"]]
+    if turnos:
+        cmd += ["--max-turns", str(turnos)]
     if retomar:
         cmd += ["--resume", retomar]
     if cfg["runner"]["ferramentas"]:   # variádico: acaba na opção seguinte (nenhuma ferramenta começa por -)
@@ -784,7 +875,7 @@ def settings_base(cfg, cfg_path: str | None) -> dict:
     editar += [_regra("Edit", f) for f in cred_home + executa]
     editar += [_regra("Edit", officecfg.caminho(cfg, k) / "**")
                for k in ("quadro_lancar", "decisoes_fila", "decisoes", "quadro", "runner", "runner_estado",
-                         "arquivo_fila")]
+                         "arquivo_fila", "agentes", "agentes_fila", "agentes_rascunhos")]
     editar.append(_regra("Edit", RUNNER_REPO / "**"))
     if cfg["runner"]["settings"]:
         editar.append(_regra("Edit", cfg["runner"]["settings"]))
@@ -975,7 +1066,7 @@ def entrega(meta: dict) -> tuple[str, str | None, str | None, list[str]]:
     return "concluída", _pr_rotulo(pr), pr_url, issues
 
 
-def _pulsar(meta: dict, meta_path: Path, log: Path, desde: int, parar: threading.Event) -> None:
+def _pulsar(cfg, meta: dict, meta_path: Path, log: Path, desde: int, parar: threading.Event) -> None:
     # heartbeat a cada HEARTBEAT_S; guarda o session_id assim que o init aparece (para a retoma)
     beat = Path(meta["workdir"]) / "heartbeat"
     while True:
@@ -987,6 +1078,7 @@ def _pulsar(meta: dict, meta_path: Path, log: Path, desde: int, parar: threading
             sid = _sessao(log, desde)
             if sid:
                 meta["session_id"] = sid
+                guardar_sessao(cfg, meta["id"], sid)
                 try:
                     escrever_json(meta_path, meta)
                 except OSError:
@@ -1042,6 +1134,11 @@ def correr(cfg, tid: str, retomar: bool = False, cfg_path: str | None = None) ->
     meta = ler_meta(meta_path)
     if meta is None or meta.get("id") != tid:
         raise Falha(f"tarefa {tid} sem meta.json")
+    if not confiar(cfg, tid, meta):   # workdir/worktree mexidos: nada corre com eles
+        meta.update(status="erro", result=DIFERENTE, pid=None, issues=[DIFERENTE],
+                    finished_at=agora(cfg).isoformat(timespec="seconds"))
+        escrever_json(meta_path, meta)
+        return meta
     filho, sinal = [], []
 
     def _sigterm(_sig, _frame):
@@ -1063,7 +1160,7 @@ def _correr(cfg, meta_path: Path, meta: dict, retomar: bool, cfg_path: str | Non
     workdir, log = Path(meta["workdir"]), Path(meta["workdir"]) / "claude.log"
     marca = meta_path.parent / "parar"
     marcada = os.path.lexists(marca)   # office_runner.py parar: nunca lança
-    sessao = meta.get("session_id") if retomar else None
+    sessao = sessao_de(cfg, tid, meta) if retomar else None
     texto = RETOMA_PROMPT.format(workdir=meta["workdir"]) if sessao else prompt(meta, cfg)
     meta.update(status="a correr", pid=os.getpid(), finished_at=None)
     if not sessao:
@@ -1094,7 +1191,7 @@ def _correr(cfg, meta_path: Path, meta: dict, retomar: bool, cfg_path: str | Non
         env = env_claude(cred)
         cred = None
         parar = threading.Event()
-        pulso = threading.Thread(target=_pulsar, args=(meta, meta_path, log, desde, parar), daemon=True)
+        pulso = threading.Thread(target=_pulsar, args=(cfg, meta, meta_path, log, desde, parar), daemon=True)
         with log.open("ab") as out:
             proc = subprocess.Popen(comando(cfg, meta, claude, sessao, str(settings)), cwd=meta["worktree"],
                                     stdin=subprocess.PIPE, stdout=out, stderr=subprocess.STDOUT, env=env,
@@ -1121,6 +1218,7 @@ def _correr(cfg, meta_path: Path, meta: dict, retomar: bool, cfg_path: str | Non
         res, (custo, turnos, dur) = _resultado(log, desde)
         meta.update(cost_usd=custo, turns=turnos, duration_s=dur)
         meta["session_id"] = _sessao(log, desde) or meta.get("session_id")
+        guardar_sessao(cfg, tid, meta["session_id"])
         meta["result"] = (res or {}).get("result") if isinstance((res or {}).get("result"), str) else None
         if timeout:
             meta["result"] = f"tempo esgotado ({TIMEOUT_S.get(meta.get('mode'), TIMEOUT_S['task']) // 60} min)"
@@ -1132,11 +1230,15 @@ def _correr(cfg, meta_path: Path, meta: dict, retomar: bool, cfg_path: str | Non
         meta.update(status="erro", pr=None, pr_url=None, issues=[])
     else:
         meta["status"], meta["pr"], meta["pr_url"], meta["issues"] = entrega(meta)
+    avisos = ler_estado(cfg, tid).get("avisos")   # cópia dos agentes (CA-14): o do repo ganhou
+    meta["issues"] = [a for a in avisos if isinstance(a, str)] + meta["issues"] if isinstance(avisos, list) \
+        else meta["issues"]
     if os.path.lexists(marca):   # parar em qualquer momento até aqui (na entrega(), pr/pr_url ficam)
         meta.update(status="erro", result=PARADA)
     elif sinal and not terminou:   # SIGTERM sem marca: não se fecha a meta; guarda só o session_id para a retoma
         disco = ler_meta(meta_path) or meta
         sid = _sessao(log, desde)
+        guardar_sessao(cfg, tid, sid)
         if sid and disco.get("session_id") != sid:
             disco["session_id"] = sid
             try:
@@ -1171,11 +1273,26 @@ def retomas(cfg, cfg_path: str, now: float | None = None) -> list[str]:
         idade = idade_heartbeat(meta_path.parent, t)
         if (idade is not None and idade < MORTA_S) or _correr_vivo(meta.get("pid"), tid):
             continue
-        pode = (isinstance(meta.get("session_id"), str) and int(meta.get("auto_resumes") or 0) < MAX_RETOMAS
+        if not confiar(cfg, tid, meta):
+            meta.update(status="erro", pid=None, finished_at=agora(cfg, t).isoformat(timespec="seconds"),
+                        issues=[DIFERENTE])
+            escrever_json(meta_path, meta)
+            linhas.append(f"tarefa {tid} não retomada: {DIFERENTE}")
+            continue
+        pode = (sessao_de(cfg, tid, meta) is not None and int(meta.get("auto_resumes") or 0) < MAX_RETOMAS
                 and Path(str(meta.get("worktree"))).is_dir())
         if pode:
             if a_correr(cfg, t) >= cfg["runner"]["paralelo"]:
                 continue
+            est = ler_estado(cfg, tid)
+            if est:   # tarefas de antes da 0.4.0 não têm estado: retomam sem cópia
+                wt = Path(meta["worktree"])   # já confirmado por confiar()
+                antes = [c for c in est.get("agentes_copiados") or [] if isinstance(c, str)]
+                copiados, avisos = agentes_copia.copiar(cfg, est.get("squad"), wt, antes)
+                velhos = [x for x in est.get("avisos") or [] if isinstance(x, str)]
+                est.update(agentes_copiados=copiados, avisos=list(dict.fromkeys(velhos + avisos)))
+                gravar_estado(cfg, tid, est)
+                meta.update(agentes_copiados=copiados, avisos_agentes=est["avisos"])   # só informativo
             meta["auto_resumes"] = int(meta.get("auto_resumes") or 0) + 1
             escrever_json(meta_path, meta)
             (meta_path.parent / "heartbeat").touch()

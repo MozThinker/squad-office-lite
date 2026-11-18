@@ -16,6 +16,8 @@ squads:
     personagem: Maestro
     tipos: [feat, fix]
     modos: [goal, task]
+    # modelo da sessão principal desta squad (--model); sem esta chave, o runner.modelo (ou o do claude)
+    # modelo: sonnet
 projectos:
   - id: exemplo
     nome: Exemplo

@@ -689,10 +689,11 @@ class ReplayHttpTest(HttpBase):
 
 class RotasTest(unittest.TestCase):
     def test_ca41_do_post_nao_muda(self):
-        # as rotas de escrita continuam 6 (POST /api/decisao, /api/quadro, /api/quadro/lancar, push, arquivo)
+        # a v3 não acrescentou rotas de escrita; a 0.4.0 acrescenta só a fila dos agentes (ADR-017)
         src = inspect.getsource(server.Handler.do_POST)
         self.assertEqual(set(re.findall(r'path [!=]= "([^"]+)"', src)),
-                         {"/api/quadro", "/api/quadro/lancar", "/api/biblioteca/arquivo", "/api/decisao"})
+                         {"/api/quadro", "/api/quadro/lancar", "/api/biblioteca/arquivo", "/api/decisao",
+                          "/api/agentes/pedido"})
         self.assertIn("path in PUSH_ROTAS", src)
         self.assertEqual(server.PUSH_ROTAS, ("/api/push/subscrever", "/api/push/cancelar", "/api/push/teste"))
         for m in ("do_PUT", "do_DELETE", "do_PATCH"):

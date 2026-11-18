@@ -51,7 +51,7 @@ jobs:
         with:
           node-version: "22"
       - name: Python compila
-        run: python -m py_compile server.py aprovacoes.py reader.py biblioteca.py quadro.py push.py progresso.py lancar.py officecfg.py arquivo.py entregas.py replay.py runner/*.py tools/gerar_icones.py
+        run: python -m py_compile server.py aprovacoes.py reader.py biblioteca.py quadro.py push.py progresso.py lancar.py officecfg.py arquivo.py agentes.py entregas.py replay.py runner/*.py tools/gerar_icones.py tools/verificar_modelos.py
       - name: API responde com dados vazios
         run: |
           mkdir -p /tmp/t /tmp/c

@@ -388,7 +388,7 @@ class RulesTest(unittest.TestCase):
             mods |= {n.module.split(".")[0] for n in ast.walk(tree) if isinstance(n, ast.ImportFrom) and n.module}
             with self.subTest(name=name):
                 locais = {"reader", "aprovacoes", "biblioteca", "quadro", "progresso", "push", "lancar", "officecfg",
-                          "entregas", "replay"}
+                          "entregas", "replay", "agentes"}
                 self.assertLessEqual(mods - locais, set(sys.stdlib_module_names) | {"__future__"})
 
     def test_static_no_external_scripts(self):

@@ -257,6 +257,8 @@ def _morta(cfg, tid, **campos):
     m = json.loads((p / "meta.json").read_text(encoding="utf-8"))
     m.update(campos)
     (p / "meta.json").write_text(json.dumps(m), encoding="utf-8")
+    if isinstance(campos.get("session_id"), str):   # o --resume usa o session_id do estado do runner
+        lancador.guardar_sessao(cfg, tid, campos["session_id"])
     t = time.time() - 10 * 60
     os.utime(p / "heartbeat", (t, t))
 
@@ -564,6 +566,7 @@ def test_correr_grava_pr_url_mas_nao_o_avisa(com_push, monkeypatch):
     monkeypatch.setattr(lancador, "_resultado", lambda log, desde: ({"type": "result", "result": m["result"]},
                                                                      (0.01, 1, 1)))
     monkeypatch.setenv("FAKE_GH_RC_VIEW", "1")
+    monkeypatch.setattr(lancador, "confiar", lambda *x: True)   # meta feita à mão, com o worktree do repo com push
     avisos = []
     monkeypatch.setattr(lancador, "avisar", avisos.append)
     final = lancador.correr(cfg, tid)

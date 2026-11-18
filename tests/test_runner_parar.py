@@ -246,6 +246,7 @@ def test_sigterm_sem_marca_deixa_a_correr_para_a_retoma(ctx, monkeypatch):
     monkeypatch.setattr(lancador, "destacar", lambda *a, **k: chamadas.append(a) or 4242)
     m["session_id"] = "sessao-1"   # o claude lento não escreve init
     lancador.escrever_json(meta_path(cfg, tid), m)
+    lancador.guardar_sessao(cfg, tid, "sessao-1")   # o --resume usa o do estado do runner
     velho = time.time() - 600
     os.utime(meta_path(cfg, tid).parent / "heartbeat", (velho, velho))
     assert lancador.retomas(cfg, str(path))[0] == f"tarefa {tid} retomada (1/2)"

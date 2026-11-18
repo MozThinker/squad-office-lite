@@ -24,13 +24,14 @@ def seccao(titulo: str) -> str:
 class ExemploComentado(unittest.TestCase):
     def test_chaves_comentadas_validam_ao_descomentar(self):
         texto = EXEMPLO
-        for chave in ("a-espera", "max_usd", "modelo"):
+        for chave, vezes in (("a-espera", 1), ("max_usd", 1), ("modelo", 2)):   # modelo: squads[0] e runner
             texto, n = re.subn(rf"^(\s*)# ({re.escape(chave)}: )", r"\1\2", texto, flags=re.M)
-            self.assertEqual(n, 1, chave)
+            self.assertEqual(n, vezes, chave)
         cfg = validar(ler_yaml(texto))
         self.assertEqual(cfg["colunas"]["a-espera"], "À espera de revisão")
         self.assertEqual(cfg["runner"]["max_usd"], "5")
         self.assertEqual(cfg["runner"]["modelo"], "sonnet")
+        self.assertEqual(cfg["squads"][0]["modelo"], "sonnet")
 
     def test_exemplo_tal_como_esta_nao_passa_flags(self):
         cfg = validar(ler_yaml(EXEMPLO))

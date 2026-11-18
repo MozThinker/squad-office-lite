@@ -1,5 +1,25 @@
 # Changelog
 
+## Lite 0.4.0 (2026-11-18)
+
+Squads e agentes (porte do Squad Office #31, #33, #34, #36 e #37; ADR-017…019). `versao: 1` com uma chave opcional
+nova; fila nova `agentes-fila` (contrato v1); os contratos existentes não mudam.
+
+- **Squads e agentes** (no ⚙): ver agentes, modelo e skills de cada squad e mudá-los por pedido; o runner aplica na
+  passagem seguinte, com backup e `sha256` do ficheiro visto. O runner copia os agentes da squad para o worktree de
+  cada tarefa (o do repo ganha).
+- **Agente por descrição:** rascunho de IA sem ferramentas, edição, ensaio só de leitura num clone descartável e só
+  depois «Activar»; «Remover» com backup. Tecto de 10 USD por dia nas acções com IA.
+- **Squad a partir de um modelo** (desenvolvimento, investigação, observação, conteúdo), com verificador dos modelos;
+  **rotinas** que só ficam activas depois de aprovadas nas Aprovações, lançadas pelo runner e pausadas após 3 falhas.
+- **`office.yaml`:** `squads[].modelo` (modelo da sessão principal da squad); recusa de caracteres invisíveis e erros
+  sem o valor recusado.
+- **Modo Docker:** três volumes novos; numa instalação antiga corre o `configurar` uma vez.
+- **Fica de fora** (e porquê, ADR-017…019): instalar skills de fora (quarentena), registar projectos e criar squads no
+  `office.yaml` pela fila (o runner não escreve a config; a vista dá o bloco a colar), desactivar agentes por
+  `permissions.deny` («Remover» com backup cobre o caso), salas/lugares/`papeis` do esquema do Office, rascunho de
+  rotinas por IA e ensaio pelo GitHub.
+
 ## Lite 0.3.0 (2026-11-18)
 
 Office v3 no Lite (porte do Squad Office): escritório legível no telemóvel, barra de contadores, avisos, lista de

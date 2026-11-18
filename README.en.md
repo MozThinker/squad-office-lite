@@ -55,17 +55,17 @@ There are two ways to install the Lite:
    [Claude credentials](#claude-credentials)).
    Install `gh` following the [official instructions for Ubuntu](https://github.com/cli/cli/blob/trunk/docs/install_linux.md);
    for `gh auth login`, preferably use a [token limited to the Office repositories](#github-token).
-3. **Download and install the Office.** The URL is pinned to the version (`v0.3.0`), so you always read the same
+3. **Download and install the Office.** The URL is pinned to the version (`v0.4.0`), so you always read the same
    script that the book and this README describe.
    **Careful way** (recommended: you read the script before running it):
    ```bash
-   curl -fsSLO https://raw.githubusercontent.com/MozThinker/squad-office-lite/v0.3.0/get.sh
+   curl -fsSLO https://raw.githubusercontent.com/MozThinker/squad-office-lite/v0.4.0/get.sh
    less get.sh
-   bash get.sh --versao 0.3.0
+   bash get.sh --versao 0.4.0
    ```
    **One command:**
    ```bash
-   curl -fsSL https://raw.githubusercontent.com/MozThinker/squad-office-lite/v0.3.0/get.sh | bash -s -- --versao 0.3.0
+   curl -fsSL https://raw.githubusercontent.com/MozThinker/squad-office-lite/v0.4.0/get.sh | bash -s -- --versao 0.4.0
    ```
    > This command downloads a script from the internet and runs it on your server, as your user. Only do it with
    > URLs you trust, and preferably read it first. `get.sh` checks the package's sha256: that catches a corrupted
@@ -78,14 +78,14 @@ There are two ways to install the Lite:
    that is what the careful way is for. Options (after `bash -s --` in the one-line command, or after `bash get.sh`):
    - `--sem-perguntas` (no questions): the answers come from the environment (see the header of `install.sh`;
      `OFFICE_GIT_NOME` and `OFFICE_GIT_EMAIL` for the git identity; without them, and with no identity in git, it only
-     warns). E.g.: `curl -fsSL …/get.sh | bash -s -- --versao 0.3.0 --sem-perguntas`;
-   - `--versao X.Y.Z`: installs that version instead of the latest (`… | bash -s -- --versao 0.3.0`);
+     warns). E.g.: `curl -fsSL …/get.sh | bash -s -- --versao 0.4.0 --sem-perguntas`;
+   - `--versao X.Y.Z`: installs that version instead of the latest (`… | bash -s -- --versao 0.4.0`);
    - any other options are passed on to `install.sh` (e.g. `--proxy traefik --rede <rede>`).
 
    **Optional origin check.** The sha256 only confirms that the package is not corrupted. To confirm that it was
    built by the public repository (GitHub attestation; needs `gh` logged in), download the package manually and run:
    ```bash
-   gh attestation verify squad-office-lite-0.3.0.tar.gz --repo MozThinker/squad-office-lite
+   gh attestation verify squad-office-lite-0.4.0.tar.gz --repo MozThinker/squad-office-lite
    ```
    Only versions published with an attestation pass. A failure here is a reason not to install and to report it (see
    [`SECURITY.en.md`](SECURITY.en.md)).
@@ -126,7 +126,7 @@ needs no restart. If you changed the `raizes`, run `./install.sh` again (it does
 
 The same `get.sh`, without `--versao` (it installs the latest published version; read the warning in “Installation”):
 ```bash
-curl -fsSL https://raw.githubusercontent.com/MozThinker/squad-office-lite/v0.3.0/get.sh | bash
+curl -fsSL https://raw.githubusercontent.com/MozThinker/squad-office-lite/v0.4.0/get.sh | bash
 ```
 The installed version moves to `~/squad-office-lite.anterior-<data>` and the new one goes to `~/squad-office-lite`.
 `~/office-lite` (config, `.env`, credentials and data) is not touched by `get.sh`; `install.sh` only asks again for
@@ -447,17 +447,17 @@ your PC. You don't install `claude`, `gh`, `git` or Python: they come in the run
    ```bash
    mkdir -p ~/office && cd ~/office
    ```
-3. **Download the `compose.yaml`** for version 0.3.0. The Office and runner images are pinned by digest: what runs is
+3. **Download the `compose.yaml`** for version 0.4.0. The Office and runner images are pinned by digest: what runs is
    always what was published with this version.
    In PowerShell (it's `curl.exe`, not `curl`):
    ```powershell
-   curl.exe -fsSLO https://github.com/MozThinker/squad-office-lite/releases/download/v0.3.0/compose.yaml
+   curl.exe -fsSLO https://github.com/MozThinker/squad-office-lite/releases/download/v0.4.0/compose.yaml
    ```
    In the Terminal:
    ```bash
-   curl -fsSLO https://github.com/MozThinker/squad-office-lite/releases/download/v0.3.0/compose.yaml
+   curl -fsSLO https://github.com/MozThinker/squad-office-lite/releases/download/v0.4.0/compose.yaml
    ```
-   You can also download it with the browser, from the `v0.3.0` release page, and save it in this folder as
+   You can also download it with the browser, from the `v0.4.0` release page, and save it in this folder as
    `compose.yaml`. To change the port or the projects folder, see
    [Changing the port, the address or the projects folder](#changing-the-port-the-address-or-the-projects-folder) (optional).
    **On Linux**, create the `.env` with your user and group now, before step 4, so that the project files belong to
@@ -537,7 +537,7 @@ Without a `.env` the defaults apply. To change them, download the release's `env
 `compose.yaml` folder, remove the `#` from the lines you want to change and run `docker compose up -d` (on Linux you
 already have a `.env` from step 3: don't replace it, add the lines to it):
 ```powershell
-curl.exe -fsSLo .env https://github.com/MozThinker/squad-office-lite/releases/download/v0.3.0/env.example
+curl.exe -fsSLo .env https://github.com/MozThinker/squad-office-lite/releases/download/v0.4.0/env.example
 ```
 (in the Terminal, `curl` instead of `curl.exe`). The attachment is called `env.example` because GitHub renames
 attachments whose names start with a dot.
@@ -614,7 +614,8 @@ docker compose up -d
 and the volumes (config, credentials, data) stay as they are. See what changed in the `CHANGELOG.md`. **From 0.1.x to
 0.2.0** run `docker compose run --rm configurar` once after `up -d`: the new `arquivo-fila` volume is created owned by
 root and only `configurar` gives it the right owner (until then «Arquivar» answers «fila do arquivo indisponível» and
-the runner logs that the queue is unsafe).
+the runner logs that the queue is unsafe). **From 0.3.x to 0.4.0**, the same for the new `agentes`,
+`agentes-rascunhos` and `agentes-fila` volumes (see [Squads and agents](#squads-and-agents)).
 
 ### Uninstalling from the PC
 
@@ -660,6 +661,104 @@ for the Office.
   hand.
 - No backups or data migration between the PC and a VPS yet.
 
+## Squads and agents
+
+In ⚙ (settings), «Abrir «Squads e agentes»» ("Open Squads and agents") shows, per squad, the agents (name,
+description, model, skills), the available skills and the model of the main session. Everything you do in this view is
+a **request**: the Office only puts it in a queue and the runner writes the files, on the next pass (up to 1 min).
+«Pedidos» ("Requests") lists each one (pending, done, or error with the reason); the view refreshes on its own. None
+of this touches the projects or `office.yaml`.
+
+Agents live in `<dados>/agentes/<squad>/agents/<nome>.md` (Claude Code subagents, with frontmatter), skills in
+`<dados>/agentes/<squad>/skills/<skill>/SKILL.md` and the squad's instructions (optional) in
+`<dados>/agentes/<squad>/CLAUDE.md`. When the runner prepares a task for the squad, and again on resume, it copies
+them into the worktree, kept out of commits (see [Agents queue](#agents-queue-adr-017-to-019)). You put skills in
+that folder yourself (in Docker mode, with `docker compose cp` to `runner:/dados/agentes/<squad>/skills/`, as with
+the Biblioteca); the Office doesn't install skills from elsewhere.
+
+**Changing the model or the skills:** «Mudar modelo ou skills» ("Change model or skills") on an agent. Models:
+`inherit`, `sonnet`, `opus`, `haiku` or «sem campo» ("no field": uses the session's); other names only by editing the
+file. Skills: only the squad's. Before you switch to a more expensive model (`haiku` < `sonnet` < `opus`), the view
+warns you. The runner checks that the file is still the one you saw (otherwise «o agente mudou depois de ser visto»,
+"the agent changed after it was seen", and nothing changes), changes only the `model:` line or the `skills:` block and
+keeps the previous one as `<nome>.md.bak-AAAAMMDD-HHMM`. **It applies from the squad's next task** (or the resume of an
+interrupted one), after that pass: a task already running keeps the copy it got. The lead's model isn't changed here:
+the lead is the main session and uses `squads[].modelo` from `office.yaml` (otherwise `runner.modelo`, otherwise
+`claude`'s default).
+
+**Creating an agent from a description:** «Criar agente por descrição» ("Create agent from a description"), with a
+name and what it should do.
+1. **Draft:** the runner asks `claude` for an agent `.md` (no tools, 1 turn, up to 0.50 USD). It normalises it
+   (`name` = the requested name; only `name`, `description`, `tools`, `model`, `skills` and `permissionMode`; skills
+   the squad doesn't have are dropped; `bypassPermissions` is refused) and puts it under «Agentes por activar»
+   ("Agents to activate"), never in `agents/`.
+2. **Edit:** you open the whole file, change it and save. Each saved version has to be tested again.
+3. **Read-only test run:** you pick a project and what to ask. The runner clones the project (`--depth 1`, no
+   remotes) into a temporary folder, puts the candidate and the squad's agents and skills there and runs
+   `claude --agent <nome>` with only `Read`, `Grep` and `Glob` (up to 8 turns, 2 USD and 10 min). The folder is always
+   deleted. The report (with secrets masked), the cost and the untested tools show up on the candidate.
+4. **Activate:** only with an ok test run of the current version. The `.md` moves to `agents/` (never over an agent
+   with the same name). «Descartar» ("Discard") deletes the candidate.
+
+**What the test run doesn't test:** tools beyond `Read`, `Grep` and `Glob` (`Bash`, `Edit`, `Write`, `WebFetch`…; the
+view lists the ones the agent asks for), writing, git and PRs, MCP servers, the permissions and `runner.ferramentas` of
+a real task, or more than 8 turns. An ok test run says the agent reads the project and answers what you asked, not that
+it does a writing task well.
+
+**Removing:** «Remover agente» ("Remove agent") moves the `.md` to `agents/.removidos/<nome>.md.bak-AAAAMMDD-HHMM` (to
+restore it, move it back by hand). The lead can't be removed.
+
+**Squad from a template:** «Nova squad a partir de um modelo» ("New squad from a template"), with one of the 4 generic
+templates (Desenvolvimento, Investigação, Observação, Conteúdo: development, research, monitoring, content; in
+`modelos/squads/`), an id and the mission. The runner asks `claude` (as for the agent draft, up to 0.50 USD) to adapt
+the mission and the agents' descriptions and instructions; names, tools, models and permissions always come from the
+template (all 4 only read: `Read`, `Grep`, `Glob`, `Agent`, `WebSearch`, `WebFetch`). The draft shows up on the squad:
+«Criar squad» ("Create squad") or «Descartar rascunho» ("Discard draft"). Creating writes `<dados>/agentes/<id>/`
+(`CLAUDE.md` and `agents/`), all or nothing, and registers the squad in `<dados>/agentes/squads.json`.
+- Id of an `office.yaml` squad that has no agents yet: the template fills that squad.
+- New id: the view shows a block to paste into the `squads:` list of `office.yaml` («Copiar bloco», "Copy block"), for
+  example
+  ```
+    - id: pesquisa
+      nome: "Pesquisa"
+      lead: lider
+  ```
+  The runner never writes `office.yaml`: on the VPS edit `~/office-lite/office.yaml`; in Docker mode, see
+  [Editing the `office.yaml`](#editing-the-officeyaml-and-adding-files-to-the-biblioteca). Without the block, the
+  squad can't be launched and has no routines.
+- «Ensaiar o lead» ("Test the lead") tests it as above. In squads created from a template, routines only run with an
+  ok test run of the current lead.
+- «Desactivar squad» ("Deactivate squad", only those created from a template): it leaves the register, its routines
+  are cancelled and `agents/` becomes `agents.bak-AAAAMMDD-HHMM`; nothing is deleted. You remove the block from
+  `office.yaml` yourself.
+
+**Routines:** «Pedir uma rotina» ("Request a routine"; `office.yaml` squads with `formato: worktree` and the `task`
+mode): project, time `HH:MM`, days of the week, instructions (1–2000 characters), cap per run (0.10–5.00 USD) and
+maximum turns (1–30); up to 5 per squad. The runner creates the request `rotina-<squad>-<id>.md` in **Aprovações**
+(approvals), with the exact definition. **The routine only runs after you approve line `R1`**; refused, it never runs;
+with the `.md`'s definition tampered with, it doesn't either. Once approved, it runs once on each chosen day, on the
+first pass from that time on (in `fuso`), as a `task` of the squad (the first of its `tipos`), with the agents copied
+and its own cap and turns. It counts towards `tecto_diario` and waits for `paralelo`. If the runner is stopped until
+the end of the day, that day is skipped.
+- **Pause:** 3 runs in a row ending in «erro» (or that never got started) make it `pausada` (paused; a Telegram
+  notice, if you have it). «Terminou sem PR» ("Finished without a PR") doesn't count as a failure.
+- «Retomar» ("Resume", only paused ones) sets it back to `aprovada`, with the counter at zero. «Cancelar rotina»
+  ("Cancel routine") is permanent: requesting it again means a new approval.
+
+**Costs:** drafts and test runs use the same Claude credential as the tasks. Cap per call: 0.50 USD per draft and
+2 USD per test run (a test run that goes over 2 USD ends in error). **Daily AI cap: 10 USD** (fixed, in `fuso`), added
+up in `<dados>/runner/agentes-ia.jsonl`; a call with no known cost counts as its cap. Above it the request gets «tecto
+diário de IA atingido» ("daily AI cap reached"); requests without AI carry on. Only 1 draft or test run per pass (the
+others wait) and a test run can hold up the pass for up to 10 min. The amounts are `claude`'s own estimates; with the
+subscription token they use its limits. Routines are normal tasks: their cap applies per start (with 2 resumes, up to
+3×). Changing model and skills, activating and removing cost nothing.
+
+**Docker mode:** there are three new volumes (`agentes`, `agentes-rascunhos`, `agentes-fila`). On an install older than
+0.4.0 they are created owned by root on `docker compose up -d`: run `docker compose run --rm configurar` once, which
+gives them your `OFFICE_UID`/`OFFICE_GID`. Until then the view says «A fila dos agentes está indisponível: corre o
+`configurar` uma vez (modo Docker)» ("The agents queue is unavailable: run `configurar` once") and accepts no requests.
+On the VPS, `get.sh` (or `./install.sh`) creates the new folders and generates the compose with them.
+
 ---
 
 ## Reference
@@ -676,6 +775,8 @@ indentation with spaces only, in multiples of 2 (tabs = error); `#` comments on 
 `- key: value` (the following keys aligned); single-line lists of simple values only (`[feat, fix]`); values `"…"`,
 `'…'`, plain, integers and `true`/`false`. **Not supported:** anchors, tags, `|`/`>`, `{…}`, `null`/`~`, multi-line
 values, multiple documents (`---`). `~/x` is text (expanded to the user's home directory in the roots).
+Invisible characters (Unicode categories `Cf`, `Co`, `Cs`, except the emoji ZWJ) are refused in keys and values; error
+messages never repeat the refused value.
 
 | key | what (default) |
 |---|---|
@@ -687,6 +788,7 @@ values, multiple documents (`---`). `~/x` is text (expanded to the user's home d
 | `raizes.projectos` | where the repositories are (`~/projectos`) |
 | `raizes.claude_projects` | Claude Code sessions (`~/.claude/projects`) |
 | `squads[]` | 1–6: `id`, `nome`, `lead` (the lead's role, `tech-lead`), `personagem`, `formato` `worktree` (launchable, default) or `sessao` (follow-only); `tipos` (`[feat, fix]`) and `modos` (`[goal, task]`) only with `worktree` |
+| `squads[].modelo` | optional: model of the squad's main session (`--model`), same rules as `runner.modelo` (letters, digits, `.`, `_`, `-`, up to 64, no leading `-`); overrides `runner.modelo` for that squad's tasks, routines and drafts (see [Squads and agents](#squads-and-agents)) |
 | `projectos[]` | 1–30: `id` (lowercase), `nome`, `glifo` (1–2 characters, «◆»), `repo` (folder in `raizes.projectos`, default = `id`) |
 | `colunas` | labels for `ideias`, `a-fazer`, `em-curso`, `a-espera`, `feito` (fixed keys and order), 1–30; without `a-espera`: «À espera de <`utilizador.nome`>» (an empty value doesn't validate) |
 | `biblioteca[]` | 0–12 sources: `id`, `rotulo`, `pasta` (relative to `<dados>/biblioteca`), `media` (`false`), optional `tipo` (`relatorios`, `estudos`, `planos`, `conhecimento`, `textos`); optional `arquivo_dias`, 7–3650: the runner archives on its own, at most once a day, the source's items unchanged for more than N days (ADR-012; without the key it never archives anything without a request; see [Biblioteca archive](#biblioteca-archive-adr-011)) |
@@ -711,17 +813,21 @@ Launchable = each `worktree` squad × each project.
     quadro/cartoes.json         cartões manuais
     quadro-lancar/              pedidos de lançamento
     arquivo-fila/               pedidos de arquivar/repor vindos da Biblioteca (JSON)
+    agentes/<squad>/            agentes (agents/<nome>.md), skills (skills/<skill>/SKILL.md) e CLAUDE.md da squad;
+                                squads.json e rotinas.json (registos); só o runner lá escreve
+    agentes-rascunhos/          candidatos, rascunhos de squads e ensaios; só o runner lá escreve
+    agentes-fila/               pedidos da vista «Squads e agentes» (JSON)
     push/                       chaves e subscrições Web Push (0700)
     biblioteca/<pasta>/         fontes da Biblioteca
     biblioteca/<pasta>/.arquivo/  o que se arquivou (mesmos caminhos) e o REGISTO.tsv; só o runner lá escreve
-    runner/                     lock, histórico, logs, settings/, office.yaml.sha256 e gh-verificado.json
-                                do runner (só no host)
+    runner/                     lock, histórico, logs, settings/, office.yaml.sha256, gh-verificado.json e
+                                agentes-ia.jsonl (custos da IA dos agentes) do runner (só no host)
     runner-estado/estado.json   sinal do runner para o Office (sem segredos; ver Runner)
 ~/projectos/exemplo/            repositório de exemplo criado pelo instalador
 ```
 In the container, `tasks`, `claude_projects`, `squads`, `decisoes`, `biblioteca` and `runner-estado` are mounted
-read-only; the Office only
-writes to `decisoes-fila`, `quadro`, `quadro-lancar`, `push`, `arquivo-fila` and the thumbnails (in a `tmpfs`). The container runs with
+read-only, as are `agentes` and `agentes-rascunhos`; the Office only
+writes to `decisoes-fila`, `quadro`, `quadro-lancar`, `push`, `arquivo-fila`, `agentes-fila` and the thumbnails (in a `tmpfs`). The container runs with
 the uid/gid of whoever installed it (`OFFICE_UID`/`OFFICE_GID` in `.env`), `read_only`, with no published ports.
 
 **In Docker mode** there is no `~/office-lite` or `~/squad-office-lite`: each `dados/` folder is a Docker volume with
@@ -760,14 +866,16 @@ and whether `estado.json` is less than 3 min old.
 Each pass (with a lock, never two at the same time): writes `estado.json` → checks whether `office.yaml` changed →
 applies decisions → resumes interrupted tasks (up to 2 times) → processes the Quadro (board) queue → processes the
 Biblioteca archive queue and the automatic archive (see [Biblioteca archive](#biblioteca-archive-adr-011)) → archives
-old requests (of every queue). In the log, Biblioteca lines start with «biblioteca:».
+old requests (of every queue) → approved routines → the agents queue, with the AI action last (see
+[Agents queue](#agents-queue-adr-017-to-019)). In the log, Biblioteca lines start with «biblioteca:» and agents queue
+lines with «agentes:».
 
 **`estado.json`** (`<dados>/runner-estado/`, 0644, atomic write): the runner's heartbeat for the Office, which reads
 it read-only and uses it to draw «Primeiros passos» ("First steps") and the «O runner não dá sinal desde HH:MM» ("The
 runner hasn't checked in since HH:MM") banner (more than 3 min without a pass). Only values from a known list, never
 secrets, paths or command output:
 ```json
-{"v": 1, "em": "2026-11-08T19:30:00+00:00", "versao": "0.3.0",
+{"v": 1, "em": "2026-11-08T19:30:00+00:00", "versao": "0.4.0",
  "claude": "ok|falta", "credencial": "ok|falta|modo", "gh": "ok|sem sessão"}
 ```
 `credencial` says whether there is a valid credential (`claude.env`, `runner.env` or the `claude` login), without
@@ -778,8 +886,8 @@ doesn't change.
 
 **Launching:** re-validates the request against the config; checks the daily cap (`tecto_diario`, in the config's
 time zone) and `paralelo` (above it, the request waits); creates a `git worktree` in `<repo>/.worktrees/<task_id>` on a
-`<kind>/<slug>` branch off `origin`'s default branch (or the current one, if there's no remote); writes `task.md` and
-`meta.json`; replies `{"task_id"}` and runs `claude -p` detached (log in `<dados>/runner/logs/<task_id>.log`, claude's
+`<kind>/<slug>` branch off `origin`'s default branch (or the current one, if there's no remote); copies the squad's
+agents into it (see [Agents queue](#agents-queue-adr-017-to-019)); writes `task.md` and `meta.json`; replies `{"task_id"}` and runs `claude -p` detached (log in `<dados>/runner/logs/<task_id>.log`, claude's
 output in `tasks/<id>/claude.log`; the `runner.env` secrets reach it via stdin, see
 [Claude credentials](#claude-credentials)). The title and the brief only travel by file and stdin, delimited as user
 data. Time limit
@@ -815,7 +923,8 @@ the request carries the same values as always (contract v1).
     `~/.claude/.credentials.json`, `~/.git-credentials`, `~/.netrc`, `~/.docker/config.json`,
     `~/.config/systemd/**` and `/proc/**` (the environment of other processes);
   - writing (`Edit`, which covers Write) those three home files, `office.yaml`, `quadro-lancar/`,
-    `decisoes-fila/`, `decisoes/`, `quadro/`, `runner/` and `runner-estado/` inside `raizes.dados`, the Lite's code
+    `decisoes-fila/`, `decisoes/`, `quadro/`, `runner/`, `runner-estado/`, `arquivo-fila/`, `agentes/`, `agentes-fila/`
+    and `agentes-rascunhos/` inside `raizes.dados`, the Lite's code
     (`~/squad-office-lite/**`), the `runner.settings` file, the five `~` entries above (credentials and
     `~/.config/systemd/**`) and what your user executes: `~/.claude/settings.json`,
     `~/.claude/settings.local.json`, `~/.bashrc`, `~/.profile`, `~/.bash_profile` and `~/.local/bin/**`;
@@ -851,7 +960,8 @@ the request carries the same values as always (contract v1).
 - `runner.max_usd` (`--max-budget-usd`): cost cap per `claude` start, as estimated by `claude` itself (it may go
   slightly over). Each resume is a new start: with 2 resumes, a task can spend up to 3× the cap.
   `runner.modelo` (`--model`): the squad's model (e.g. `sonnet`); the name isn't validated at startup, a wrong name
-  shows up in `claude.log`.
+  shows up in `claude.log`. `squads[].modelo` overrides it for that squad. In routines, `--max-budget-usd` and
+  `--max-turns` are the routine's own.
 
 ### Claude credentials
 
@@ -1110,6 +1220,125 @@ indisponível`: folder missing or not writable). Success: **202** `{"id", "accao
 `arquivo`: `{"arquivavel", "arquivado": null | {"em", "motivo"}, "pendente": null | "arquivar" | "repor", "erro": null
 | <reason of the last failed request>}`; in the archive list each item carries `arquivado`.
 
+### Agents queue (ADR-017 to 019)
+
+The «Squads e agentes» view (see [Squads and agents](#squads-and-agents)) only reads and writes requests to a queue;
+the runner re-validates everything and writes. Names: squad `[a-z][a-z0-9-]{1,19}`, agent and skill
+`[a-z][a-z0-9-]{1,39}`, routine `r1`…`r999` (never reused). Only the runner writes to `agentes/` and
+`agentes-rascunhos/`:
+```
+<dados>/agentes/<squad>/agents/<nome>.md          (+ <nome>.md.bak-AAAAMMDD-HHMM e .removidos/)
+<dados>/agentes/<squad>/skills/<skill>/SKILL.md
+<dados>/agentes/<squad>/CLAUDE.md                 (opcional)
+<dados>/agentes/squads.json  rotinas.json         (registos das squads por modelo e das rotinas)
+<dados>/agentes-rascunhos/agentes/<squad>/<nome>.md  + <nome>.ensaio.json
+<dados>/agentes-rascunhos/squads/<id>/rascunho.json  + ensaio.json
+<dados>/agentes-fila/<id>.json  + <id>.feito.json ; feito/ (rotação)
+<dados>/runner/agentes-ia.jsonl                   (livro de custos da IA)
+<dados>/runner/tarefas/<tid>.json                 (estado de cada tarefa só do runner: worktree, cópias, sessão, tectos da rotina; a retoma nunca confia na meta.json)
+```
+
+**`GET /api/agentes`** (read-only, `no-store`): per squad (those in `office.yaml` and those in `squads.json`), each
+agent's allowed frontmatter, the relative path and the `sha256` of the `.md`, the skills, the session model
+(`squads[].modelo`, otherwise `runner.modelo`, otherwise `claude`'s default), candidates with their last test run, the
+squad draft, routines and the 50 most recent requests; `escrita` says whether the queue is writable. **Never the body
+of the `.md` files**: a whole candidate only comes out on request, in `GET /api/agentes/candidato?squad=&nome=`
+(`{"md", "sha256"}`, 404 if there is none). A `.md` that is a symlink, larger than 80 KB, has no frontmatter or has
+`---` inside it shows up as «ilegível» ("unreadable"; the file name only).
+
+**`POST /api/agentes/pedido`** `{"token", "accao", "args"}` (exact keys; same rules as `/api/decisao`: JSON, same
+origin, `token`): 413 (> 80 KB), 403, 400 (`campos inválidos` or the reason: squad, agent, skill, candidate, project
+or squad template not found, model not in the list, routine limits…), 409 (`já há um pedido pendente para este alvo`,
+already a pending request for this target; `fila cheia`, 50 pending), 503 (`fila dos agentes indisponível`: folder
+missing or not writable). Success: **202** `{"id", "accao"}`.
+
+**Request** `<dados>/agentes-fila/<id>.json` (contract `v: 1`, written by the Office; the name comes only from the
+clock and `secrets.token_hex(4)`), exact keys in this order:
+```json
+{"v": 1, "id": "20261118T093000-0a1b2c3d", "accao": "modelo",
+ "args": {"squad": "dev", "agente": "revisor", "sha256": "<sha256 do .md que viste>", "modelo": "haiku"},
+ "pedido_em": "2026-11-18T09:30:00+00:00", "ip": "…", "ua": "…"}
+```
+`pedido_em` ISO with a time zone; `ip` ≤ 64 and `ua` ≤ 200 characters; file ≤ 96 KB. Multi-line texts (`descricao`,
+`missao`, `tarefa`, `instrucoes`) with 1–2000 characters, no control characters (except `\n` and `\t`) or invisible
+ones (`Cf`, `Co`, `Cs`, except the ZWJ). `args` has exactly the action's keys:
+
+| `accao` | `args` | target | AI (cap) |
+|---|---|---|---|
+| `modelo` | `squad, agente, sha256, modelo` (`inherit`, `sonnet`, `opus`, `haiku` or `""` = remove the field) | `agente:<squad>/<agente>` | |
+| `skills` | `squad, agente, sha256, skills` (0–20, unique, the squad's) | same | |
+| `agente_remover` | `squad, agente, sha256` | same | |
+| `agente_rascunho` | `squad, nome, descricao` | `cand:<squad>/<nome>` | 0.50 USD |
+| `agente_criar` | `squad, nome, sha256` (of the candidate seen, or `null` if new), `md` (≤ 64 KB) | same | |
+| `agente_ensaio` | `squad, nome, sha256, projecto, tarefa` | same | 2 USD |
+| `agente_activar` | `squad, nome, sha256` | same | |
+| `agente_descartar` | `squad, nome` | same | |
+| `squad_rascunho` | `squad, modelo` (`desenvolvimento`, `investigacao`, `observacao`, `conteudo`), `missao` | `squad:<squad>` | 0.50 USD |
+| `squad_criar` | `squad, sha256` (of `rascunho.json`) | same | |
+| `squad_ensaio` | `squad, sha256` (of the lead's `.md`), `projecto, tarefa` | same | 2 USD |
+| `squad_descartar` / `squad_desactivar` | `squad` | same | |
+| `rotina_pedir` | `squad, projecto, hora` (`HH:MM`), `dias` (1–7 integers, 1 = Mon … 7 = Sun, ascending), `instrucoes`, `tecto_usd` (text `0.10`–`5.00`), `max_turnos` (1–30) | `rotina:<squad>` | |
+| `rotina_retomar` / `rotina_cancelar` | `squad, rotina` | `rotina:<squad>/<rotina>` | |
+
+**Runner response** `<id>.feito.json`: `{"ok": true}` or `{"erro": "<reason>"}`, with the reason from a closed list
+(`pedido ilegível`, `versão desconhecida`, `pedido repetido nesta passagem`, `squad desconhecida`, `agente
+inexistente`, `skill inexistente`, `modelo inválido`, `frontmatter inválido`, `o agente mudou depois de ser visto`, `o
+rascunho mudou depois de ser visto`, `já existe`, `candidato inexistente`, `sem ensaio ok desta versão`, `o lead não
+pode ser removido`, `projecto inválido`, `modelo de squad inexistente`, `squad já tem agentes`, `rascunho inexistente`,
+`squad não registada`, `squad não lançável`, `limite de rotinas`, `rotina inexistente`, `rotina não pausada`, `tecto
+diário de IA atingido`, `a IA falhou`, `tempo esgotado`, `erro de escrita`). Invalid request: an error and nothing
+written. **Rotation:** the request and the response go to `feito/` once the response is older than
+`runner.rotacao_dias`.
+
+**Runner contract** (the queue comes from a container and an agent with `Bash` can write to it; the runner doesn't
+trust it): only names `^\d{8}T\d{6}-[0-9a-f]{8}\.json$`, opened with `O_NOFOLLOW` and `fstat`; it re-validates the
+shape, the config, the disk and the `sha256` of what was seen; at most 50 requests per pass (in name order), 1 per
+target and **1 AI action**, last (the other AI ones get no response until the next pass); writes by tmp + `rename`,
+activation and the routine `.md` by exclusive creation. AI uses the launcher's credential and environment, in a
+`mkdtemp` folder that is always deleted; the user's text goes only through stdin, between markers with a nonce, never in
+argv. Draft: `claude -p --tools "" --max-turns 1 --strict-mcp-config --output-format json --no-session-persistence
+--max-budget-usd 0.50` (plus the squad's `--model`), 120 s. Test run: `--agent <nome> --permission-mode dontAsk
+--allowedTools Read Grep Glob --disallowedTools Bash Edit Write WebFetch NotebookEdit --max-turns 8 --max-budget-usd
+2`, with the default denials in a `--settings` outside the clone, 600 s. **`ensaio.json`**: `{"v": 1, "sha256",
+"estado": "ok"|"erro", "motivo", "relatorio", "nao_ensaiadas", "custo_usd", "em"}` (`relatorio` with secrets masked,
+≤ 8000 characters); «ok» = `claude` exited 0, no error, in time and within the cap.
+
+**Decision `.md` for a routine** (`<dados>/decisoes/rotina-<squad>-<id>.md`, exclusive creation, the
+[Approvals](#approvals-decisions-adr-001) format):
+```
+---
+estado: pendente
+criado: 2026-11-18
+---
+# Rotina r1 da squad Dev
+## O quê
+Correr uma tarefa da squad dev no projecto exemplo às 07:30 (seg, qua, sex), no fuso Europe/Lisbon.
+## Datas e orçamento
+Tecto: 0.50 USD por execução · máximo 10 turnos.
+## Instruções
+> cada linha das instruções, citada com "> "
+## Definição
+    <a definição em JSON canónico, numa linha>
+## Decisões
+- [R1] Activar a rotina r1 (tecto 0.50 USD por execução)
+```
+No line coming from the user opens a section or a decision (instructions with `> `, the definition indented). The
+definition is `json.dumps({squad, id, projecto, hora, dias, instrucoes, tecto_usd, max_turnos}, ensure_ascii=True,
+sort_keys=True, separators=(",", ":"))` and its `sha256` is kept in `rotinas.json`. The runner only launches with
+`R1 → aprovado` and the `## Definição` line equal to the register's. Task: `kind` = the first of `tipos`, `mode`
+`task`, slug `rotina-<squad>-<id>-AAAAMMDD`; 3 tasks in a row in `erro` (or failures to prepare) → `pausada`.
+
+**What the runner copies into the worktree** (when preparing the task and again on resume, also for routines and in
+the test-run clone): `<dados>/agentes/<squad>/agents/*.md` → `<worktree>/.claude/agents/`, `skills/<skill>/…` →
+`.claude/skills/<skill>/…` and `CLAUDE.md` → `.claude/CLAUDE.md`. `claude` reads them as the project's agents, skills
+and instructions; argv and `HOME` don't change. Regular files only, up to 4 folders deep in each skill and 2 MB per
+squad; a symlink in the path = that branch isn't copied. **The repo's wins:** if the project already has a file at
+the same path, it stays untouched and the task records in `issues` «o repo já tem .claude/agents/x.md: ficou o do
+repo» ("the repo already has …: kept the repo's"). On resume only the copies made by the runner are updated. Each
+copied path goes, anchored (`/.claude/agents/x.md`), once, into the repository's `info/exclude`
+(`git rev-parse --git-path info/exclude`): it never enters commits and `git status` stays clean. That file belongs to
+the repository, so the patterns also apply in the main checkout.
+
 ### Other parts
 
 - **Biblioteca** (library, `▤`): files from the `biblioteca` sources and the tasks' `SPEC/PLAN/QA.md`, to view and
@@ -1241,7 +1470,8 @@ To report a vulnerability, see [`SECURITY.en.md`](SECURITY.en.md) (GitHub privat
 
 Set by the generated compose: `OFFICE_CONFIG` (default `/config/office.yaml`), `TASKS_DIR`, `CLAUDE_PROJECTS_DIR`,
 `SQUADS_DIR`, `APROVACOES_DIR`, `BIBLIOTECA_DIR`, `DECISOES_FILA_DIR`, `QUADRO_DIR`, `QUADRO_LANCAR_DIR`, `PUSH_DIR`,
-`ARQUIVO_FILA_DIR` (default `/data/arquivo-fila`), `RUNNER_ESTADO_DIR` (default `/data/runner-estado`), `PUSH_CONTACTO` (optional) and
+`ARQUIVO_FILA_DIR` (default `/data/arquivo-fila`), `RUNNER_ESTADO_DIR` (default `/data/runner-estado`), `AGENTES_DIR`, `AGENTES_RASCUNHOS_DIR` and `AGENTES_FILA_DIR`
+(defaults `/data/agentes`, `/data/agentes-rascunhos` and `/data/agentes-fila`), `PUSH_CONTACTO` (optional) and
 `BIBLIOTECA_MINI_DIR` (default `/tmp/miniaturas`); `PORT` (8080). In Docker mode also `OFFICE_MODO=docker`
 (`GET /api/config` gains `"modo": "docker"`, otherwise `"vps"`; «Primeiros passos» shows the
 `docker compose …` commands) and `OFFICE_PROXY_SEGREDO_FILE=/proxy/segredo` instead of `OFFICE_PROXY_SEGREDO`: the

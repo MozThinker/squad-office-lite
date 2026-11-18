@@ -120,6 +120,29 @@ export function replayDemo(dia, semente = 1, agora = Infinity, cfg = {}) {
   return { v: 1, dia, inicio: Math.floor(inicio / 1000), fim: Math.floor(fim / 1000), truncado: false, quadros };
 }
 
+// GET /api/agentes fictício (PLAN §3.5): as squads da config com 2 agentes inventados cada, sem candidatos, rascunhos,
+// rotinas nem pedidos; os modelos de squad são só nomes. Os pedidos (POST) respondem 503 «demo».
+const MODELOS_DEMO = [["desenvolvimento", "Desenvolvimento", "tech-lead", ["tech-lead", "revisor"]],
+  ["investigacao", "Investigação", "investigador", ["investigador", "verificador"]],
+  ["observacao", "Observação", "plantao", ["plantao", "analista"]], ["conteudo", "Conteúdo", "editor", ["editor", "revisor"]]];
+const sha = (n) => (n.toString(16).padStart(8, "0")).repeat(8);
+export function agentesDemo(cfg = {}) {
+  const sqs = Array.isArray(cfg.squads) && cfg.squads.length ? cfg.squads : SQ0, ps = Array.isArray(cfg.projectos) && cfg.projectos.length ? cfg.projectos : P0;
+  const ag = (nome, i, o) => ({ nome, ficheiro: `agents/${nome}.md`, sha256: sha(i), description: o.d, model: o.m ?? null, tools: o.t, skills: o.s ?? [],
+    permissionMode: null, lead: !!o.lead });
+  return { v: 1, escrita: true,
+    modelos: MODELOS_DEMO.map(([id, nome, lead, agentes]) => ({ id, nome, lead, resumo: `Squad de demonstração: ${nome.toLowerCase()}.`, agentes })),
+    projectos: ps.map((x) => x.id),
+    squads: sqs.map((s, i) => { const lead = s.lead || "tech-lead";
+      return { id: s.id, nome: s.nome, origem: "office", formato: s.formato || "worktree", lead, sessao: { modelo: null, fonte: "omissao" },
+        modelo_squad: null, instrucoes: false,
+        agentes: [ag(lead, 2 * i + 1, { d: "Coordena a squad e reparte o trabalho (demonstração).", t: ["Read", "Grep", "Glob", "Agent"], lead: true }),
+          ag(lead === "revisor" ? "revisor-2" : "revisor", 2 * i + 2, { d: "Revê alterações e aponta riscos (demonstração).", m: "haiku", t: ["Read", "Grep"], s: ["rever"] })],
+        skills: [{ nome: "rever", ficheiro: "skills/rever/SKILL.md", description: "Lista de verificação de revisão (demonstração)." }],
+        candidatos: [], rascunho: null, ensaio_lead: null, rotinas: [] }; }),
+    pedidos: [] };
+}
+
 // ---- DOM: instalar() corre antes dos outros módulos e do 1.º poll (o index.html espera por ela)
 
 export const MSG = "Indisponível no modo demonstração.";
@@ -141,6 +164,7 @@ export async function instalar(w = globalThis) {
     try { u = new URL(typeof input === "string" || input instanceof URL ? input : input.url, w.location.href); } catch { return f0(input, init); }
     if (!/\/api\//.test(u.pathname)) return f0(input, init);
     if (/\/api\/state$/.test(u.pathname)) return Promise.resolve(json(estadoDemo(relogio(), sem, C)));
+    if (/\/api\/agentes$/.test(u.pathname) && (init?.method ?? "GET") === "GET") return Promise.resolve(json(agentesDemo(C)));
     if (/\/api\/config$/.test(u.pathname)) return Promise.resolve(cfg ? json(cfg) : json({ error: MSG }, 503));
     if (/\/api\/replay$/.test(u.pathname)) {
       const dia = u.searchParams.get("dia") ?? "", hoje = diaLocal(relogio(), C.fuso), ok = /^\d{4}-\d{2}-\d{2}$/.test(dia) && dia <= hoje

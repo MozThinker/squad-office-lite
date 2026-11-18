@@ -138,6 +138,18 @@ class ModoDocker(unittest.TestCase):
         self.assertEqual(runner["/dados/arquivo-fila"], ("arquivo-fila", False))
         self.assertEqual(runner["/dados/biblioteca"], ("biblioteca", False))
 
+    def test_agentes(self):  # CA-11: Office lê agentes/candidatos e escreve a fila; runner e configurar tudo rw
+        office = volumes(servico(self.out, "office"))
+        self.assertEqual(office["/data/agentes"], ("agentes", True))
+        self.assertEqual(office["/data/agentes-rascunhos"], ("agentes-rascunhos", True))
+        self.assertEqual(office["/data/agentes-fila"], ("agentes-fila", False))
+        for s in ("runner", "configurar"):
+            v = volumes(servico(self.out, s))
+            for pasta in ("agentes", "agentes-rascunhos", "agentes-fila"):
+                self.assertEqual(v[f"/dados/{pasta}"], (pasta, False), (s, pasta))
+        for pasta in ("agentes", "agentes-rascunhos", "agentes-fila"):
+            self.assertIn(f"  {pasta}:\n", topo(self.out, "volumes"))
+
     def test_volumes_do_runner(self):  # AC-c3: tudo rw salvo config e segredos (D5)
         runner = volumes(servico(self.out, "runner"))
         esperado = {f"/dados/{officecfg.SUB[o]}": (officecfg.SUB[o], False)

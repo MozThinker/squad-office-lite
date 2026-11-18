@@ -45,7 +45,7 @@ body:
     attributes:
       label: Versão do Lite / Lite version
       description: A versão que instalaste. / The version you installed.
-      placeholder: "0.3.0"
+      placeholder: "0.4.0"
     validations:
       required: true
   - type: dropdown

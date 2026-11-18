@@ -15,11 +15,12 @@ from pathlib import Path
 from zoneinfo import ZoneInfo, available_timezones
 
 EXEMPLO = Path(__file__).resolve().parent / "office.example.yaml"
-VERSAO = "0.3.0"   # versão do produto: única fonte (runner: estado.json e doctor); = 1.ª «## Lite X.Y.Z» do CHANGELOG
+VERSAO = "0.4.0"   # versão do produto: única fonte (runner: estado.json e doctor); = 1.ª «## Lite X.Y.Z» do CHANGELOG
 
 SUB = {"tasks": "tasks", "inbox": "tasks/inbox", "quadro": "quadro", "quadro_lancar": "quadro-lancar",
        "decisoes": "decisoes", "decisoes_fila": "decisoes-fila", "push": "push", "biblioteca": "biblioteca",
-       "squads": "squads", "runner": "runner", "runner_estado": "runner-estado", "arquivo_fila": "arquivo-fila"}
+       "squads": "squads", "runner": "runner", "runner_estado": "runner-estado", "arquivo_fila": "arquivo-fila",
+       "agentes": "agentes", "agentes_rascunhos": "agentes-rascunhos", "agentes_fila": "agentes-fila"}
 MOUNTS = [  # (origem, destino no contentor, modo, variável de ambiente do servidor)
     ("tasks", "/data/tasks", "ro", "TASKS_DIR"), ("claude_projects", "/data/claude", "ro", "CLAUDE_PROJECTS_DIR"),
     ("squads", "/data/squads", "ro", "SQUADS_DIR"), ("decisoes", "/data/aprovacoes", "ro", "APROVACOES_DIR"),
@@ -27,7 +28,11 @@ MOUNTS = [  # (origem, destino no contentor, modo, variável de ambiente do serv
     ("decisoes_fila", "/data/decisoes-fila", "rw", "DECISOES_FILA_DIR"),
     ("quadro", "/data/quadro", "rw", "QUADRO_DIR"), ("quadro_lancar", "/data/quadro-lancar", "rw", "QUADRO_LANCAR_DIR"),
     ("push", "/data/push", "rw", "PUSH_DIR"), ("arquivo_fila", "/data/arquivo-fila", "rw", "ARQUIVO_FILA_DIR"),
-    ("runner_estado", "/data/runner-estado", "ro", "RUNNER_ESTADO_DIR")]   # estado.json do runner (sem segredos)
+    ("runner_estado", "/data/runner-estado", "ro", "RUNNER_ESTADO_DIR"),   # estado.json do runner (sem segredos)
+    # agentes das squads (ADR-017): o Office lê agentes e candidatos e só escreve pedidos na fila
+    ("agentes", "/data/agentes", "ro", "AGENTES_DIR"),
+    ("agentes_rascunhos", "/data/agentes-rascunhos", "ro", "AGENTES_RASCUNHOS_DIR"),
+    ("agentes_fila", "/data/agentes-fila", "rw", "AGENTES_FILA_DIR")]
 RAIZES = ("dados", "projectos", "claude_projects")
 COLUNAS = {"ideias": "Ideias", "a-fazer": "A fazer", "em-curso": "Em curso", "a-espera": None, "feito": "Feito"}
 
@@ -73,7 +78,7 @@ def _aspas(s, n):
             if c == "\\":
                 e = s[i + 1:i + 2]
                 if e not in ('"', "\\", "n"):
-                    raise ConfigErro(f"linha {n}: não suportado: escape \\{e}")
+                    raise ConfigErro(f"linha {n}: não suportado: escape (só \\\", \\\\ e \\n)")
                 out.append("\n" if e == "n" else e)
                 i += 2
                 continue
@@ -247,7 +252,9 @@ def _mapa_de(d, campo, permitidas, obrigatorias=()):
         raise ConfigErro(f"{campo or 'config'}: tem de ser um mapeamento (chave: valor)")
     for k in d:
         if k not in permitidas:
-            raise ConfigErro(f"{_c(campo, k)}: chave desconhecida")
+            # a chave só entra na mensagem se tiver a forma de uma chave (nunca texto arbitrário)
+            ok = isinstance(k, str) and _CHAVE.fullmatch(k + ":")
+            raise ConfigErro(f"{_c(campo, k) if ok else campo or 'config'}: chave desconhecida")
     for k in obrigatorias:
         if k not in d:
             raise ConfigErro(f"{_c(campo, k)}: obrigatório")
@@ -288,7 +295,7 @@ def _unico(ids, campo):
     vistos = set()
     for i, x in enumerate(ids):
         if x in vistos:
-            raise ConfigErro(f"{campo}[{i}].id: repetido ({x})")
+            raise ConfigErro(f"{campo}[{i}].id: repetido")
         vistos.add(x)
 
 
@@ -296,16 +303,19 @@ def _squads(v):
     out = []
     for i, s in enumerate(_lista_de(v, "squads", 1, 6)):
         c = f"squads[{i}]"
-        _mapa_de(s, c, ("id", "nome", "lead", "personagem", "formato", "tipos", "modos"), ("id", "nome"))
+        _mapa_de(s, c, ("id", "nome", "lead", "personagem", "formato", "tipos", "modos", "modelo"), ("id", "nome"))
         formato = s.get("formato", "worktree")
         if formato not in ("worktree", "sessao"):
             raise ConfigErro(f"{c}.formato: tem de ser worktree ou sessao")
-        personagem = s.get("personagem")
+        personagem, modelo = s.get("personagem"), s.get("modelo")
         n = {"id": _padrao(s["id"], f"{c}.id", _ID_SQUAD, "minúsculas, dígitos e -, 2 a 20"),
              "nome": _texto(s["nome"], f"{c}.nome", 1, 24),
              "lead": _padrao(s.get("lead", "tech-lead"), f"{c}.lead", _LEAD, "minúsculas, dígitos e -, 2 a 40"),
              "personagem": None if personagem is None else _texto(personagem, f"{c}.personagem", 1, 24),
-             "formato": formato, "tipos": [], "modos": []}
+             "formato": formato, "tipos": [], "modos": [],
+             # modelo da sessão principal desta squad (--model); ganha ao runner.modelo
+             "modelo": None if modelo is None else _padrao(modelo, f"{c}.modelo", _MODELO,
+                                                           "letras, dígitos, . _ -, até 64")}
         if formato == "sessao":
             for k in ("tipos", "modos"):
                 if k in s:
@@ -418,8 +428,27 @@ def _max_usd(v):
     return v
 
 
+def _invisiveis(v, campo):
+    # Cf/Co/Cs (bidi, privados, surrogates) em chaves e textos, salvo o ZWJ (emojis compostos); a mensagem só leva o
+    # caminho do campo, nunca o valor
+    def mau(s):
+        return any(ch != "\u200d" and unicodedata.category(ch) in ("Cf", "Co", "Cs") for ch in s)
+    if isinstance(v, str):
+        if mau(v):
+            raise ConfigErro(f"{campo or 'config'}: caracteres invisíveis não permitidos")
+    elif isinstance(v, dict):
+        for k, x in v.items():
+            if isinstance(k, str) and mau(k):
+                raise ConfigErro(f"{campo or 'config'}: caracteres invisíveis não permitidos")
+            _invisiveis(x, _c(campo, k if isinstance(k, str) and _CHAVE.fullmatch(k + ":") else "?"))
+    elif isinstance(v, list):
+        for i, x in enumerate(v):
+            _invisiveis(x, f"{campo}[{i}]")
+
+
 def validar(d):
-    """Esquema §3.3 -> config normalizada (omissões preenchidas). ConfigErro com o campo."""
+    """Esquema §3.3 -> config normalizada (omissões preenchidas). ConfigErro com o campo, nunca com o valor."""
+    _invisiveis(d, "")
     _mapa_de(d, "", ("versao", "marca", "utilizador", "fuso", "raizes", "squads", "projectos", "colunas",
                      "biblioteca", "runner"), ("squads", "projectos"))
     if d.get("versao", 1) != 1 or type(d.get("versao", 1)) is not int:
@@ -487,7 +516,7 @@ def carregar(caminho, estrito=False):
 
 def raiz(cfg, nome):
     if nome not in RAIZES:
-        raise ConfigErro(f"raiz desconhecida: {nome} (usa {', '.join(RAIZES)})")
+        raise ConfigErro(f"raiz desconhecida (usa {', '.join(RAIZES)})")
     return Path(os.path.expanduser(cfg["raizes"][nome])).resolve()
 
 

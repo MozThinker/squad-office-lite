@@ -45,10 +45,11 @@ RUN groupadd -g 10001 office \
  && useradd -u 10001 -g 10001 -d /home/office -M -s /bin/bash office \
  && install -d -o root -g root -m 0755 /dados /dados/tasks /dados/squads /dados/decisoes /dados/biblioteca \
       /dados/runner-estado /dados/decisoes-fila /dados/quadro /dados/quadro-lancar /dados/runner /dados/push \
-      /dados/arquivo-fila \
+      /dados/arquivo-fila /dados/agentes /dados/agentes-rascunhos /dados/agentes-fila \
       /home/office /home/office/.claude /home/office/.claude/projects /config /projectos /segredos /proxy
 WORKDIR /app
-COPY officecfg.py arquivo.py office.example.yaml ./
+COPY officecfg.py arquivo.py agentes.py office.example.yaml ./
+COPY modelos ./modelos
 COPY runner/*.py ./runner/
 # comandos sem ENTRYPOINT (o docker compose exec não passa por ele): ciclo, doctor, parar, configurar.
 # python3 -I: a casa (/home/office) é escrita pelo agente; nada de .pth/usercustomize/PYTHON* de lá, nem como root

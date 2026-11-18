@@ -13,15 +13,20 @@ for _p in (str(RAIZ / "runner"), str(RAIZ)):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
+import agentes_copia
+import agentes_fila
 import decisoes
 import diagnostico
 import lancador
 import office_runner
+import rotinas
+import seguro
 
 import officecfg
 
 # sem aprovacoes/server aqui: importam reader.py (re `*+`, Python >= 3.11) e estes testes correm também em 3.10
-__all__ = ["decisoes", "diagnostico", "lancador", "office_runner", "officecfg"]
+__all__ = ["agentes_copia", "agentes_fila", "decisoes", "diagnostico", "lancador", "office_runner", "officecfg",
+           "rotinas", "seguro"]
 
 GIT_ENV = {"GIT_AUTHOR_NAME": "Teste", "GIT_AUTHOR_EMAIL": "teste@example.com", "GIT_COMMITTER_NAME": "Teste",
            "GIT_COMMITTER_EMAIL": "teste@example.com", "GIT_CONFIG_NOSYSTEM": "1"}
@@ -29,7 +34,8 @@ CHAVES = ["v", "id", "cartao_id", "squad", "projecto", "kind", "mode", "slug", "
 # variáveis do claude e do gh falsos: entram na lista branca do runner só nos testes em processo (monkeypatch em
 # ambiente()); nos testes em subprocesso usa-se claude_com()
 FAKE = ("FAKE_CLAUDE_ARGV", "FAKE_CLAUDE_STDIN", "FAKE_CLAUDE_FALHA", "FAKE_CLAUDE_EXIGE_CRED", "FAKE_CLAUDE_CRED",
-        "FAKE_CLAUDE_SETTINGS", "FAKE_GH_ARGV", "FAKE_GH_SAIDA", "FAKE_GH_SAIDA_VIEW", "FAKE_GH_RC_VIEW")
+        "FAKE_CLAUDE_SETTINGS", "FAKE_GH_ARGV", "FAKE_GH_SAIDA", "FAKE_GH_SAIDA_VIEW", "FAKE_GH_RC_VIEW",
+        "FAKE_CLAUDE_RESULTADO", "FAKE_CLAUDE_CUSTO", "FAKE_CLAUDE_DORME", "FAKE_CLAUDE_CWD")
 
 
 def gh_sem_sessao(tmp: Path) -> Path:
@@ -57,7 +63,8 @@ def ambiente(monkeypatch, tmp: Path, extra_bin: Path | None = None) -> None:
     monkeypatch.setenv("PATH", os.pathsep.join(caminhos))
     for k in ("OFFICE_TELEGRAM_TOKEN", "OFFICE_TELEGRAM_CHAT", "OFFICE_TELEGRAM_API", "FAKE_CLAUDE_FALHA",
               "FAKE_CLAUDE_ARGV", "FAKE_CLAUDE_STDIN", "OFFICE_CONFIG", "FAKE_CLAUDE_EXIGE_CRED", "FAKE_CLAUDE_CRED",
-              "ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN", "FAKE_CLAUDE_SETTINGS", "GH_TOKEN", "GITHUB_TOKEN"):
+              "ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN", "FAKE_CLAUDE_SETTINGS", "GH_TOKEN", "GITHUB_TOKEN",
+              "FAKE_CLAUDE_RESULTADO", "FAKE_CLAUDE_CUSTO", "FAKE_CLAUDE_DORME", "FAKE_CLAUDE_CWD"):
         monkeypatch.delenv(k, raising=False)
     monkeypatch.setattr(lancador, "SEGREDOS", {})   # os segredos guardados no arranque, como os do processo
 

@@ -574,7 +574,7 @@ def test_root_chown_lista_fixa_e_larga(amb, monkeypatch):
     assert root.chamadas[len(chowns):] == [("setgroups", []), ("setgid", 4343), ("setuid", 4242)]
     nomes = {p.name for p in ps}
     assert {"tasks", "runner", "runner-estado", "push", "arquivo-fila", "casa", ".claude", "projects", "config",
-            "segredos", "proxy"} <= nomes
+            "segredos", "proxy", "agentes", "agentes-rascunhos", "agentes-fila"} <= nomes
 
 
 def test_root_nao_segue_symlinks(amb, monkeypatch, capsys):

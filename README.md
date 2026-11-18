@@ -51,17 +51,17 @@ O Lite instala-se de duas formas:
    depois de instalar (o instalador não o pede nem o guarda; ver [Credenciais do Claude](#credenciais-do-claude)).
    O `gh` instala-se pelas [instruções oficiais para Ubuntu](https://github.com/cli/cli/blob/trunk/docs/install_linux.md);
    no `gh auth login` usa de preferência um [token só para os repositórios do Office](#token-do-github).
-3. **Descarrega e instala o Office.** O endereço fica fixado à versão (`v0.3.0`), para leres sempre o mesmo script
+3. **Descarrega e instala o Office.** O endereço fica fixado à versão (`v0.4.0`), para leres sempre o mesmo script
    que o livro e este README descrevem.
    **Forma prudente** (recomendada: lês o script antes de o correr):
    ```bash
-   curl -fsSLO https://raw.githubusercontent.com/MozThinker/squad-office-lite/v0.3.0/get.sh
+   curl -fsSLO https://raw.githubusercontent.com/MozThinker/squad-office-lite/v0.4.0/get.sh
    less get.sh
-   bash get.sh --versao 0.3.0
+   bash get.sh --versao 0.4.0
    ```
    **Com um comando:**
    ```bash
-   curl -fsSL https://raw.githubusercontent.com/MozThinker/squad-office-lite/v0.3.0/get.sh | bash -s -- --versao 0.3.0
+   curl -fsSL https://raw.githubusercontent.com/MozThinker/squad-office-lite/v0.4.0/get.sh | bash -s -- --versao 0.4.0
    ```
    > Este comando descarrega um script da internet e corre-o no teu servidor, com o teu utilizador. Só o faças com
    > endereços em que confias, e de preferência lê-o primeiro. O `get.sh` confere o sha256 do pacote: isso apanha uma
@@ -74,14 +74,14 @@ O Lite instala-se de duas formas:
    prudente. Opções (depois de `bash -s --` no comando de uma linha, ou de `bash get.sh`):
    - `--sem-perguntas`: as respostas vêm do ambiente (ver o cabeçalho do `install.sh`; `OFFICE_GIT_NOME` e
      `OFFICE_GIT_EMAIL` para a identidade do git; sem elas, e sem identidade no git, só avisa). Ex.:
-     `curl -fsSL …/get.sh | bash -s -- --versao 0.3.0 --sem-perguntas`;
-   - `--versao X.Y.Z`: instala essa versão em vez da última (`… | bash -s -- --versao 0.3.0`);
+     `curl -fsSL …/get.sh | bash -s -- --versao 0.4.0 --sem-perguntas`;
+   - `--versao X.Y.Z`: instala essa versão em vez da última (`… | bash -s -- --versao 0.4.0`);
    - as outras opções passam ao `install.sh` (ex.: `--proxy traefik --rede <rede>`).
 
    **Verificação opcional da origem.** O sha256 só confirma que o pacote não se estragou. Para confirmar que foi
    construído pelo repositório público (atestação do GitHub; precisa do `gh` com sessão), descarrega o pacote à mão e:
    ```bash
-   gh attestation verify squad-office-lite-0.3.0.tar.gz --repo MozThinker/squad-office-lite
+   gh attestation verify squad-office-lite-0.4.0.tar.gz --repo MozThinker/squad-office-lite
    ```
    Só as versões publicadas com atestação passam. Uma falha aqui é motivo para não instalar e reportar (ver
    [`SECURITY.md`](SECURITY.md)).
@@ -121,7 +121,7 @@ de reinício. Se mudaste as `raizes`, corre outra vez `./install.sh` (não volta
 
 O mesmo `get.sh`, sem `--versao` (instala a última versão publicada; lê o aviso em «Instalação»):
 ```bash
-curl -fsSL https://raw.githubusercontent.com/MozThinker/squad-office-lite/v0.3.0/get.sh | bash
+curl -fsSL https://raw.githubusercontent.com/MozThinker/squad-office-lite/v0.4.0/get.sh | bash
 ```
 A versão instalada passa para `~/squad-office-lite.anterior-<data>` e a nova fica em `~/squad-office-lite`.
 `~/office-lite` (config, `.env`, credenciais e dados) não é tocada pelo `get.sh`; o `install.sh` só volta a
@@ -430,17 +430,17 @@ só neste PC. A squad só trabalha enquanto o PC está ligado e o Docker Desktop
    ```bash
    mkdir -p ~/office && cd ~/office
    ```
-3. **Descarrega o `compose.yaml`** da versão 0.3.0. As imagens do Office e do runner vêm fixadas por digest: o que
+3. **Descarrega o `compose.yaml`** da versão 0.4.0. As imagens do Office e do runner vêm fixadas por digest: o que
    corre é sempre o que foi publicado com esta versão.
    No PowerShell (é `curl.exe`, não `curl`):
    ```powershell
-   curl.exe -fsSLO https://github.com/MozThinker/squad-office-lite/releases/download/v0.3.0/compose.yaml
+   curl.exe -fsSLO https://github.com/MozThinker/squad-office-lite/releases/download/v0.4.0/compose.yaml
    ```
    No Terminal:
    ```bash
-   curl -fsSLO https://github.com/MozThinker/squad-office-lite/releases/download/v0.3.0/compose.yaml
+   curl -fsSLO https://github.com/MozThinker/squad-office-lite/releases/download/v0.4.0/compose.yaml
    ```
-   Também o podes descarregar pelo browser, na página da release `v0.3.0`, e guardá-lo nesta pasta com o nome
+   Também o podes descarregar pelo browser, na página da release `v0.4.0`, e guardá-lo nesta pasta com o nome
    `compose.yaml`. Para mudar a porta ou a pasta dos projectos, ver
    [Mudar a porta, o endereço ou a pasta dos projectos](#mudar-a-porta-o-endereço-ou-a-pasta-dos-projectos) (opcional).
    **No Linux**, cria já o `.env` com o teu utilizador e grupo, antes do passo 4, para os ficheiros dos projectos
@@ -517,7 +517,7 @@ Sem `.env` valem as omissões. Para mudar, descarrega o `env.example` da release
 `compose.yaml`, tira o `#` das linhas que queres mudar e corre `docker compose up -d` (no Linux já tens um `.env` do
 passo 3: não o substituas, acrescenta-lhe as linhas):
 ```powershell
-curl.exe -fsSLo .env https://github.com/MozThinker/squad-office-lite/releases/download/v0.3.0/env.example
+curl.exe -fsSLo .env https://github.com/MozThinker/squad-office-lite/releases/download/v0.4.0/env.example
 ```
 (no Terminal, `curl` em vez de `curl.exe`). O anexo chama-se `env.example` porque o GitHub muda o nome dos anexos que
 começam por ponto.
@@ -591,7 +591,8 @@ docker compose up -d
 (ou numa só linha, também no PowerShell do Windows: `docker compose pull; docker compose up -d`). O `.env` e os volumes (config, credenciais, dados) ficam como estão. Vê o que mudou no
 `CHANGELOG.md`. **Da 0.1.x para a 0.2.0** corre uma vez `docker compose run --rm configurar` depois do `up -d`: o
 volume novo `arquivo-fila` nasce do root e só o `configurar` lhe dá o dono certo (até lá «Arquivar» responde
-«fila do arquivo indisponível» e o runner escreve no log que a fila está insegura).
+«fila do arquivo indisponível» e o runner escreve no log que a fila está insegura). **Da 0.3.x para a 0.4.0**, o
+mesmo para os volumes novos `agentes`, `agentes-rascunhos` e `agentes-fila` (ver [Squads e agentes](#squads-e-agentes)).
 
 ### Desinstalar do PC
 
@@ -637,6 +638,94 @@ Office.
   verificados à mão.
 - Ainda sem backups nem passagem de dados entre o PC e uma VPS.
 
+## Squads e agentes
+
+No ⚙ (Definições), «Abrir «Squads e agentes»» mostra, por squad, os agentes (nome, descrição, modelo, skills), as
+skills disponíveis e o modelo da sessão principal. Tudo o que fazes nesta vista é um **pedido**: o Office só o põe numa
+fila e quem escreve os ficheiros é o runner, na passagem seguinte (até 1 min). Em «Pedidos» vês cada um (pendente,
+feito ou erro com o motivo); a vista actualiza-se sozinha. Nada disto mexe nos projectos nem no `office.yaml`.
+
+Os agentes vivem em `<dados>/agentes/<squad>/agents/<nome>.md` (subagentes do Claude Code, com frontmatter), as
+skills em `<dados>/agentes/<squad>/skills/<skill>/SKILL.md` e as instruções da squad (opcionais) em
+`<dados>/agentes/<squad>/CLAUDE.md`. Quando o runner prepara uma tarefa da squad, e de novo na retoma, copia-os para o
+worktree, fora dos commits (ver [Fila dos agentes](#fila-dos-agentes-adr-017-a-019)). As skills pões tu nessa pasta (no
+modo Docker, com `docker compose cp` para `runner:/dados/agentes/<squad>/skills/`, como na Biblioteca); o Office não
+instala skills de fora.
+
+**Mudar o modelo ou as skills:** «Mudar modelo ou skills» num agente. Modelos: `inherit`, `sonnet`, `opus`, `haiku`
+ou «sem campo» (usa o da sessão); outros nomes só editando o ficheiro. Skills: só as da squad. Antes de passares para
+um modelo mais caro (`haiku` < `sonnet` < `opus`), a vista avisa. O runner confirma que o ficheiro ainda é o que viste
+(senão «o agente mudou depois de ser visto» e nada muda), muda só a linha `model:` ou o bloco `skills:` e guarda o
+anterior em `<nome>.md.bak-AAAAMMDD-HHMM`. **Vale na próxima tarefa** da squad (ou na retoma de uma interrompida),
+depois dessa passagem: uma tarefa já a correr fica com a cópia que recebeu. O modelo do lead não se muda aqui: o lead
+é a sessão principal e usa `squads[].modelo` do `office.yaml` (senão `runner.modelo`, senão a omissão do `claude`).
+
+**Criar um agente por descrição:** «Criar agente por descrição», com um nome e o que deve fazer.
+1. **Rascunho:** o runner pede ao `claude` um `.md` de agente (sem ferramentas, 1 turno, até 0,50 USD). Normaliza-o
+   (`name` = o nome pedido; só `name`, `description`, `tools`, `model`, `skills` e `permissionMode`; skills que a squad
+   não tem saem; `bypassPermissions` é recusado) e põe-no em «Agentes por activar», nunca em `agents/`.
+2. **Editar:** abres o ficheiro inteiro, mudas e guardas. Cada versão guardada tem de ser ensaiada de novo.
+3. **Ensaio só de leitura:** escolhes um projecto e o que pedir. O runner clona o projecto (`--depth 1`, sem remotos)
+   numa pasta temporária, põe lá o candidato e os agentes e skills da squad e corre `claude --agent <nome>` só com
+   `Read`, `Grep` e `Glob` (até 8 turnos, 2 USD e 10 min). A pasta apaga-se sempre. O relatório (com segredos tapados),
+   o custo e as ferramentas não ensaiadas aparecem no candidato.
+4. **Activar:** só com um ensaio ok da versão actual. O `.md` passa para `agents/` (nunca por cima de um agente com o
+   mesmo nome). «Descartar» apaga o candidato.
+
+**O que o ensaio não ensaia:** as ferramentas além de `Read`, `Grep` e `Glob` (`Bash`, `Edit`, `Write`, `WebFetch`…;
+a vista lista as que o agente pede), escrita, git e PRs, servidores MCP, as permissões e o `runner.ferramentas` de uma
+tarefa a sério, nem mais de 8 turnos. Um ensaio ok diz que o agente lê o projecto e responde ao que pediste, não que
+faz bem uma tarefa com escrita.
+
+**Remover:** «Remover agente» move o `.md` para `agents/.removidos/<nome>.md.bak-AAAAMMDD-HHMM` (para o repor, move-o
+de volta à mão). O lead não se remove.
+
+**Squad a partir de um modelo:** «Nova squad a partir de um modelo», com um dos 4 modelos genéricos (Desenvolvimento,
+Investigação, Observação, Conteúdo; em `modelos/squads/`), um id e a missão. O runner pede ao `claude` (como no
+rascunho de agente, até 0,50 USD) que adapte a missão e as descrições e instruções dos agentes; nomes, ferramentas,
+modelos e permissões vêm sempre do modelo (os 4 só lêem: `Read`, `Grep`, `Glob`, `Agent`, `WebSearch`, `WebFetch`).
+O rascunho aparece na squad: «Criar squad» ou «Descartar rascunho». Criar grava `<dados>/agentes/<id>/` (`CLAUDE.md`
+e `agents/`), tudo ou nada, e regista a squad em `<dados>/agentes/squads.json`.
+- Id de uma squad do `office.yaml` ainda sem agentes: o modelo povoa essa squad.
+- Id novo: a vista mostra um bloco para colar na lista `squads:` do `office.yaml` («Copiar bloco»), por exemplo
+  ```
+    - id: pesquisa
+      nome: "Pesquisa"
+      lead: lider
+  ```
+  O runner nunca escreve o `office.yaml`: na VPS edita `~/office-lite/office.yaml`; no modo Docker, ver
+  [Editar o `office.yaml`](#editar-o-officeyaml-e-pôr-ficheiros-na-biblioteca). Sem o bloco, a squad não é lançável
+  nem tem rotinas.
+- «Ensaiar o lead» ensaia-o como acima. Nas squads criadas por modelo, as rotinas só correm com um ensaio ok do lead
+  actual.
+- «Desactivar squad» (só as criadas por modelo): sai do registo, as rotinas dela são canceladas e `agents/` passa a
+  `agents.bak-AAAAMMDD-HHMM`; nada se apaga. O bloco do `office.yaml` tiras tu.
+
+**Rotinas:** «Pedir uma rotina» (squads do `office.yaml` com `formato: worktree` e o modo `task`): projecto, hora
+`HH:MM`, dias da semana, instruções (1–2000 caracteres), tecto por execução (0.10–5.00 USD) e máximo de turnos (1–30);
+até 5 por squad. O runner cria o pedido `rotina-<squad>-<id>.md` nas **Aprovações**, com a definição exacta. **A
+rotina só corre depois de aprovares a linha `R1`**; recusada, nunca corre; com a definição do `.md` mexida, também
+não. Aprovada, corre uma vez em cada dia marcado, na primeira passagem a partir da hora (no `fuso`), como tarefa `task`
+da squad (o 1.º dos `tipos`), com os agentes copiados e o tecto e os turnos dela. Conta no `tecto_diario` e espera pelo
+`paralelo`. Com o runner parado até ao fim do dia, esse dia salta.
+- **Pausa:** 3 execuções seguidas em «erro» (ou que nem chegaram a arrancar) põem-na `pausada` (aviso no Telegram, se
+  o tiveres). «Terminou sem PR» não conta como falha.
+- «Retomar» (só pausadas) volta a `aprovada`, com o contador a zero. «Cancelar rotina» é para sempre: pedir de novo é
+  uma aprovação nova.
+
+**Custos:** rascunhos e ensaios gastam a credencial do Claude das tarefas. Tecto por chamada: 0,50 USD por rascunho e
+2 USD por ensaio (um ensaio que passe dos 2 USD fica em erro). **Tecto diário de IA: 10 USD** (fixo, no `fuso`), somado
+em `<dados>/runner/agentes-ia.jsonl`; uma chamada sem custo conhecido conta pelo seu tecto. Acima dele o pedido fica
+com «tecto diário de IA atingido»; os pedidos sem IA seguem. Só 1 rascunho ou ensaio por passagem (os outros esperam)
+e um ensaio pode atrasar a passagem até 10 min. Os valores são as estimativas do próprio `claude`; com o token da
+subscrição gastam os limites dela. As rotinas são tarefas normais: o tecto delas vale por arranque (com 2 retomas, até
+3×). Mudar modelo e skills, activar e remover não gastam nada.
+
+**Modo Docker:** há três volumes novos (`agentes`, `agentes-rascunhos`, `agentes-fila`). Numa instalação anterior à
+0.4.0 nascem do root no `docker compose up -d`: corre uma vez `docker compose run --rm configurar`, que lhes dá o teu
+`OFFICE_UID`/`OFFICE_GID`. Até lá a vista diz «A fila dos agentes está indisponível: corre o `configurar` uma vez (modo
+Docker)» e não aceita pedidos. Na VPS, o `get.sh` (ou `./install.sh`) cria as pastas novas e gera o compose com elas.
+
 ---
 
 ## Referência
@@ -653,6 +742,8 @@ indentação só com espaços, em múltiplos de 2 (tabs = erro); comentários `#
 `- valor` ou `- chave: valor` (as chaves seguintes alinhadas); listas numa linha só de valores simples (`[feat, fix]`);
 valores `"…"`, `'…'`, simples, inteiros e `true`/`false`. **Não há:** âncoras, tags, `|`/`>`, `{…}`, `null`/`~`,
 valores em várias linhas, vários documentos (`---`). `~/x` é texto (expandido para a casa do utilizador nas raízes).
+Caracteres invisíveis (categorias Unicode `Cf`, `Co`, `Cs`, salvo o ZWJ dos emojis) são recusados em chaves e valores;
+as mensagens de erro nunca repetem o valor recusado.
 
 | chave | o quê (omissão) |
 |---|---|
@@ -664,6 +755,7 @@ valores em várias linhas, vários documentos (`---`). `~/x` é texto (expandido
 | `raizes.projectos` | onde estão os repositórios (`~/projectos`) |
 | `raizes.claude_projects` | sessões do Claude Code (`~/.claude/projects`) |
 | `squads[]` | 1–6: `id`, `nome`, `lead` (papel do líder, `tech-lead`), `personagem`, `formato` `worktree` (lançável, omissão) ou `sessao` (só acompanhada); `tipos` (`[feat, fix]`) e `modos` (`[goal, task]`) só em `worktree` |
+| `squads[].modelo` | opcional: modelo da sessão principal da squad (`--model`), mesmas regras de `runner.modelo` (letras, dígitos, `.`, `_`, `-`, até 64, sem `-` inicial); ganha ao `runner.modelo` nas tarefas e rotinas dessa squad e nos rascunhos dela (ver [Squads e agentes](#squads-e-agentes)) |
 | `projectos[]` | 1–30: `id` (minúsculas), `nome`, `glifo` (1–2 caracteres, «◆»), `repo` (pasta em `raizes.projectos`, omissão = `id`) |
 | `colunas` | rótulos de `ideias`, `a-fazer`, `em-curso`, `a-espera`, `feito` (chaves e ordem fixas), 1–30; sem `a-espera`: «À espera de <`utilizador.nome`>» (um valor vazio não valida) |
 | `biblioteca[]` | 0–12 fontes: `id`, `rotulo`, `pasta` (relativa a `<dados>/biblioteca`), `media` (`false`), `tipo` opcional (`relatorios`, `estudos`, `planos`, `conhecimento`, `textos`); `arquivo_dias` opcional, 7–3650: o runner arquiva sozinho, no máximo 1× por dia, os itens da fonte sem alterações há mais de N dias (ADR-012; sem a chave nunca arquiva nada sem pedido; ver [Arquivo da Biblioteca](#arquivo-da-biblioteca-adr-011)) |
@@ -688,17 +780,21 @@ Lançáveis = cada squad `worktree` × cada projecto.
     quadro/cartoes.json         cartões manuais
     quadro-lancar/              pedidos de lançamento
     arquivo-fila/               pedidos de arquivar/repor vindos da Biblioteca (JSON)
+    agentes/<squad>/            agentes (agents/<nome>.md), skills (skills/<skill>/SKILL.md) e CLAUDE.md da squad;
+                                squads.json e rotinas.json (registos); só o runner lá escreve
+    agentes-rascunhos/          candidatos, rascunhos de squads e ensaios; só o runner lá escreve
+    agentes-fila/               pedidos da vista «Squads e agentes» (JSON)
     push/                       chaves e subscrições Web Push (0700)
     biblioteca/<pasta>/         fontes da Biblioteca
     biblioteca/<pasta>/.arquivo/  o que se arquivou (mesmos caminhos) e o REGISTO.tsv; só o runner lá escreve
-    runner/                     lock, histórico, logs, settings/, office.yaml.sha256 e gh-verificado.json
-                                do runner (só no host)
+    runner/                     lock, histórico, logs, settings/, office.yaml.sha256, gh-verificado.json e
+                                agentes-ia.jsonl (custos da IA dos agentes) do runner (só no host)
     runner-estado/estado.json   sinal do runner para o Office (sem segredos; ver Runner)
 ~/projectos/exemplo/            repositório de exemplo criado pelo instalador
 ```
 No contentor, `tasks`, `claude_projects`, `squads`, `decisoes`, `biblioteca` e `runner-estado` são montadas só de
-leitura; o Office só
-escreve em `decisoes-fila`, `quadro`, `quadro-lancar`, `push`, `arquivo-fila` e nas miniaturas (num `tmpfs`). O contentor corre com o
+leitura, tal como `agentes` e `agentes-rascunhos`; o Office só
+escreve em `decisoes-fila`, `quadro`, `quadro-lancar`, `push`, `arquivo-fila`, `agentes-fila` e nas miniaturas (num `tmpfs`). O contentor corre com o
 uid/gid de quem instalou (`OFFICE_UID`/`OFFICE_GID` no `.env`), `read_only`, sem portas publicadas.
 
 **No modo Docker** não há `~/office-lite` nem `~/squad-office-lite`: cada pasta de `dados/` é um volume do Docker com
@@ -735,13 +831,15 @@ menos de 3 min.
 Cada passagem (com lock, nunca duas ao mesmo tempo): grava o `estado.json` → confirma se o `office.yaml` mudou →
 aplica decisões → retoma tarefas interrompidas (até 2 vezes) → trata a fila do Quadro → trata a fila do arquivo da
 Biblioteca e o arquivo automático (ver [Arquivo da Biblioteca](#arquivo-da-biblioteca-adr-011)) → arquiva pedidos
-antigos (de todas as filas). No log, o que é da Biblioteca começa por «biblioteca:».
+antigos (de todas as filas) → rotinas aprovadas → fila dos agentes, com a acção de IA no fim (ver
+[Fila dos agentes](#fila-dos-agentes-adr-017-a-019)). No log, o que é da Biblioteca começa por «biblioteca:» e o da
+fila dos agentes por «agentes:».
 
 **`estado.json`** (`<dados>/runner-estado/`, 0644, escrita atómica): o sinal do runner para o Office, que o lê só de
 leitura e com ele desenha os «Primeiros passos» e a faixa «O runner não dá sinal desde HH:MM» (mais de 3 min sem
 passagem). Só valores de uma lista conhecida, nunca segredos, caminhos nem a saída dos comandos:
 ```json
-{"v": 1, "em": "2026-11-08T19:30:00+00:00", "versao": "0.3.0",
+{"v": 1, "em": "2026-11-08T19:30:00+00:00", "versao": "0.4.0",
  "claude": "ok|falta", "credencial": "ok|falta|modo", "gh": "ok|sem sessão"}
 ```
 `credencial` diz se há uma credencial válida (`claude.env`, `runner.env` ou o login do `claude`), sem a ler para fora
@@ -751,7 +849,8 @@ ignorado (o Office diz «O runner ainda não deu sinal»). O `/healthz` não mud
 
 **Lançar:** revalida o pedido contra a config; confirma o tecto diário (`tecto_diario`, no fuso da config) e o
 `paralelo` (acima dele o pedido espera); cria `git worktree` em `<repo>/.worktrees/<task_id>` num branch
-`<kind>/<slug>` a partir do ramo por omissão do `origin` (ou do actual, sem remoto); grava `task.md` e `meta.json`;
+`<kind>/<slug>` a partir do ramo por omissão do `origin` (ou do actual, sem remoto); copia para lá os agentes da squad
+(ver [Fila dos agentes](#fila-dos-agentes-adr-017-a-019)); grava `task.md` e `meta.json`;
 responde `{"task_id"}` e corre o `claude -p` destacado (log em `<dados>/runner/logs/<task_id>.log`, saída do claude em
 `tasks/<id>/claude.log`; os segredos do `runner.env` chegam-lhe pelo stdin, ver
 [Credenciais do Claude](#credenciais-do-claude)). O título e o brief vão só por ficheiro e stdin, delimitados como dados do utilizador. Limite
@@ -786,7 +885,8 @@ mesmos valores de sempre (contrato v1).
     `~/.claude/.credentials.json`, `~/.git-credentials`, `~/.netrc`, `~/.docker/config.json`,
     `~/.config/systemd/**` e `/proc/**` (o ambiente dos outros processos);
   - escrita (`Edit`, que cobre o Write) desses três ficheiros da casa, do `office.yaml`, de `quadro-lancar/`,
-    `decisoes-fila/`, `decisoes/`, `quadro/`, `runner/` e `runner-estado/` dentro de `raizes.dados`, do código do Lite
+    `decisoes-fila/`, `decisoes/`, `quadro/`, `runner/`, `runner-estado/`, `arquivo-fila/`, `agentes/`, `agentes-fila/` e
+    `agentes-rascunhos/` dentro de `raizes.dados`, do código do Lite
     (`~/squad-office-lite/**`), do ficheiro de `runner.settings`, dos cinco de `~` acima (credenciais e
     `~/.config/systemd/**`) e do que o teu utilizador executa: `~/.claude/settings.json`,
     `~/.claude/settings.local.json`, `~/.bashrc`, `~/.profile`, `~/.bash_profile` e `~/.local/bin/**`;
@@ -821,7 +921,8 @@ mesmos valores de sempre (contrato v1).
 - `runner.max_usd` (`--max-budget-usd`): teto de custo por arranque do `claude`, estimado pelo próprio `claude` (pode
   passar um pouco). Cada retoma é um arranque novo: com 2 retomas, uma tarefa pode gastar até 3× o teto.
   `runner.modelo` (`--model`): o modelo da squad (ex.: `sonnet`); o nome não é validado no arranque, um nome errado
-  aparece no `claude.log`.
+  aparece no `claude.log`. `squads[].modelo` ganha-lhe nessa squad. Nas rotinas, o `--max-budget-usd` e o
+  `--max-turns` são os da rotina.
 
 ### Credenciais do Claude
 
@@ -1070,6 +1171,121 @@ indisponível`: pasta ausente ou sem escrita). Sucesso: **202** `{"id", "accao"}
 acrescenta `arquivo`: `{"arquivavel", "arquivado": null | {"em", "motivo"}, "pendente": null | "arquivar" | "repor",
 "erro": null | <motivo do último pedido falhado>}`; na lista do arquivo cada item traz `arquivado`.
 
+### Fila dos agentes (ADR-017 a 019)
+
+A vista «Squads e agentes» (ver [Squads e agentes](#squads-e-agentes)) só lê e grava pedidos numa fila; o runner
+revalida tudo e escreve. Nomes: squad `[a-z][a-z0-9-]{1,19}`, agente e skill `[a-z][a-z0-9-]{1,39}`, rotina `r1`…`r999`
+(nunca reutilizado). Só o runner escreve em `agentes/` e `agentes-rascunhos/`:
+```
+<dados>/agentes/<squad>/agents/<nome>.md          (+ <nome>.md.bak-AAAAMMDD-HHMM e .removidos/)
+<dados>/agentes/<squad>/skills/<skill>/SKILL.md
+<dados>/agentes/<squad>/CLAUDE.md                 (opcional)
+<dados>/agentes/squads.json  rotinas.json         (registos das squads por modelo e das rotinas)
+<dados>/agentes-rascunhos/agentes/<squad>/<nome>.md  + <nome>.ensaio.json
+<dados>/agentes-rascunhos/squads/<id>/rascunho.json  + ensaio.json
+<dados>/agentes-fila/<id>.json  + <id>.feito.json ; feito/ (rotação)
+<dados>/runner/agentes-ia.jsonl                   (livro de custos da IA)
+<dados>/runner/tarefas/<tid>.json                 (estado de cada tarefa só do runner: worktree, cópias, sessão, tectos da rotina; a retoma nunca confia na meta.json)
+```
+
+**`GET /api/agentes`** (só leitura, `no-store`): por squad (as do `office.yaml` e as de `squads.json`), o frontmatter
+permitido de cada agente, o caminho relativo e o `sha256` do `.md`, as skills, o modelo da sessão (`squads[].modelo`,
+senão `runner.modelo`, senão a omissão do `claude`), candidatos com o último ensaio, rascunho de squad, rotinas e os 50
+pedidos mais recentes; `escrita` diz se a fila é gravável. **Nunca o corpo dos `.md`**: um candidato inteiro só sai a
+pedido, em `GET /api/agentes/candidato?squad=&nome=` (`{"md", "sha256"}`, 404 sem ele). Um `.md` que seja symlink,
+maior que 80 KB, sem frontmatter ou com `---` dentro dele aparece como «ilegível» (só o nome do ficheiro).
+
+**`POST /api/agentes/pedido`** `{"token", "accao", "args"}` (chaves exactas; mesmas regras do `/api/decisao`: JSON,
+mesma origem, `token`): 413 (> 80 KB), 403, 400 (`campos inválidos` ou o motivo: squad, agente, skill, candidato,
+projecto ou modelo de squad inexistentes, modelo fora da lista, limites da rotina…), 409 (`já há um pedido pendente
+para este alvo`; `fila cheia`, 50 pendentes), 503 (`fila dos agentes indisponível`: pasta ausente ou sem escrita).
+Sucesso: **202** `{"id", "accao"}`.
+
+**Pedido** `<dados>/agentes-fila/<id>.json` (contrato `v: 1`, escrito pelo Office; nome só do relógio e de
+`secrets.token_hex(4)`), chaves exactas por esta ordem:
+```json
+{"v": 1, "id": "20261118T093000-0a1b2c3d", "accao": "modelo",
+ "args": {"squad": "dev", "agente": "revisor", "sha256": "<sha256 do .md que viste>", "modelo": "haiku"},
+ "pedido_em": "2026-11-18T09:30:00+00:00", "ip": "…", "ua": "…"}
+```
+`pedido_em` ISO com fuso; `ip` ≤ 64 e `ua` ≤ 200 caracteres; ficheiro ≤ 96 KB. Textos de várias linhas (`descricao`,
+`missao`, `tarefa`, `instrucoes`) com 1–2000 caracteres, sem controlos (salvo `\n` e `\t`) nem invisíveis (`Cf`, `Co`,
+`Cs`, salvo o ZWJ). `args` tem exactamente as chaves da acção:
+
+| `accao` | `args` | alvo | IA (tecto) |
+|---|---|---|---|
+| `modelo` | `squad, agente, sha256, modelo` (`inherit`, `sonnet`, `opus`, `haiku` ou `""` = tirar o campo) | `agente:<squad>/<agente>` | |
+| `skills` | `squad, agente, sha256, skills` (0–20, únicas, da squad) | idem | |
+| `agente_remover` | `squad, agente, sha256` | idem | |
+| `agente_rascunho` | `squad, nome, descricao` | `cand:<squad>/<nome>` | 0.50 USD |
+| `agente_criar` | `squad, nome, sha256` (do candidato visto, ou `null` se novo), `md` (≤ 64 KB) | idem | |
+| `agente_ensaio` | `squad, nome, sha256, projecto, tarefa` | idem | 2 USD |
+| `agente_activar` | `squad, nome, sha256` | idem | |
+| `agente_descartar` | `squad, nome` | idem | |
+| `squad_rascunho` | `squad, modelo` (`desenvolvimento`, `investigacao`, `observacao`, `conteudo`), `missao` | `squad:<squad>` | 0.50 USD |
+| `squad_criar` | `squad, sha256` (do `rascunho.json`) | idem | |
+| `squad_ensaio` | `squad, sha256` (do `.md` do lead), `projecto, tarefa` | idem | 2 USD |
+| `squad_descartar` / `squad_desactivar` | `squad` | idem | |
+| `rotina_pedir` | `squad, projecto, hora` (`HH:MM`), `dias` (1–7 inteiros, 1 = seg … 7 = dom, crescentes), `instrucoes`, `tecto_usd` (texto `0.10`–`5.00`), `max_turnos` (1–30) | `rotina:<squad>` | |
+| `rotina_retomar` / `rotina_cancelar` | `squad, rotina` | `rotina:<squad>/<rotina>` | |
+
+**Resposta do runner** `<id>.feito.json`: `{"ok": true}` ou `{"erro": "<motivo>"}`, com o motivo de uma lista fechada
+(`pedido ilegível`, `versão desconhecida`, `pedido repetido nesta passagem`, `squad desconhecida`, `agente
+inexistente`, `skill inexistente`, `modelo inválido`, `frontmatter inválido`, `o agente mudou depois de ser visto`, `o
+rascunho mudou depois de ser visto`, `já existe`, `candidato inexistente`, `sem ensaio ok desta versão`, `o lead não
+pode ser removido`, `projecto inválido`, `modelo de squad inexistente`, `squad já tem agentes`, `rascunho inexistente`,
+`squad não registada`, `squad não lançável`, `limite de rotinas`, `rotina inexistente`, `rotina não pausada`, `tecto
+diário de IA atingido`, `a IA falhou`, `tempo esgotado`, `erro de escrita`). Pedido inválido: erro e nada escrito.
+**Rotação:** o pedido e a resposta vão para `feito/` quando a resposta tem mais de `runner.rotacao_dias`.
+
+**Contrato do runner** (a fila vem de um contentor e um agente com `Bash` pode escrever nela; o runner não confia
+nela): só nomes `^\d{8}T\d{6}-[0-9a-f]{8}\.json$`, abertos com `O_NOFOLLOW` e `fstat`; revalida a forma, a config, o
+disco e o `sha256` do que foi visto; no máximo 50 pedidos por passagem (por ordem do nome), 1 por alvo e **1 acção com
+IA**, no fim (as outras com IA ficam sem resposta até à passagem seguinte); escritas por tmp + `rename`, activação e
+`.md` de rotina com criação exclusiva. A IA usa a credencial e o ambiente do lançador, numa pasta `mkdtemp` apagada
+sempre; o texto do utilizador vai só pelo stdin, entre marcas com um nonce, nunca em argv. Rascunho: `claude -p --tools
+"" --max-turns 1 --strict-mcp-config --output-format json --no-session-persistence --max-budget-usd 0.50` (mais o
+`--model` da squad), 120 s. Ensaio: `--agent <nome> --permission-mode dontAsk --allowedTools Read Grep Glob
+--disallowedTools Bash Edit Write WebFetch NotebookEdit --max-turns 8 --max-budget-usd 2`, com as negações por
+omissão num `--settings` fora do clone, 600 s. **`ensaio.json`**: `{"v": 1, "sha256", "estado": "ok"|"erro",
+"motivo", "relatorio", "nao_ensaiadas", "custo_usd", "em"}` (`relatorio` com segredos tapados, ≤ 8000 caracteres);
+«ok» = `claude` com código 0, sem erro, a tempo e dentro do tecto.
+
+**`.md` de decisão de uma rotina** (`<dados>/decisoes/rotina-<squad>-<id>.md`, criação exclusiva, formato das
+[Aprovações](#aprovações-decisões-adr-001)):
+```
+---
+estado: pendente
+criado: 2026-11-18
+---
+# Rotina r1 da squad Dev
+## O quê
+Correr uma tarefa da squad dev no projecto exemplo às 07:30 (seg, qua, sex), no fuso Europe/Lisbon.
+## Datas e orçamento
+Tecto: 0.50 USD por execução · máximo 10 turnos.
+## Instruções
+> cada linha das instruções, citada com "> "
+## Definição
+    <a definição em JSON canónico, numa linha>
+## Decisões
+- [R1] Activar a rotina r1 (tecto 0.50 USD por execução)
+```
+Nenhuma linha vinda do utilizador abre secção ou decisão (instruções com `> `, definição indentada). A definição é
+`json.dumps({squad, id, projecto, hora, dias, instrucoes, tecto_usd, max_turnos}, ensure_ascii=True, sort_keys=True,
+separators=(",", ":"))` e o seu `sha256` fica em `rotinas.json`. O runner só lança com `R1 → aprovado` e a linha da
+`## Definição` igual à do registo. Tarefa: `kind` = o 1.º dos `tipos`, `mode` `task`, slug
+`rotina-<squad>-<id>-AAAAMMDD`; 3 tarefas seguidas em `erro` (ou falhas a preparar) → `pausada`.
+
+**O que o runner copia para o worktree** (ao preparar a tarefa e de novo na retoma, também nas rotinas e no clone do
+ensaio): `<dados>/agentes/<squad>/agents/*.md` → `<worktree>/.claude/agents/`, `skills/<skill>/…` →
+`.claude/skills/<skill>/…` e `CLAUDE.md` → `.claude/CLAUDE.md`. O `claude` lê-os como agentes, skills e instruções do
+projecto; o argv e o `HOME` não mudam. Só ficheiros regulares, até 4 pastas de fundo em cada skill e 2 MB por squad;
+um symlink no caminho = esse ramo não é copiado. **O do repo ganha:** se o projecto já tem um ficheiro com o mesmo
+caminho, fica intacto e a tarefa regista em `issues` «o repo já tem .claude/agents/x.md: ficou o do repo». Na retoma só
+se actualizam as cópias feitas pelo runner. Cada caminho copiado vai, ancorado (`/.claude/agents/x.md`), uma vez, para
+o `info/exclude` do repositório (`git rev-parse --git-path info/exclude`): nunca entra em commits e o `git status`
+fica limpo. Esse ficheiro é do repositório, por isso os padrões valem também no checkout principal.
+
 ### Outras partes
 
 - **Biblioteca** (`▤`): ficheiros das fontes de `biblioteca` e os `SPEC/PLAN/QA.md` das tarefas, para ver e
@@ -1195,7 +1411,8 @@ Para reportar uma falha, ver [`SECURITY.md`](SECURITY.md) (reporte privado no Gi
 
 Postas pelo compose gerado: `OFFICE_CONFIG` (omissão `/config/office.yaml`), `TASKS_DIR`, `CLAUDE_PROJECTS_DIR`,
 `SQUADS_DIR`, `APROVACOES_DIR`, `BIBLIOTECA_DIR`, `DECISOES_FILA_DIR`, `QUADRO_DIR`, `QUADRO_LANCAR_DIR`, `PUSH_DIR`,
-`ARQUIVO_FILA_DIR` (omissão `/data/arquivo-fila`), `RUNNER_ESTADO_DIR` (omissão `/data/runner-estado`), `PUSH_CONTACTO` (opcional) e
+`ARQUIVO_FILA_DIR` (omissão `/data/arquivo-fila`), `RUNNER_ESTADO_DIR` (omissão `/data/runner-estado`), `AGENTES_DIR`, `AGENTES_RASCUNHOS_DIR` e `AGENTES_FILA_DIR`
+(omissões `/data/agentes`, `/data/agentes-rascunhos` e `/data/agentes-fila`), `PUSH_CONTACTO` (opcional) e
 `BIBLIOTECA_MINI_DIR` (omissão `/tmp/miniaturas`); `PORT` (8080). No modo Docker também `OFFICE_MODO=docker`
 (`GET /api/config` ganha `"modo": "docker"`, senão `"vps"`; os «Primeiros passos» mostram os comandos
 `docker compose …`) e `OFFICE_PROXY_SEGREDO_FILE=/proxy/segredo` em vez de `OFFICE_PROXY_SEGREDO`: o segredo vem desse

@@ -43,7 +43,7 @@ purchase.*
 O mesmo comando da instalação (ver README, «Actualizar»):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/MozThinker/squad-office-lite/v0.3.0/get.sh | bash
+curl -fsSL https://raw.githubusercontent.com/MozThinker/squad-office-lite/v0.4.0/get.sh | bash
 ```
 
 Descarrega a última versão publicada, confirma o sha256 e corre o `install.sh`. A versão anterior fica em

@@ -27,6 +27,9 @@ services:
       PUSH_DIR: /data/push
       ARQUIVO_FILA_DIR: /data/arquivo-fila
       RUNNER_ESTADO_DIR: /data/runner-estado
+      AGENTES_DIR: /data/agentes
+      AGENTES_RASCUNHOS_DIR: /data/agentes-rascunhos
+      AGENTES_FILA_DIR: /data/agentes-fila
     volumes:
       - type: bind
         source: "/home/utilizador/office-lite/dados/tasks"
@@ -72,6 +75,18 @@ services:
         source: "/home/utilizador/office-lite/dados/runner-estado"
         target: /data/runner-estado
         read_only: true
+      - type: bind
+        source: "/home/utilizador/office-lite/dados/agentes"
+        target: /data/agentes
+        read_only: true
+      - type: bind
+        source: "/home/utilizador/office-lite/dados/agentes-rascunhos"
+        target: /data/agentes-rascunhos
+        read_only: true
+      - type: bind
+        source: "/home/utilizador/office-lite/dados/agentes-fila"
+        target: /data/agentes-fila
+        read_only: false
       - type: bind
         source: "/home/utilizador/office-lite/office.yaml"
         target: /config/office.yaml

@@ -123,7 +123,8 @@ class ValidarTest(unittest.TestCase):
         self.assertEqual(cfg["raizes"], {"dados": "~/office-lite/dados", "projectos": "~/projectos",
                                          "claude_projects": "~/.claude/projects"})
         self.assertEqual(cfg["squads"], [{"id": "dev", "nome": "Dev", "lead": "tech-lead", "personagem": None,
-                                          "formato": "worktree", "tipos": ["feat", "fix"], "modos": ["goal", "task"]}])
+                                          "formato": "worktree", "tipos": ["feat", "fix"], "modos": ["goal", "task"],
+                                          "modelo": None}])
         self.assertEqual(cfg["projectos"], [{"id": "loja", "nome": "Loja", "glifo": "◆", "repo": "loja"}])
         self.assertEqual(cfg["colunas"], {"ideias": "Ideias", "a-fazer": "A fazer", "em-curso": "Em curso",
                                           "a-espera": "À espera de Utilizador", "feito": "Feito"})
@@ -195,7 +196,8 @@ class ValidarTest(unittest.TestCase):
         cfg = validar(com(squads=[sq, {"id": "marketing", "nome": "Marketing", "formato": "sessao", "lead": "cmo",
                                        "personagem": "Lia"}], ))
         self.assertEqual(cfg["squads"][1], {"id": "marketing", "nome": "Marketing", "lead": "cmo",
-                                            "personagem": "Lia", "formato": "sessao", "tipos": [], "modos": []})
+                                            "personagem": "Lia", "formato": "sessao", "tipos": [], "modos": [],
+                                            "modelo": None})
         self.assertEqual(validar(com(squads=[dict(sq, modos=["task"])]))["squads"][0]["modos"], ["task"])
 
     def test_projectos(self):
@@ -304,6 +306,59 @@ class ValidarTest(unittest.TestCase):
         for mau in ("son net", "-x", ".x", "_x", "A" * 65, "", "sonnet[1m]", "a/b", "a\n", 5, True, []):
             with self.subTest(mau=mau):
                 self.erro(com(runner={"modelo": mau}), "runner.modelo: inválido (letras, dígitos, . _ -, até 64)")
+
+    def test_squads_modelo(self):  # CA-21: mesma regra do runner.modelo; opcional, por squad
+        sq = {"id": "dev", "nome": "Dev"}
+        for v in ("sonnet", "haiku", "claude-sonnet-4-5", "a", "x.y_z-1", "A" * 64):
+            with self.subTest(v=v):
+                self.assertEqual(validar(com(squads=[dict(sq, modelo=v)]))["squads"][0]["modelo"], v)
+        for mau in ("", "A" * 65, "-x", "son net", ".x", "a/b", 5, True, []):
+            with self.subTest(mau=mau):
+                self.erro(com(squads=[dict(sq, modelo=mau)]),
+                          "squads[0].modelo: inválido (letras, dígitos, . _ -, até 64)")
+        cfg = validar(com(squads=[dict(sq, modelo="haiku"), {"id": "ops", "nome": "Ops", "formato": "sessao",
+                                                              "modelo": "opus"}], runner={"modelo": "sonnet"}))
+        self.assertEqual([s["modelo"] for s in cfg["squads"]], ["haiku", "opus"])
+        self.assertEqual(cfg["runner"]["modelo"], "sonnet")
+        yaml = "squads:\n  - id: dev\n    nome: Dev\n    modelo: haiku\nprojectos:\n  - id: loja\n    nome: L\n"
+        self.assertEqual(validar(ler_yaml(yaml))["squads"][0]["modelo"], "haiku")
+        # /api/config igual (CA-7): o modelo não sai no público
+        self.assertNotIn("modelo", officecfg.publico(cfg, None)["squads"][0])
+
+    def test_invisiveis(self):  # CA-22: Cf/Co/Cs recusados (salvo ZWJ), em qualquer texto ou chave
+        for ch in ("\u202e", "\u200b", "\ufeff", "\ue000", "\u2066"):
+            with self.subTest(ch=hex(ord(ch))):
+                self.erro(com(marca=f"Marca{ch}"), "marca: caracteres invisíveis não permitidos")
+                self.erro(com(squads=[{"id": "dev", "nome": f"D{ch}"}]),
+                          "squads[0].nome: caracteres invisíveis não permitidos")
+                self.erro(com(runner={"ferramentas": ["Read", f"Bash(x{ch} *)"]}),
+                          "runner.ferramentas[1]: caracteres invisíveis não permitidos")
+                self.erro(com(**{f"x{ch}": 1}), "config: caracteres invisíveis não permitidos")
+        zwj = "\U0001f469\u200d\U0001f4bb"
+        self.assertEqual(validar(com(marca=f"Loja {zwj}"))["marca"], f"Loja {zwj}")
+
+    def test_mensagens_sem_valor(self):  # CA-22: nenhuma mensagem leva o valor recusado
+        marca = "VALOR-MARCADO-7f3a"
+        casos = [com(marca=marca + "\u202e"), com(marca=marca * 5), com(squads=[{"id": marca, "nome": "D"}]),
+                 com(squads=[{"id": "dev", "nome": "D", "modelo": marca + " x"}]),
+                 com(squads=[{"id": "dev", "nome": "D", marca: 1}]),
+                 com(squads=[{"id": "dev", "nome": "D"}, {"id": "dev", "nome": marca}]),
+                 com(utilizador={"contacto": marca}), com(fuso=marca), com(runner={"modelo": marca + "/"}),
+                 com(runner={"max_usd": marca}), com(runner={"permission_mode": marca}),
+                 com(raizes={"dados": marca}), com(projectos=[{"id": "loja", "nome": "L", "repo": marca + "/"}]),
+                 com(squads=[{"id": "dev", "nome": "D", "formato": marca}])]
+        for d in casos:
+            with self.subTest(d=d):
+                with self.assertRaises(ConfigErro) as cm:
+                    validar(d)
+                self.assertNotIn("MARCADO", str(cm.exception))
+        with self.assertRaises(ConfigErro) as cm:
+            officecfg.raiz(validar(com()), marca)
+        self.assertNotIn("MARCADO", str(cm.exception))
+        with self.assertRaises(ConfigErro) as cm:
+            ler_yaml('marca: "x\\qMARCADO"\n')
+        self.assertNotIn("MARCADO", str(cm.exception))
+        self.assertNotIn("\\q", str(cm.exception))
 
     def test_versao_continua_so_1(self):
         self.erro(com(versao=2, runner={"max_usd": 5}), "versao")
@@ -472,7 +527,7 @@ class LayoutTest(unittest.TestCase):
             self.assertTrue(destino.startswith("/data/"))
             self.assertIn(modo, ("ro", "rw"))
         self.assertEqual(sorted(o for o, _, m, _ in officecfg.MOUNTS if m == "rw"),
-                         ["arquivo_fila", "decisoes_fila", "push", "quadro", "quadro_lancar"])
+                         ["agentes_fila", "arquivo_fila", "decisoes_fila", "push", "quadro", "quadro_lancar"])
 
     def test_arquivo_fila(self):  # AC16: pasta própria em dados, rw no contentor; a biblioteca continua ro
         cfg = self.cfg(dados="/d", projectos="/p", claude_projects="/c")
@@ -480,6 +535,19 @@ class LayoutTest(unittest.TestCase):
         self.assertIn(("0750", Path("/d/arquivo-fila")), officecfg.pastas(cfg))
         self.assertIn(("arquivo_fila", "/data/arquivo-fila", "rw", "ARQUIVO_FILA_DIR"), officecfg.MOUNTS)
         self.assertIn(("biblioteca", "/data/biblioteca", "ro", "BIBLIOTECA_DIR"), officecfg.MOUNTS)
+
+    def test_agentes(self):  # ADR-017: agentes e candidatos ro no Office, fila rw; pastas criadas pelo instalador
+        cfg = self.cfg(dados="/d", projectos="/p", claude_projects="/c")
+        for k, pasta, destino, modo, var in (("agentes", "agentes", "/data/agentes", "ro", "AGENTES_DIR"),
+                                            ("agentes_rascunhos", "agentes-rascunhos", "/data/agentes-rascunhos",
+                                             "ro", "AGENTES_RASCUNHOS_DIR"),
+                                            ("agentes_fila", "agentes-fila", "/data/agentes-fila", "rw",
+                                             "AGENTES_FILA_DIR")):
+            with self.subTest(k=k):
+                self.assertEqual(officecfg.caminho(cfg, k), Path("/d") / pasta)
+                self.assertIn(("0750", Path("/d") / pasta), officecfg.pastas(cfg))
+                self.assertIn((k, destino, modo, var), officecfg.MOUNTS)
+        self.assertEqual([o for o, *_ in officecfg.MOUNTS][-3:], ["agentes", "agentes_rascunhos", "agentes_fila"])
 
     def test_mangle(self):  # AC-b1
         self.assertEqual(officecfg.mangle("/tmp/xyz/.worktrees/20261106-x"), "-tmp-xyz--worktrees-20261106-x")

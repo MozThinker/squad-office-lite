@@ -1044,9 +1044,10 @@ $("#quad-b").onclick = () => (isQuadro() ? qFechar() : (location.hash = "quadro"
 addEventListener("hashchange", qRoute);
 
 // ---- «Definições» (lazy)
-let defP = null;
+let defP = null, agP = null;
+const agentes = () => (agP ||= import("./agentes.js")).then((m) => m.abrir({ cfg, getState: () => state }), () => { agP = null; alert("Não foi possível abrir «Squads e agentes»."); });
 $("#def-b").onclick = async () => {
-  try { (await (defP ||= import("./definicoes.js"))).abrir({ esc, cfg, swReady, isIOS, getState: () => state, musica, tema, notif: { estado: notifEstado, alternar: bellToggle },
+  try { (await (defP ||= import("./definicoes.js"))).abrir({ esc, cfg, swReady, isIOS, getState: () => state, musica, tema, agentes, notif: { estado: notifEstado, alternar: bellToggle },
     repintar: () => { paint(false); qP?.then((m) => m.repintar(), () => {}); } }); }
   catch { defP = null; alert("Não foi possível abrir as definições."); }
 };

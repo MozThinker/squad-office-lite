@@ -54,6 +54,11 @@ uma vez só (marca <id>.movido.json). O Office nunca lança nada directamente.
 Arquivo da Biblioteca (biblioteca.py + arquivo.py, ADR-011): POST /api/biblioteca/arquivo (mesmas verificações do
 /api/decisao) grava um pedido «arquivar|repor» em ARQUIVO_FILA_DIR: 6.ª escrita do serviço. Quem move é o runner do
 host; o Office só lê as `<fonte>/.arquivo/` («Ver arquivados» e links antigos) e nunca escreve nas fontes.
+
+Squads e agentes (agentes.py, ADR-017…019): GET /api/agentes lê AGENTES_DIR e AGENTES_RASCUNHOS_DIR (só leitura; só o
+frontmatter permitido, caminhos relativos e sha256, nunca o corpo dos .md) e GET /api/agentes/candidato devolve um
+candidato inteiro a pedido. POST /api/agentes/pedido (mesmas verificações do /api/decisao) grava um pedido v1 em
+AGENTES_FILA_DIR: 6.ª pasta em que o serviço escreve. Quem escreve agentes, rascunhos, registos e rotinas é o runner do host.
 """
 from __future__ import annotations
 
@@ -75,6 +80,7 @@ from pathlib import Path, PurePosixPath
 from urllib.parse import parse_qs, unquote, urlsplit
 from zoneinfo import ZoneInfo
 
+import agentes
 import aprovacoes
 import biblioteca
 import entregas
@@ -226,6 +232,11 @@ LANCAR_POST_MAX = 32768
 BIBLIOTECA_DIR = Path(os.environ.get("BIBLIOTECA_DIR", "/data/biblioteca"))
 ARQUIVO_FILA = Path(os.environ.get("ARQUIVO_FILA_DIR") or "/data/arquivo-fila")   # ADR-011: pedidos de arquivo
 ARQUIVO_POST_MAX = 4096
+# ADR-017: agentes e candidatos só de leitura; a fila dos agentes é a 6.ª pasta em que o serviço escreve
+AGENTES_DIR = Path(os.environ.get("AGENTES_DIR") or "/data/agentes")
+AGENTES_RASCUNHOS_DIR = Path(os.environ.get("AGENTES_RASCUNHOS_DIR") or "/data/agentes-rascunhos")
+AGENTES_FILA_DIR = Path(os.environ.get("AGENTES_FILA_DIR") or "/data/agentes-fila")
+AGENTES_POST_MAX = 80 * 1024
 # estado.json do runner (só leitura, sem segredos): chaves exactas, só enumerados; inválido ⇒ "runner": null
 RUNNER_ESTADO_DIR = Path(os.environ.get("RUNNER_ESTADO_DIR", "/data/runner-estado"))
 RUNNER_ESTADO_MAX = 4096
@@ -279,13 +290,15 @@ PUSH = push.Servico(Path(os.environ.get("PUSH_DIR", "/data/push")), "mailto:offi
 PUSH_EVERY_S = 30
 PUSH_ROTAS = ("/api/push/subscrever", "/api/push/cancelar", "/api/push/teste")
 CONFIG_BODY = b"{}"   # corpo do GET /api/config, pré-serializado em configurar
+CFG: dict = {}        # config validada em uso (configurar)
 BIBLIOTECA = biblioteca.Indice({}, TASKS, APROVACOES)
 BIBLIOTECA_ARQ = biblioteca.Indice({}, TASKS, APROVACOES, arquivo=True)
 
 
 def configurar(cfg: dict, aviso: str | None = None) -> None:
     # troca as globais que vêm da config (arranque e testes); cada módulo troca só as suas
-    global SQUADS, LEADS, FORMATO, LOCAL_TZ, CONFIG_BODY, BIBLIOTECA, BIBLIOTECA_ARQ
+    global SQUADS, LEADS, FORMATO, LOCAL_TZ, CONFIG_BODY, BIBLIOTECA, BIBLIOTECA_ARQ, CFG
+    CFG = cfg
     SQUADS = tuple(s["id"] for s in cfg["squads"])
     LEADS = {s["id"]: s["lead"] for s in cfg["squads"]}
     FORMATO = {s["id"]: s["formato"] for s in cfg["squads"]}
@@ -1629,6 +1642,18 @@ class Handler(SimpleHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(body)
             return
+        if path == "/api/agentes":   # só leitura (ADR-017); a query é ignorada
+            out = agentes.resposta(CFG, AGENTES_DIR, AGENTES_RASCUNHOS_DIR, AGENTES_FILA_DIR, LOCAL_TZ, time.time())
+            self._json(200, json.dumps(out, ensure_ascii=False).encode())
+            return
+        if path == "/api/agentes/candidato":   # o .md inteiro de um candidato, só a pedido (editar)
+            qs = {k: v[0] for k, v in parse_qs(query).items()}
+            out = agentes.candidato(AGENTES_RASCUNHOS_DIR, qs.get("squad"), qs.get("nome"))
+            if out is None:
+                self._err(404, "não encontrado")
+            else:
+                self._json(200, json.dumps(out, ensure_ascii=False).encode())
+            return
         if path == "/api/entregas":   # só leitura (ADR-014); a query é ignorada
             out = entregas.listar(TASKS, SQUADS_DIR, BIBLIOTECA, time.time())
             self._json(200, json.dumps(out, ensure_ascii=False).encode())
@@ -1717,6 +1742,9 @@ class Handler(SimpleHTTPRequestHandler):
         if path == "/api/biblioteca/arquivo":
             self._post_arquivo()
             return
+        if path == "/api/agentes/pedido":
+            self._post_agentes()
+            return
         if path != "/api/decisao":
             self._err(404, "não encontrado")
             return
@@ -1768,6 +1796,16 @@ class Handler(SimpleHTTPRequestHandler):
         ip = self.headers.get("X-Forwarded-For", "").split(",")[-1].strip() or self.client_address[0]
         code, out = biblioteca.pedir_arquivo(ARQUIVO_FILA, BIBLIOTECA, BIBLIOTECA_ARQ, data, ip,
                                              self.headers.get("User-Agent", ""), LOCAL_TZ, time.time())
+        self._json(code, json.dumps(out, ensure_ascii=False).encode())
+
+    def _post_agentes(self):
+        # _post_json (413/403/400) → forma e semântica (400) → pedido na fila (202, 409, 503)
+        data = self._post_json(AGENTES_POST_MAX)
+        if data is None:
+            return
+        ip = self.headers.get("X-Forwarded-For", "").split(",")[-1].strip() or self.client_address[0]
+        code, out = agentes.pedir(AGENTES_FILA_DIR, AGENTES_DIR, CFG, data, ip, self.headers.get("User-Agent", ""),
+                                  LOCAL_TZ, time.time(), rasc=AGENTES_RASCUNHOS_DIR)
         self._json(code, json.dumps(out, ensure_ascii=False).encode())
 
     def _post_push(self, path: str):

@@ -494,3 +494,84 @@ e `lateral.css`; por `import()`, quando são precisos, `paineis.js`, `entregas.j
 
 **Consequências:** o telemóvel só descarrega o que usa e cada função pura testa-se em node. Reverter é caro (muitos
 ficheiros e testes), por isso fica registado.
+
+## ADR-017 · Agentes das squads em `<dados>/agentes/`, fila `agentes-fila` aplicada pelo runner (2026-11-18)
+**Contexto:** o Squad Office (vista «Agentes», o seu ADR-011) mostra e muda as skills e o modelo dos agentes de cada squad
+por uma fila aplicada por um script do host. O Lite não tinha nenhum conceito de agentes: o runner corre `claude -p`
+num `git worktree` do projecto. No modo Docker o `office.yaml` é só de leitura para o runner (ADR-008).
+
+**Decisão:** padrão dos ADR-001/005/011. (1) Agentes, skills e instruções de cada squad vivem em
+`<dados>/agentes/<squad>/` (`agents/<nome>.md`, `skills/<skill>/SKILL.md`, `CLAUDE.md`); `SUB` ganha `agentes` (`ro` no
+Office, `AGENTES_DIR`), `agentes-fila` (`rw`, `AGENTES_FILA_DIR`) e `agentes-rascunhos` (`ro`, `AGENTES_RASCUNHOS_DIR`).
+Só o runner escreve em `agentes/` e `agentes-rascunhos/`; as três ficam negadas ao `Edit`/`Write` do agente.
+(2) `agentes.py` (stdlib, raiz do repo) tem o parser de frontmatter próprio (sem YAML, lista fechada de chaves,
+`bypassPermissions` proibido, nenhum `---` dentro do frontmatter), a validação dos pedidos e a reescrita byte a byte de
+`model:`/`skills:`; é usado pelo servidor e outra vez pelo runner, que revalida tudo (a fila é escrita pelo contentor e
+o agente tem o mesmo uid). (3) `GET /api/agentes` devolve só frontmatter e caminhos relativos; `POST
+/api/agentes/pedido` grava um pedido **v1** (contrato novo, README «Referência»): ≤ 50 pendentes, 1 por alvo, `sha256`
+do ficheiro visto, comparado pelo runner antes de escrever (backup `.bak-AAAAMMDD-HHMM`, resposta em `feito.json`).
+(4) Na preparação e na retoma de cada tarefa o runner copia os agentes, as skills e o `CLAUDE.md` da squad para
+`<worktree>/.claude/`, nunca por cima de um ficheiro do repo (o do repo ganha, com aviso em `issues`), com os caminhos
+copiados no `info/exclude`: o `claude` lê-os como agentes do projecto nos dois modos, sem mudar argv nem `HOME`.
+(5) Chave opcional `squads[].modelo` (modelo da sessão principal da squad; ganha ao `runner.modelo`), mostrada na vista
+como modelo do lead (Office #36); `versao: 1` mantém-se. Do esquema do Office (#33) volta só o que não muda o formato:
+recusa de caracteres invisíveis (Cf/Co/Cs, salvo ZWJ) e mensagens de erro sem o valor recusado.
+(6) O ADR-012 do Office (estado numa raiz única) não se aplica: o Lite já lê as squads `sessao` de uma raiz única
+(`<dados>/squads`, um mount) desde o ADR-006.
+
+**Alternativas recusadas:** um `HOME` ou `CLAUDE_CONFIG_DIR` por squad (muda o ambiente e as credenciais do `claude`, e
+difere entre modos); `--agents` com JSON (definições no argv); o Office a escrever nos agentes (quebra o ADR-001);
+instalar skills de fora (quarentena do Office, fica para outra versão); salas, lugares, `papeis` e `lancador` do esquema
+do Office (são do desenho e dos scripts de lá).
+
+**Consequências:** 6.ª pasta em que o serviço escreve, só atrás do basic auth e do segredo do proxy (ADR-006). No modo Docker os três
+volumes novos nascem de root numa instalação antiga: a fila responde 503 até se correr o `configurar` uma vez. O
+`info/exclude` é do repo (partilhado pelos worktrees), por isso os caminhos excluídos valem também no checkout
+principal. A `meta.json` está numa pasta onde o agente escreve: o runner guarda em `<dados>/runner/tarefas/<tid>.json`
+(negado ao agente) o worktree, as cópias, a sessão e os tectos da rotina, e a retoma recusa uma meta cujo `workdir` ou
+`worktree` não bata com o que ele calcula. Reverter = tirar as rotas, as pastas do `SUB` e a cópia no `preparar`; os
+ficheiros dos agentes ficam.
+
+## ADR-018 · Agentes por descrição: rascunho de IA, ensaio só de leitura e activação por `sha256` (2026-11-18)
+**Contexto:** porte do Office #34 (o seu ADR-013). Criar um agente pedia editar `.md` à mão.
+
+**Decisão:** acções `agente_rascunho`, `agente_criar`, `agente_ensaio`, `agente_activar`, `agente_descartar` e
+`agente_remover` na fila do ADR-017. O rascunho usa o `claude` do utilizador, nas mesmas condições do lançador
+(credenciais do `claude.env`, ambiente da lista branca), **sem ferramentas** (`--tools ""`, `--max-turns 1`,
+`--strict-mcp-config`, `--max-budget-usd 0.50`, sem sessão guardada), com a descrição pelo stdin entre marcas com nonce,
+declarada como dado. A saída é normalizada (nome, ferramentas de leitura, modelo da lista) e tem de passar o validador;
+fica em `agentes-rascunhos/`, nunca numa pasta de agentes. O ensaio corre a versão editada **só de leitura** num clone
+`--depth 1 file://` de um projecto do `office.yaml` em `mkdtemp`, sem remotes (`dontAsk`, `Read`/`Grep`/`Glob`,
+`--disallowedTools` de escrita, shell e rede, 8 turnos, 2 USD, 600 s; pasta apagada sempre; segredos tapados no
+relatório). «Activar» só aceita o `sha256` de um ensaio `ok` e grava com `O_EXCL`; «Remover» move o `.md` para
+`agents/.removidos/` com backup (nunca o lead). Travões: uma acção com IA por passagem e 10 USD por dia (constante
+`agentes.IA_DIA_USD`, livro em `<dados>/runner/agentes-ia.jsonl`).
+
+**Alternativas recusadas:** chave nova `runner.tecto_ia` (mais esquema sem pedido; pode vir depois sem `versao: 2`);
+rascunho com ferramentas (o texto livre podia mandar ler ou escrever); ensaio num `git worktree` (partilha remotes e
+config com o clone); ensaio pelo GitHub (rede e tokens); registar projectos pela fila (os projectos são do
+`office.yaml`, que o runner não escreve); desactivar por `permissions.deny` (o Lite não tem settings por squad).
+
+**Consequências:** uma passagem do runner pode durar até ≈ 10 min durante um ensaio (o lock impede passagens
+sobrepostas). As ferramentas de escrita, shell e rede do agente não são ensaiadas, e a vista di-lo.
+
+## ADR-019 · Squads a partir de modelos genéricos e rotinas só por aprovação (2026-11-18)
+**Contexto:** porte do Office #37 (o seu ADR-014). No Lite não há agendador externo: quem agenda é o runner.
+
+**Decisão:** quatro modelos genéricos no repo (`modelos/squads/{desenvolvimento,investigacao,observacao,conteudo}/`,
+verificados por `tools/verificar_modelos.py`, também teste). `squad_rascunho` (IA sem ferramentas, só descrições, corpos
+e missão; `name`, `tools`, `model`, `skills` e `permissionMode` vêm sempre do modelo), `squad_criar` (tudo-ou-nada em
+`<dados>/agentes/<id>/`, registo em `agentes/squads.json`), `squad_ensaio`, `squad_descartar` e `squad_desactivar`. O
+runner nunca escreve o `office.yaml`: se o id já é uma squad da config sem agentes, o modelo povoa-a; senão a vista
+mostra o bloco YAML a colar. Rotinas por formulário fechado (projecto, hora, dias, instruções, tecto 0.10–5.00 USD,
+1–30 turnos; ≤ 5 por squad): `rotina_pedir` faz o runner escrever em `decisoes/` um `.md` no formato das Aprovações
+(ADR-001) com a definição, o seu `sha256` e `- [R1] …`; a rotina só fica activa com `R1 → aprovado` e o `sha256` igual.
+O runner lança-a à hora como tarefa `task` da squad, dentro de `tecto_diario`/`paralelo`; 3 erros seguidos pausam-na;
+`rotina_retomar`/`rotina_cancelar` pela fila.
+
+**Alternativas recusadas:** cron do sistema (fora do runner, diferente entre modos); rascunho de rotina por IA (sem
+pedido, custo); o runner a editar o `office.yaml` (só de leitura no modo Docker).
+
+**Consequências:** com o runner parado à hora, a rotina corre na 1.ª passagem desse dia depois da hora; sem passagem até à meia-noite, esse dia perde-se (não há recuperação). O formato do `.md` de rotina passa a ser
+contrato. Uma squad criada que não está no `office.yaml` aparece na vista mas não lança nem tem rotinas até se colar o
+bloco.

@@ -82,6 +82,8 @@ function html() {
 <section aria-labelledby="def-mh"><h3 id="def-mh">Música</h3><label class="def-c"><input type="checkbox" id="def-mus"> Música de fundo</label>
 <label class="def-r" id="def-vr">Volume <input type="range" id="def-vol" min="0" max="100" step="10"></label></section>
 <section aria-labelledby="def-th"><h3 id="def-th">Tema</h3><select id="def-tema" aria-label="Tema">${TEMAS.map(([v, r]) => `<option value="${v}">${r}</option>`).join("")}</select></section>
+<section aria-labelledby="def-ah"><h3 id="def-ah">Squads e agentes</h3><p class="sub">Agentes, skills e modelos de cada squad, squads a partir de um modelo e rotinas.</p>
+<button type="button" class="def-bt" data-a="agentes">Abrir «Squads e agentes»</button></section>
 <section aria-labelledby="def-eh"><h3 id="def-eh">Escritório</h3>${AMB.map(([k, r]) => caixa(k, r, ` data-v="${k}"`)).join("")}
 <p class="sub">Desligado: sempre de dia. A hora é a do fuso da configuração.</p></section>
 <section aria-labelledby="def-nh"><h3 id="def-nh">Notificações neste browser</h3>
@@ -242,7 +244,7 @@ function sincPrefs() {
   if (n) { $("#def-nb").checked = n === "on"; $("#def-nb").disabled = !["on", "off"].includes(n); msg("#def-nm", MSG_NB[n] ?? ""); }
 }
 
-// api = { esc, cfg (GET api/config), swReady, isIOS, getState(), repintar(), musica, tema, notif }
+// api = { esc, cfg (GET api/config), swReady, isIOS, getState(), repintar(), musica, tema, notif, agentes() (abre «Squads e agentes») }
 export async function abrir(api) {
   A = api;
   SQ = squadsDe(api.cfg);
@@ -256,7 +258,8 @@ export async function abrir(api) {
     $("#def-on").addEventListener("change", ligar);
     $("#def-f").addEventListener("submit", guardar);
     $("#def-f").elements["e-fases"].addEventListener("change", ligarFases);
-    dlg.addEventListener("click", (e) => { const a = e.target.closest("[data-a]")?.dataset.a; a === "fechar" ? dlg.close() : a === "teste" && teste(e.target.closest("[data-a]")); });
+    dlg.addEventListener("click", (e) => { const a = e.target.closest("[data-a]")?.dataset.a; a === "fechar" ? dlg.close() : a === "teste" ? teste(e.target.closest("[data-a]"))
+      : a === "agentes" && (dlg.close(), A.agentes?.()); });
     dlg.addEventListener("change", (e) => { const k = e.target.dataset.v; if (!k) return;
       try { localStorage.setItem(k, e.target.checked ? "1" : "0"); } catch {}
       A.repintar(); });

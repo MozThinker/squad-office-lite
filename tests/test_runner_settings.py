@@ -58,7 +58,8 @@ def test_base_tem_exactamente_as_negacoes(ctx):
         f"Edit({abs_(dados / 'quadro-lancar/**')})", f"Edit({abs_(dados / 'decisoes-fila/**')})",
         f"Edit({abs_(dados / 'decisoes/**')})", f"Edit({abs_(dados / 'quadro/**')})",
         f"Edit({abs_(dados / 'runner/**')})", f"Edit({abs_(dados / 'runner-estado/**')})",
-        f"Edit({abs_(dados / 'arquivo-fila/**')})",
+        f"Edit({abs_(dados / 'arquivo-fila/**')})", f"Edit({abs_(dados / 'agentes/**')})",
+        f"Edit({abs_(dados / 'agentes-fila/**')})", f"Edit({abs_(dados / 'agentes-rascunhos/**')})",
         f"Edit({abs_(c.RAIZ / '**')})",
     ], "blockWritesOutsideWorkingDirectories": True}}
     regras = base["permissions"]["deny"]

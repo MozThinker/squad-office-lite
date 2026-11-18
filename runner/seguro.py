@@ -50,3 +50,15 @@ def escrever(dfd: int, nome: str, dados: bytes) -> None:
 def mover(src_fd: int, nome: str, dst_fd: int, destino: str | None = None) -> None:
     """rename relativo aos dois fds (o rename não segue symlinks: move a entrada, nunca o alvo)."""
     os.rename(nome, destino or nome, src_dir_fd=src_fd, dst_dir_fd=dst_fd)
+
+
+def substituir(dfd: int, nome: str, dados: bytes) -> None:
+    """Troca `nome` dentro de `dfd` de forma atómica: tmp novo de nome aleatório (O_EXCL|O_NOFOLLOW) + rename (o
+    rename substitui a entrada, nunca segue um symlink que lá esteja). Quem lê vê o antigo ou o novo, nunca meio."""
+    tmp = f".{nome}.{os.urandom(8).hex()}.tmp"
+    escrever(dfd, tmp, dados)
+    try:
+        mover(dfd, tmp, dfd, nome)
+    except OSError:
+        os.unlink(tmp, dir_fd=dfd)
+        raise

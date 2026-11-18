@@ -1,4 +1,4 @@
-# Squad Office Lite 0.3.0, modo Docker. Gerado por runner/gerar_compose.py --modo docker.
+# Squad Office Lite 0.4.0, modo Docker. Gerado por runner/gerar_compose.py --modo docker.
 # Primeiro: docker compose run --rm configurar
 # Depois: docker compose up -d e abre http://localhost:8080
 # Opcional: .env ao lado (ver env.example) com OFFICE_ENDERECO, OFFICE_PORTA, OFFICE_PROJECTOS,
@@ -7,7 +7,7 @@
 name: office-lite-pc
 services:
   office:
-    image: ghcr.io/mozthinker/squad-office-lite:0.3.0
+    image: ghcr.io/mozthinker/squad-office-lite:0.4.0
     restart: unless-stopped
     read_only: true
     # Pillow descodifica uma miniatura de cada vez (até ~330 MB) + tmpfs das miniaturas + servidor
@@ -29,6 +29,9 @@ services:
       PUSH_DIR: /data/push
       ARQUIVO_FILA_DIR: /data/arquivo-fila
       RUNNER_ESTADO_DIR: /data/runner-estado
+      AGENTES_DIR: /data/agentes
+      AGENTES_RASCUNHOS_DIR: /data/agentes-rascunhos
+      AGENTES_FILA_DIR: /data/agentes-fila
     # sem capacidades: um servidor HTTP do Python na porta 8080, sem root
     security_opt:
       - no-new-privileges:true
@@ -97,6 +100,23 @@ services:
         volume:
           nocopy: true
       - type: volume
+        source: agentes
+        target: /data/agentes
+        read_only: true
+        volume:
+          nocopy: true
+      - type: volume
+        source: agentes-rascunhos
+        target: /data/agentes-rascunhos
+        read_only: true
+        volume:
+          nocopy: true
+      - type: volume
+        source: agentes-fila
+        target: /data/agentes-fila
+        volume:
+          nocopy: true
+      - type: volume
         source: config
         target: /config
         read_only: true
@@ -145,7 +165,7 @@ services:
     networks:
       - office
   runner:
-    image: ghcr.io/mozthinker/squad-office-lite-runner:0.3.0
+    image: ghcr.io/mozthinker/squad-office-lite-runner:0.4.0
     restart: unless-stopped
     init: true
     read_only: true
@@ -215,6 +235,21 @@ services:
         volume:
           nocopy: true
       - type: volume
+        source: agentes
+        target: /dados/agentes
+        volume:
+          nocopy: true
+      - type: volume
+        source: agentes-rascunhos
+        target: /dados/agentes-rascunhos
+        volume:
+          nocopy: true
+      - type: volume
+        source: agentes-fila
+        target: /dados/agentes-fila
+        volume:
+          nocopy: true
+      - type: volume
         source: runner
         target: /dados/runner
         volume:
@@ -244,7 +279,7 @@ services:
     networks:
       - runner
   configurar:
-    image: ghcr.io/mozthinker/squad-office-lite-runner:0.3.0
+    image: ghcr.io/mozthinker/squad-office-lite-runner:0.4.0
     profiles:
       - configurar
     entrypoint: ["configurar"]
@@ -328,6 +363,21 @@ services:
         volume:
           nocopy: true
       - type: volume
+        source: agentes
+        target: /dados/agentes
+        volume:
+          nocopy: true
+      - type: volume
+        source: agentes-rascunhos
+        target: /dados/agentes-rascunhos
+        volume:
+          nocopy: true
+      - type: volume
+        source: agentes-fila
+        target: /dados/agentes-fila
+        volume:
+          nocopy: true
+      - type: volume
         source: runner
         target: /dados/runner
         volume:
@@ -397,6 +447,9 @@ volumes:
   push:
   arquivo-fila:
   runner-estado:
+  agentes:
+  agentes-rascunhos:
+  agentes-fila:
   runner:
   runner-home:
   config:

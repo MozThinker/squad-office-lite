@@ -104,7 +104,8 @@ jobs:
           cp env.example dist/env.example
           docker compose -f dist/compose.yaml config -q
           grep -qxF "    image: $IMAGEM_OFFICE:$VERSAO@$DIGEST_OFFICE" dist/compose.yaml
-          test "$(grep -cxF "    image: $IMAGEM_RUNNER:$VERSAO@$DIGEST_RUNNER" dist/compose.yaml)" = 2
+          # tantas linhas do runner como no compose.example.yaml (runner, configurar e, desde a 0.5.0, accoes)
+          test "$(grep -cxF "    image: $IMAGEM_RUNNER:$VERSAO@$DIGEST_RUNNER" dist/compose.yaml)" = "$(grep -cxF "    image: $IMAGEM_RUNNER:$VERSAO" compose.example.yaml)"
       - uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
           subject-path: |

@@ -1,5 +1,22 @@
 # Changelog
 
+## Lite 0.5.2 (2026-11-19)
+
+Correcção do ensaio de agentes (achado A6 do teste D9). `versao: 1` sem chaves novas no `office.yaml`; os contratos v1
+e o `ensaio.json` não mudam (o `motivo` continua a ser texto).
+
+- **O ensaio encontra o agente:** com `--setting-sources user` o `claude` (2.1.x) não lê `.claude/agents/` do clone e
+  o ensaio acabava sempre em «a IA falhou» («--agent '<nome>' not found»), deixando «Activar» desligado. O runner passa
+  agora o agente inline por `--agents <ficheiro>` (descrição, instruções, `tools` e `model` do `.md`; ficheiro na pasta
+  temporária, fora do clone, nunca em argv) e mantém `--setting-sources user`: o `.claude/settings.json` do projecto
+  (hooks, permissões, MCP) continua a não carregar no ensaio.
+- **Motivo das falhas da IA:** o stderr do `claude` deixa de ir para `/dev/null` nas acções do ⚙. Quando o ensaio
+  falha, o `motivo` do `ensaio.json` (que a vista já mostra) leva a última linha do stderr, numa linha, até 200
+  caracteres, sem os valores das variáveis de ambiente passadas ao `claude` e com segredos tapados; sem stderr, o
+  `subtype` do resultado (por exemplo `error_max_turns`).
+- As tarefas lançadas (com ou sem agentes do ⚙) não usam `--setting-sources` e lêem `.claude/agents/` do worktree:
+  não tinham este problema.
+
 ## Lite 0.5.1 (2026-11-18)
 
 Serviço de ações sem aviso repetido e com alerta no dashboard (ADR-022). `versao: 1` sem chaves novas no

@@ -236,6 +236,10 @@ def candidato(cfg, texto=CAND, nome="leitor") -> str:
     return a.sha(texto.encode())
 
 
+def settings_path(argv) -> str:
+    return argv[argv.index("--settings") + 1]
+
+
 def test_ensaio_clone_so_de_leitura_relatorio_tapado(tmp_path, monkeypatch):
     a.c.ambiente(monkeypatch, tmp_path)
     monkeypatch.delenv("OFFICE_MODO", raising=False)
@@ -261,7 +265,9 @@ def test_ensaio_clone_so_de_leitura_relatorio_tapado(tmp_path, monkeypatch):
     i, j = argv.index("--allowedTools"), argv.index("--disallowedTools")
     assert argv[argv.index("--agent") + 1] == "leitor" and argv[argv.index("--permission-mode") + 1] == "dontAsk"
     assert argv[i + 1:j] == ["Read", "Grep", "Glob"] and argv[argv.index("--tools") + 1] == "Read,Grep,Glob"
-    assert argv[argv.index("--setting-sources") + 1] == "user"
+    assert argv[argv.index("--setting-sources") + 1] == "user"   # o .claude/settings.json do projecto não carrega
+    definicao = argv[argv.index("--agents") + 1]   # A6: o agente vai inline (ficheiro fora do clone, apagado no fim)
+    assert not os.path.exists(definicao) and Path(definicao).parent == Path(settings_path(argv)).parent
     assert argv[j + 1:j + 10] == ["Bash", "Edit", "Write", "WebFetch", "WebSearch", "NotebookEdit", "Agent", "Task",
                                   "Skill"]
     (vistas,) = [json.loads(x) for x in (tmp_path / "settings.jsonl").read_text("utf-8").splitlines()]
@@ -280,7 +286,8 @@ def test_ensaio_clone_so_de_leitura_relatorio_tapado(tmp_path, monkeypatch):
     assert agentes._ensaio(cand_dir(cfg) / "leitor.ensaio.json") is not None   # o servidor lê-o
 
 
-@pytest.mark.parametrize("env, motivo, erro", [({"FAKE_CLAUDE_FALHA": "1"}, "a IA falhou", "a IA falhou"),
+@pytest.mark.parametrize("env, motivo, erro", [({"FAKE_CLAUDE_FALHA": "1"}, "a IA falhou: error_during_execution",
+                                                "a IA falhou"),
                                                ({"FAKE_CLAUDE_CUSTO": "2.5"}, "custo acima do tecto", "a IA falhou"),
                                                ({"FAKE_CLAUDE_DORME": "5"}, "tempo esgotado", "tempo esgotado")])
 def test_ensaio_que_falha_fica_em_erro(ctx, monkeypatch, env, motivo, erro):
@@ -299,6 +306,45 @@ def test_ensaio_que_falha_fica_em_erro(ctx, monkeypatch, env, motivo, erro):
     s = a.pedido(cfg, "agente_activar", {"squad": "dev", "nome": "leitor", "sha256": sha}, 1, NOW + 60)
     passar(ctx, NOW + 60)
     assert a.feito(cfg, s) == {"erro": "sem ensaio ok desta versão"}
+
+
+def test_ensaio_encontra_o_agente_com_setting_sources_user(ctx, monkeypatch):
+    """A6 (D9): com `--setting-sources user` o claude não lê `.claude/agents/` do clone («--agent 'x' not found»);
+    o ensaio passa o agente por `--agents <ficheiro>`, com descrição, corpo, ferramentas e modelo do `.md`."""
+    cfg, tmp_path = ctx[0], ctx[2]
+    monkeypatch.setenv("FAKE_CLAUDE_AGENTS", str(tmp_path / "agents.jsonl"))
+    texto = "---\nname: leitor\ndescription: Lê o repo\ntools: Read, Grep\nmodel: haiku\n---\nLê tudo.\n"
+    sha = candidato(cfg, texto)
+    resultado(ctx, "Li.")
+    s = a.pedido(cfg, "agente_ensaio", {"squad": "dev", "nome": "leitor", "sha256": sha, "projecto": "exemplo",
+                                        "tarefa": "x"})
+    passar(ctx)
+    assert a.feito(cfg, s) == {"ok": True}
+    (inline,) = [json.loads(x) for x in (tmp_path / "agents.jsonl").read_text("utf-8").splitlines()]
+    assert inline == {"leitor": {"description": "Lê o repo", "prompt": "Lê tudo.", "tools": ["Read", "Grep"],
+                                 "model": "haiku"}}
+    (argv,) = argvs(ctx)
+    assert argv[argv.index("--setting-sources") + 1] == "user" and "Lê tudo." not in " ".join(argv)
+
+
+def test_ensaio_que_falha_regista_a_ultima_linha_do_stderr_sem_segredos(ctx, monkeypatch):
+    cfg = ctx[0]
+    monkeypatch.setenv("FAKE_CLAUDE_FALHA", "1")
+    monkeypatch.setattr(lancador, "env_claude", lambda cred: {**lancador.env_base(),
+                                                              "ANTHROPIC_API_KEY": "sk-ant-segredo-do-env-123456"})
+    monkeypatch.setenv("FAKE_CLAUDE_STDERR", "a carregar\n\nErro: chave sk-ant-segredo-do-env-123456 recusada; "
+                       f"token={TOKEN} " + "x" * 400)
+    sha = candidato(cfg)
+    s = a.pedido(cfg, "agente_ensaio", {"squad": "dev", "nome": "leitor", "sha256": sha, "projecto": "exemplo",
+                                        "tarefa": "x"})
+    passar(ctx)
+    assert a.feito(cfg, s) == {"erro": "a IA falhou"}
+    e = json.loads((cand_dir(cfg) / "leitor.ensaio.json").read_text("utf-8"))
+    m = e["motivo"]
+    assert m.startswith("a IA falhou: Erro: chave [tapado] recusada;") and "a carregar" not in m
+    assert "segredo-do-env" not in m and TOKEN not in m and "\n" not in m
+    assert len(m) <= len("a IA falhou: ") + agentes_fila.STDERR_MAX and m.endswith("…")
+    assert agentes._ensaio(cand_dir(cfg) / "leitor.ensaio.json")["motivo"] == m   # cabe nos 300 do servidor
 
 
 def test_ensaio_sha_desactualizado_ou_projecto_invalido(ctx):

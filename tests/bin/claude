@@ -13,6 +13,9 @@ FAKE_CLAUDE_RESULTADOS=<pasta> consome 1.txt, 2.txt, … por ordem (um por chama
 FAKE_CLAUDE_RESULTADO (conversa de várias voltas). Ambos valem também em stream-json (o "result" final).
 FAKE_CLAUDE_DORME=<s> dorme antes de responder (timeouts). FAKE_CLAUDE_CWD=<ficheiro> anexa {"cwd", "agentes",
 "skills", "remotes"} da pasta onde corre (.claude/agents e .claude/skills, `git remote`).
+Como o claude 2.1.x: `--agent X` tem de existir em `--agents` (JSON ou, com -p, ficheiro) ou em .claude/agents/ (só se
+--setting-sources incluir project); senão «--agent 'X' not found» no stderr e exit 1. FAKE_CLAUDE_AGENTS=<ficheiro>
+anexa o JSON de --agents. FAKE_CLAUDE_STDERR=<texto> escreve-o no stderr quando falha.
 """
 import hashlib
 import json
@@ -48,11 +51,32 @@ if os.environ.get("FAKE_CLAUDE_CWD"):
     with open(os.environ["FAKE_CLAUDE_CWD"], "a", encoding="utf-8") as f:
         f.write(json.dumps({"cwd": os.getcwd(), "agentes": _lista(".claude/agents"), "skills": _lista(".claude/skills"),
                             "remotes": r.stdout.split() if r.returncode == 0 else None}) + "\n")
+agentes_cli = {}
+if "--agents" in argv[:-1]:
+    v = argv[argv.index("--agents") + 1]
+    if not v.lstrip().startswith("{"):
+        with open(v, encoding="utf-8") as f:
+            v = f.read()
+    agentes_cli = json.loads(v)
+    if os.environ.get("FAKE_CLAUDE_AGENTS"):
+        with open(os.environ["FAKE_CLAUDE_AGENTS"], "a", encoding="utf-8") as f:
+            f.write(json.dumps(agentes_cli) + "\n")
+if "--agent" in argv[:-1]:
+    fontes = argv[argv.index("--setting-sources") + 1].split(",") if "--setting-sources" in argv[:-1] else ["project"]
+    disponiveis = set(agentes_cli)
+    if "project" in fontes and os.path.isdir(".claude/agents"):
+        disponiveis |= {n[:-3] for n in os.listdir(".claude/agents") if n.endswith(".md")}
+    if argv[argv.index("--agent") + 1] not in disponiveis:
+        print(f"--agent '{argv[argv.index('--agent') + 1]}' not found. Available agents: general-purpose",
+              file=sys.stderr)
+        sys.exit(1)
 if os.environ.get("FAKE_CLAUDE_DORME"):
     time.sleep(float(os.environ["FAKE_CLAUDE_DORME"]))
 sid = argv[argv.index("--resume") + 1] if "--resume" in argv[:-1] else str(uuid.uuid4())
 falha = os.environ.get("FAKE_CLAUDE_FALHA") == "1" or (
     os.environ.get("FAKE_CLAUDE_EXIGE_CRED") == "1" and not any(os.environ.get(k) for k in CRED))
+if falha and os.environ.get("FAKE_CLAUDE_STDERR"):
+    print(os.environ["FAKE_CLAUDE_STDERR"], file=sys.stderr)
 compacto = {"separators": (",", ":")}
 
 

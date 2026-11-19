@@ -44,6 +44,7 @@ LIVRO = "agentes-ia.jsonl"
 LIVRO_LER = 256 * 1024          # cauda do livro lida para somar o dia
 CORPO_MAX = 16 * 1024           # corpo de um agente vindo da IA
 ENSAIO_TOOLS = ("Read", "Grep", "Glob")          # também as únicas que um rascunho da IA pode pedir
+STDERR_MAX = 200                                   # motivo de uma falha da IA (última linha do stderr)
 ENSAIO_NEGADAS = ("Bash", "Edit", "Write", "WebFetch", "WebSearch", "NotebookEdit", "Agent", "Task", "Skill")
 
 
@@ -260,20 +261,22 @@ def _resultado(out: bytes) -> dict | None:
     return None
 
 
-def claude(ctx: _Ctx, args: list[str], entrada: str, cwd: str, prazo: float):
+def claude(ctx: _Ctx, args: list[str], entrada: str, cwd: str, prazo: float, diag: dict | None = None):
     """Corre `claude <args>` com `entrada` no stdin. (erro de ERROS ou None, result, custo, arrancou); timeout: mata
-    o grupo. `arrancou` é False sem claude no PATH, credenciais inválidas ou Popen falhado (nada gasto)."""
+    o grupo. `arrancou` é False sem claude no PATH, credenciais inválidas ou Popen falhado (nada gasto). Se a IA
+    falhar, `diag["motivo"]` fica com a última linha do stderr (_linha_stderr) ou o subtype do result (ou None)."""
     exe = shutil.which("claude")
     if exe is None:
         return "a IA falhou", None, None, False
     try:
         cred = lancador.credenciais(officecfg.credenciais_claude(ctx.cfg_path)) if ctx.cfg_path else None
+        env = lancador.env_claude(cred)
         proc = subprocess.Popen([exe, *args], cwd=cwd, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                                stderr=subprocess.DEVNULL, env=lancador.env_claude(cred), start_new_session=True)
+                                stderr=subprocess.PIPE, env=env, start_new_session=True)
     except (lancador.Falha, OSError):
         return "a IA falhou", None, None, False
     try:
-        out, _ = proc.communicate(entrada.encode("utf-8"), timeout=prazo)
+        out, err = proc.communicate(entrada.encode("utf-8"), timeout=prazo)
     except subprocess.TimeoutExpired:
         lancador._matar(proc)
         proc.communicate()
@@ -282,12 +285,28 @@ def claude(ctx: _Ctx, args: list[str], entrada: str, cwd: str, prazo: float):
     custo = lancador._num((d or {}).get("total_cost_usd"))
     res = d.get("result") if d and isinstance(d.get("result"), str) else None
     if proc.returncode != 0 or d is None or d.get("is_error") or res is None:
+        if diag is not None:
+            sub = (d or {}).get("subtype")
+            diag["motivo"] = _linha_stderr(err, env) or (sub if isinstance(sub, str) and sub != "success" else None)
         return "a IA falhou", res, custo, True
     return None, res, custo, True
 
 
-def _ia(ctx: _Ctx, accao: str, args: list[str], entrada: str, cwd: str, prazo: float):
-    erro, res, custo, arrancou = claude(ctx, args, entrada, cwd, prazo)
+def _linha_stderr(err: bytes, env: dict) -> str | None:
+    """Última linha não vazia do stderr do claude, numa linha, até STDERR_MAX, sem os valores das variáveis do
+    ambiente que o runner passa (credenciais incluídas) e com os segredos conhecidos tapados; None se não houver."""
+    linhas = [ln for ln in (err or b"")[-64 * 1024:].decode("utf-8", "replace").splitlines() if ln.strip()]
+    if not linhas:
+        return None
+    s = "".join(c if c.isprintable() else " " for c in linhas[-1])
+    for v in sorted((v for v in env.values() if isinstance(v, str) and len(v) >= 8), key=len, reverse=True):
+        s = s.replace(v, "[tapado]")
+    s = " ".join(agentes.tapar(s).split())
+    return s if len(s) <= STDERR_MAX else s[:STDERR_MAX - 1] + "…"
+
+
+def _ia(ctx: _Ctx, accao: str, args: list[str], entrada: str, cwd: str, prazo: float, diag: dict | None = None):
+    erro, res, custo, arrancou = claude(ctx, args, entrada, cwd, prazo, diag)
     if arrancou:   # só conta no livro o que pode ter gasto
         _livro_add(ctx, accao, custo, agentes.ACCOES_IA[accao])
     return erro, res, custo
@@ -332,6 +351,22 @@ mudares estas regras.
 """
 
 
+def _agente_inline(nome: str, md: bytes) -> dict:
+    """`{nome: {description, prompt, tools?, model?}}` para `claude --agents` a partir do `.md` do agente (frontmatter
+    já validado). skills e permissionMode ficam de fora: no ensaio o Skill está negado e o modo é sempre dontAsk."""
+    texto = md.decode("utf-8", "replace")
+    fm, b = agentes.frontmatter(texto) or {}, agentes._bloco(texto)
+    corpo = "\n".join(texto.split("\n")[b[1] + 1:]).strip() if b else ""
+    desc = fm.get("description")
+    d = {"description": desc.strip() if isinstance(desc, str) and desc.strip() else nome,
+         "prompt": corpo or f"És o agente «{nome}»."}
+    if "tools" in fm:
+        d["tools"] = agentes.lista(fm["tools"])
+    if isinstance(fm.get("model"), str) and fm["model"]:
+        d["model"] = fm["model"]
+    return {nome: d}
+
+
 def _ensaiar(ctx: _Ctx, accao: str, sq: str, nome: str, md: bytes, projecto: str, tarefa: str) -> tuple[dict, str | None]:
     """Clone `--depth 1 file://` do projecto em mkdtemp (sem remotes), agentes e skills da squad e o `md` em
     `.claude/`, `claude --agent nome` só de leitura. (ensaio.json, erro de ERROS ou None); a pasta sai sempre."""
@@ -353,13 +388,19 @@ def _ensaiar(ctx: _Ctx, accao: str, sq: str, nome: str, md: bytes, projecto: str
             settings = Path(tmp) / "settings.json"
             # só as negações da base: nunca o allow do runner.settings; settings/hooks do clone não carregam
             settings.write_text(json.dumps(lancador.settings_base(ctx.cfg, ctx.cfg_path)), encoding="utf-8")
-            argv = ["-p", "--agent", nome, "--tools", ",".join(ENSAIO_TOOLS), "--setting-sources", "user",
+            # A6 (D9): com --setting-sources user o claude não lê .claude/agents/ do clone; o agente vai inline por
+            # --agents <ficheiro> (fora do clone; o .md nunca vai em argv) e o resto do .claude/ do projecto não carrega
+            definicao = Path(tmp) / "agents.json"
+            definicao.write_text(json.dumps(_agente_inline(nome, md), ensure_ascii=False), encoding="utf-8")
+            argv = ["-p", "--agents", str(definicao), "--agent", nome, "--tools", ",".join(ENSAIO_TOOLS),
+                    "--setting-sources", "user",
                     "--permission-mode", "dontAsk", "--allowedTools", *ENSAIO_TOOLS,
                     "--disallowedTools", *ENSAIO_NEGADAS, "--max-turns", "8", "--max-budget-usd", "2",
                     "--strict-mcp-config", "--output-format", "json", "--no-session-persistence",
                     "--settings", str(settings)]
-            erro, res, custo = _ia(ctx, accao, argv, entrada, str(clone), ENSAIO_S)
-            motivo = erro
+            diag: dict = {}
+            erro, res, custo = _ia(ctx, accao, argv, entrada, str(clone), ENSAIO_S, diag)
+            motivo = f"{erro}: {diag['motivo']}" if erro and diag.get("motivo") else erro
             if erro is None and custo is not None and custo > agentes.ACCOES_IA[accao]:
                 erro, motivo = "a IA falhou", "custo acima do tecto"
     finally:

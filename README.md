@@ -9,6 +9,9 @@ trabalhar nos teus projectos. Escreves um cartão no Quadro, arrastas para «Em 
 cria um branch, programa, testa e abre um pull request no GitHub para tu reveres. Tudo corre numa VPS tua ou no
 teu PC, com o Docker Desktop.
 
+**A Conversa (0.6.0, só modo VPS):** o teu Claude Code no telemóvel, com cartão de aprovação para cada acção, HTTPS
+obrigatório e voz opcional. Consome tokens da tua conta. Guia: [CONVERSA.md](CONVERSA.md).
+
 ## Instalação
 
 O Lite instala-se de duas formas:
@@ -51,17 +54,17 @@ O Lite instala-se de duas formas:
    depois de instalar (o instalador não o pede nem o guarda; ver [Credenciais do Claude](#credenciais-do-claude)).
    O `gh` instala-se pelas [instruções oficiais para Ubuntu](https://github.com/cli/cli/blob/trunk/docs/install_linux.md);
    no `gh auth login` usa de preferência um [token só para os repositórios do Office](#token-do-github).
-3. **Descarrega e instala o Office.** O endereço fica fixado à versão (`v0.5.2`), para leres sempre o mesmo script
+3. **Descarrega e instala o Office.** O endereço fica fixado à versão (`v0.6.0`), para leres sempre o mesmo script
    que o livro e este README descrevem.
    **Forma prudente** (recomendada: lês o script antes de o correr):
    ```bash
-   curl -fsSLO https://raw.githubusercontent.com/MozThinker/squad-office-lite/v0.5.2/get.sh
+   curl -fsSLO https://raw.githubusercontent.com/MozThinker/squad-office-lite/v0.6.0/get.sh
    less get.sh
-   bash get.sh --versao 0.5.2
+   bash get.sh --versao 0.6.0
    ```
    **Com um comando:**
    ```bash
-   curl -fsSL https://raw.githubusercontent.com/MozThinker/squad-office-lite/v0.5.2/get.sh | bash -s -- --versao 0.5.2
+   curl -fsSL https://raw.githubusercontent.com/MozThinker/squad-office-lite/v0.6.0/get.sh | bash -s -- --versao 0.6.0
    ```
    > Este comando descarrega um script da internet e corre-o no teu servidor, com o teu utilizador. Só o faças com
    > endereços em que confias, e de preferência lê-o primeiro. O `get.sh` confere o sha256 do pacote: isso apanha uma
@@ -74,14 +77,14 @@ O Lite instala-se de duas formas:
    prudente. Opções (depois de `bash -s --` no comando de uma linha, ou de `bash get.sh`):
    - `--sem-perguntas`: as respostas vêm do ambiente (ver o cabeçalho do `install.sh`; `OFFICE_GIT_NOME` e
      `OFFICE_GIT_EMAIL` para a identidade do git; sem elas, e sem identidade no git, só avisa). Ex.:
-     `curl -fsSL …/get.sh | bash -s -- --versao 0.5.2 --sem-perguntas`;
-   - `--versao X.Y.Z`: instala essa versão em vez da última (`… | bash -s -- --versao 0.5.2`);
+     `curl -fsSL …/get.sh | bash -s -- --versao 0.6.0 --sem-perguntas`;
+   - `--versao X.Y.Z`: instala essa versão em vez da última (`… | bash -s -- --versao 0.6.0`);
    - as outras opções passam ao `install.sh` (ex.: `--proxy traefik --rede <rede>`).
 
    **Verificação opcional da origem.** O sha256 só confirma que o pacote não se estragou. Para confirmar que foi
    construído pelo repositório público (atestação do GitHub; precisa do `gh` com sessão), descarrega o pacote à mão e:
    ```bash
-   gh attestation verify squad-office-lite-0.5.2.tar.gz --repo MozThinker/squad-office-lite
+   gh attestation verify squad-office-lite-0.6.0.tar.gz --repo MozThinker/squad-office-lite
    ```
    Só as versões publicadas com atestação passam. Uma falha aqui é motivo para não instalar e reportar (ver
    [`SECURITY.md`](SECURITY.md)).
@@ -121,13 +124,15 @@ de reinício. Se mudaste as `raizes`, corre outra vez `./install.sh` (não volta
 
 O mesmo `get.sh`, sem `--versao` (instala a última versão publicada; lê o aviso em «Instalação»):
 ```bash
-curl -fsSL https://raw.githubusercontent.com/MozThinker/squad-office-lite/v0.5.2/get.sh | bash
+curl -fsSL https://raw.githubusercontent.com/MozThinker/squad-office-lite/v0.6.0/get.sh | bash
 ```
 A versão instalada passa para `~/squad-office-lite.anterior-<data>` e a nova fica em `~/squad-office-lite`.
 `~/office-lite` (config, `.env`, credenciais e dados) não é tocada pelo `get.sh`; o `install.sh` só volta a
 perguntar o que falta (sem `claude.env`, por exemplo, pergunta outra vez pelas credenciais: escolhe 2 ou 3 se usas o
 token ou o login do `claude`). Para voltar atrás: `… | bash -s -- --versao <versão anterior>`. Apaga as pastas
-`.anterior-*` quando já não precisares delas. Vê o que mudou no `CHANGELOG.md`. Se instalaste com `git`, depois do
+`.anterior-*` quando já não precisares delas. Vê o que mudou no `CHANGELOG.md`. Se já tens a Conversa instalada (0.6.0), volta a
+correr o `sudo ./instalar-conversa.sh` de uma cópia nova do Lite só do root, conferida com o `SHA256SUMS` (não da pasta do
+`get.sh`, que o instalador recusa): ver «Actualizar» no [CONVERSA.md](CONVERSA.md). Se instalaste com `git`, depois do
 `git pull` corre outra vez `./install.sh` (a 0.1.3 monta uma pasta nova no contentor; sem isso o Office diz «O runner
 ainda não deu sinal»).
 
@@ -430,17 +435,17 @@ só neste PC. A squad só trabalha enquanto o PC está ligado e o Docker Desktop
    ```bash
    mkdir -p ~/office && cd ~/office
    ```
-3. **Descarrega o `compose.yaml`** da versão 0.5.2. As imagens do Office e do runner vêm fixadas por digest: o que
+3. **Descarrega o `compose.yaml`** da versão 0.6.0. As imagens do Office e do runner vêm fixadas por digest: o que
    corre é sempre o que foi publicado com esta versão.
    No PowerShell (é `curl.exe`, não `curl`):
    ```powershell
-   curl.exe -fsSLO https://github.com/MozThinker/squad-office-lite/releases/download/v0.5.2/compose.yaml
+   curl.exe -fsSLO https://github.com/MozThinker/squad-office-lite/releases/download/v0.6.0/compose.yaml
    ```
    No Terminal:
    ```bash
-   curl -fsSLO https://github.com/MozThinker/squad-office-lite/releases/download/v0.5.2/compose.yaml
+   curl -fsSLO https://github.com/MozThinker/squad-office-lite/releases/download/v0.6.0/compose.yaml
    ```
-   Também o podes descarregar pelo browser, na página da release `v0.5.2`, e guardá-lo nesta pasta com o nome
+   Também o podes descarregar pelo browser, na página da release `v0.6.0`, e guardá-lo nesta pasta com o nome
    `compose.yaml`. Para mudar a porta ou a pasta dos projectos, ver
    [Mudar a porta, o endereço ou a pasta dos projectos](#mudar-a-porta-o-endereço-ou-a-pasta-dos-projectos) (opcional).
    **No Linux**, cria já o `.env` com o teu utilizador e grupo, antes do passo 4, para os ficheiros dos projectos
@@ -517,7 +522,7 @@ Sem `.env` valem as omissões. Para mudar, descarrega o `env.example` da release
 `compose.yaml`, tira o `#` das linhas que queres mudar e corre `docker compose up -d` (no Linux já tens um `.env` do
 passo 3: não o substituas, acrescenta-lhe as linhas):
 ```powershell
-curl.exe -fsSLo .env https://github.com/MozThinker/squad-office-lite/releases/download/v0.5.2/env.example
+curl.exe -fsSLo .env https://github.com/MozThinker/squad-office-lite/releases/download/v0.6.0/env.example
 ```
 (no Terminal, `curl` em vez de `curl.exe`). O anexo chama-se `env.example` porque o GitHub muda o nome dos anexos que
 começam por ponto.
@@ -785,6 +790,7 @@ as mensagens de erro nunca repetem o valor recusado.
 | `colunas` | rótulos de `ideias`, `a-fazer`, `em-curso`, `a-espera`, `feito` (chaves e ordem fixas), 1–30; sem `a-espera`: «À espera de <`utilizador.nome`>» (um valor vazio não valida) |
 | `biblioteca[]` | 0–12 fontes: `id`, `rotulo`, `pasta` (relativa a `<dados>/biblioteca`), `media` (`false`), `tipo` opcional (`relatorios`, `estudos`, `planos`, `conhecimento`, `textos`); `arquivo_dias` opcional, 7–3650: o runner arquiva sozinho, no máximo 1× por dia, os itens da fonte sem alterações há mais de N dias (ADR-012; sem a chave nunca arquiva nada sem pedido; ver [Arquivo da Biblioteca](#arquivo-da-biblioteca-adr-011)) |
 | `runner` | `tecto_diario` 1–100 (10), `paralelo` 1–4 (1), `rotacao_dias` 1–365 (14), `permission_mode` `dontAsk` (omissão), `auto`, `acceptEdits`, `default` ou `bypassPermissions`; `settings` (`""`, caminho absoluto de um JSON juntado às negações por omissão); `ferramentas` 0–100 regras para `--allowedTools` (`Nome` ou `Nome(regra)`, sem espaços nem vírgulas fora dos parênteses, sem `-` inicial; omissão: a lista em [Runner](#runner)); `max_usd` opcional, teto de custo em USD por arranque do `claude` (`--max-budget-usd`), número > 0 e ≤ 1000 com até 2 casas (`5`, `2.5`); `modelo` opcional, `--model` (alias como `sonnet` ou nome completo; letras, dígitos, `.`, `_`, `-`, até 64, sem `-` inicial). Sem as duas: nenhuma flag (o `claude` usa as suas omissões) |
+| `conversa` | opcional, a Conversa (ADR-023): `ativa` (`false`; com `false` nada muda), `pasta` caminho absoluto sem `..`, até 200 caracteres (obrigatória com `ativa: true`; a do `instalar-conversa.sh`, ex. `/srv/office-conversa`), `site` nome DNS em minúsculas sem porta, até 253 caracteres (o endereço próprio da Conversa, ex. `conversa.exemplo.com`, com DNS para o servidor; obrigatório com `ativa: true` e `tls: caddy`; tem de ser outro que não o `--dominio`), `tls` `externo` (omissão: o TLS termina fora da `fabrica`, num túnel ou proxy teu à frente do socket do guardião; ver «Túnel» no CONVERSA.md) ou `caddy` (só por opção: o Caddy do Office serve o `site` com HTTPS; exige o `install.sh --dominio`, não serve com o Traefik; o TLS termina no Caddy da `fabrica` e quem a controle pode servir JS na origem da Conversa). As permissões e a voz são opções do `instalar-conversa.sh` e o nome do assistente muda-se na própria Conversa, nunca neste ficheiro. Com `ativa: true` o compose monta só `<pasta>/publico` no `office` e, com `tls: caddy`, `<pasta>/sock` e o `Caddyfile.conversa` no `caddy` (tudo só de leitura), e recusa ser gerado sem essas pastas |
 
 Lançáveis = cada squad `worktree` × cada projecto.
 
@@ -1450,7 +1456,10 @@ Postas pelo compose gerado: `OFFICE_CONFIG` (omissão `/config/office.yaml`), `T
 `ARQUIVO_FILA_DIR` (omissão `/data/arquivo-fila`), `RUNNER_ESTADO_DIR` (omissão `/data/runner-estado`), `AGENTES_DIR`, `AGENTES_RASCUNHOS_DIR` e `AGENTES_FILA_DIR`
 (omissões `/data/agentes`, `/data/agentes-rascunhos` e `/data/agentes-fila`), `ACCOES_SAUDE_DIR` (omissão
 `/data/accoes-saude`, só de leitura; o servidor lê só o `saude.json`), `PUSH_CONTACTO` (opcional) e
-`BIBLIOTECA_MINI_DIR` (omissão `/tmp/miniaturas`); `PORT` (8080). No modo Docker também `OFFICE_MODO=docker`
+`BIBLIOTECA_MINI_DIR` (omissão `/tmp/miniaturas`); `PORT` (8080). Só com `conversa.ativa: true` (ADR-023):
+`CONVERSA_PUBLICO_DIR` (omissão `/data/conversa-publico`, só de leitura; o servidor lê só o `publico.json` do guardião,
+até 4 KB, e trata-o como Conversa parada se faltar, for inválido ou tiver mais de 120 s). O
+`tools/verificar_compose_conversa.py` recusa um compose com `CONVERSA_TLS_TESTE` (só dos testes do guardião). No modo Docker também `OFFICE_MODO=docker`
 (`GET /api/config` ganha `"modo": "docker"`, senão `"vps"`; os «Primeiros passos» mostram os comandos
 `docker compose …`) e `OFFICE_PROXY_SEGREDO_FILE=/proxy/segredo` em vez de `OFFICE_PROXY_SEGREDO`: o segredo vem desse
 ficheiro (escrito pelo `configurar`) e, enquanto faltar, o Office responde 503

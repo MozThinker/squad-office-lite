@@ -1,5 +1,6 @@
 // Quadro (kanban), lazy em #quadro. Funções puras testadas em node; DOM só a partir de abrir(). O servidor decide colunas e ordem.
 // HTML: tudo do servidor passa por esc()/md(); «…H()» devolve HTML escapado.
+import { html as estH, ligar as estLigar } from "./estado.js"; // peça de estado do lançamento (fase 1 de UX)
 import { rotuloEstado, rotuloDe, TIPOS, TAMANHOS, dicaErro, lancarParado, projectoNovo, comandos, ondeCorre, desvioRelogio } from "./ajuda.js";
 
 export const COL = {
@@ -231,7 +232,7 @@ const el = (id) => q(`.q-board .q-card[data-id="${CSS.escape(id)}"]`);
 const agora = () => Date.now();
 const agoraSrv = () => Date.now() + (S.desvio || 0); // para comparar com datas do servidor (desvio pelo «agora» do GET)
 const doctorTxt = () => { const o = ondeCorre(A.cfg?.modo); return `${o[0].toUpperCase() + o.slice(1)}: ${comandos(A.cfg?.modo).doctor}`; }; // «No servidor: …» / «No PC: …»
-const reduz = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
+const reduz = () => matchMedia("(prefers-reduced-motion: reduce)").matches || document.documentElement.dataset.anim === "off";
 const largo = () => matchMedia("(min-width: 900px)").matches;
 const cols = () => S.d?.colunas.map((c) => c.chave) || [];
 const rotCol = (k) => S.d?.colunas.find((c) => c.chave === k)?.rotulo || k;
@@ -369,8 +370,8 @@ function lancH(c) {
   const l = c.lancamento;
   if (!l) return "";
   if (lancarParado(l, agoraSrv())) return `<span class="q-et q-le">${esc(PARADO)}</span><button type="button" class="q-lnk q-lx" data-a="retentar">Tentar de novo</button>`;
-  if (l.estado === "a-lancar") return `<span class="q-et q-lz">a lançar…</span>`;
-  if (l.estado === "erro") return `<span class="q-et q-le">erro ao lançar</span>`;
+  if (l.estado === "a-lancar") return `<span class="q-et q-lz">${estH("a-processar", "a lançar", Date.parse(l.pedido_em))}</span>`;
+  if (l.estado === "erro") return `<span class="q-et q-le">${estH("erro", "erro ao lançar")}</span>`;
   return c.progress ? "" : `<span class="q-et">ligado · ${esc(l.task_id)}</span>`;
 }
 const execH = (c, cls = "q-lnk q-lx") => (manual(c) && c.lancamento?.estado === "ligado" && c.links?.tarefa
@@ -420,6 +421,7 @@ function render(poll) {
     S.obs.disconnect();
     qa(".q-col[data-col]").forEach((c) => S.obs.observe(c));
   }
+  estLigar(); // o tempo das peças «a lançar»
 }
 
 // FLIP: mede, muda o DOM e anima da posição antiga para a nova (só transform)

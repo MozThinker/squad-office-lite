@@ -1,5 +1,53 @@
 # Changelog
 
+## Lite 0.6.0 (2026-11-23)
+
+A Conversa (ADR-023), a voz e três fases de UX. `versao: 1` do `office.yaml` mantém-se (só uma chave nova opcional) e
+os contratos v1 (fila de decisões, `cartoes.json`, pedidos de lançamento, push) não mudam. Guia novo:
+`CONVERSA.md` (e `CONVERSA.en.md`); contrato em `docs/conversa-contrato.md`.
+
+- **A Conversa (só modo VPS):** um chat no endereço próprio da Conversa (`conversa.site`), aberto por um botão no
+  Office, que fala com o Claude Code do `dono`, o teu utilizador do servidor. A página e a API são servidas por um
+  **guardião** no host: um utilizador de sistema próprio, **`office-conversa`** (sem casa nem shell), com a unit de
+  sistema endurecida `office-conversa-guardiao.service`, o código em `/opt/office-conversa` (do root, conferido pelo
+  `SHA256SUMS` no arranque) e o estado em `/var/lib/office-conversa`, que nem o `dono`, nem o assistente, nem o
+  Office lêem. Ele guarda as chaves dos browsers, confere cada pedido e escreve os aceites numa pasta só dele; a ponte
+  (`chat_host/ponte.py`, unit de utilizador `office-conversa.service`) só lê o que ele aceitou. O Office não está no
+  caminho: as rotas `/api/conversa/*` dão 404 e só lê o `publico.json` do guardião para o botão. Cartão de aprovação
+  para cada acção com efeito (modo `cartao`, omissão) ou as permissões do teu Claude Code com cartão só nos
+  lançadores (modo `espelho`). Só abre com HTTPS. O código da Conversa é de uso único: regista um browser, que gera a
+  sua própria chave aleatória e não extraível; as entradas seguintes são por desafio–resposta (sessão de 12 h) e cada
+  pedido vai assinado (HMAC). Aviso obrigatório de que consome tokens da tua conta; o gasto do dia aparece no painel e
+  nunca bloqueia. Permissões e voz no `instalar-conversa.sh`; o nome do assistente muda-se na própria Conversa.
+- **Voz:** `desligada` (omissão), `local` (faster-whisper no host do `dono`) ou `externa` (fornecedor compatível com
+  `/v1/audio/transcriptions`, com aviso de privacidade e custo; a chave só no `voz.env` do `dono`).
+- **`instalar-conversa.sh`:** cria o utilizador `office-conversa` e instala o guardião e a ponte (pastas com ACL,
+  código em `/opt/office-conversa`, código da Conversa, voz, units). Corre como root de uma cópia do Lite só do root
+  (a release conferida com o `SHA256SUMS`, ex. em `/usr/local/src/office-lite-<versão>`): recusa uma cópia, a
+  `--pasta` ou uma pasta acima delas, até `/`, que o Office ou o `dono` escrevam. `--tls externo|caddy` (omissão
+  `externo`, com `--grupo-socket` obrigatório e sem o utilizador do Office; `caddy` mostra o aviso de que o TLS
+  termina na `fabrica`), `--novo-codigo` (outro browser), `--revogar` (esquece os browsers registados),
+  `--python <caminho>` para o Ubuntu 22.04 (o guardião e a ponte precisam de Python 3.11 ou mais: `python3.11`);
+  `--verificar` mostra o que faria. Idempotente: o código da Conversa e o `voz.env` não se reescrevem sem pedido.
+- **`office.yaml`:** bloco opcional `conversa` (`ativa`, `pasta`, `site`, `tls`; tabela no README). Com `ativa: false`
+  (omissão) nada muda: o compose, `/api/config` e `/api/state` ficam iguais. Com `ativa: true`, o compose monta só
+  `<pasta>/publico` no `office` (só leitura). Com `tls: externo` (omissão) o TLS termina num túnel teu ligado ao
+  socket do guardião e o `caddy` não monta nada da Conversa; só com `tls: caddy`, `<pasta>/sock` e o
+  `Caddyfile.conversa` no `caddy` (só leitura; o `Caddyfile` importa-o na última linha), com `--dominio` e sem o
+  Traefik. `/api/config` ganha `"conversa": {"ativa", "url"}` e `/api/state` `"conversa": {"ativa", "nome",
+  "pendentes", "dia_usd"}`.
+- **Ícones:** os ícones do Office passam a SVG (um sprite no cabeçalho e no Replay).
+- **UX, fase 1:** peça de estado (vazio, a carregar, erro) em todas as vistas, tokens de movimento e interruptor
+  «Animações» (respeita `prefers-reduced-motion`).
+- **UX, fase 2:** faixa «Agora» a 900 px ou menos, com as tarefas a correr.
+- **UX, fase 4:** sons discretos e vibração (Android), com interruptor e volume nas Definições; nunca tocam com a
+  página escondida nem antes do 1.º toque.
+- **Quem actualiza (0.5.2 → 0.6.0):** corre o `get.sh` como sempre; os dados e o `office.yaml` ficam como estão e a
+  Conversa fica desligada. Para a usar, ou se já a instalaste, volta a correr o `sudo ./instalar-conversa.sh` de uma
+  cópia do Lite só do root (ver «Actualizar» no `CONVERSA.md`) e o `install.sh` (o `get.sh` avisa se encontra
+  `/opt/office-conversa`). Sem a Conversa, nada a fazer.
+  A imagem e o `compose.yaml` do modo Docker passam a 0.6.0; a Conversa não existe nesse modo.
+
 ## Lite 0.5.2 (2026-11-19)
 
 Correcção do ensaio de agentes (achado A6 do teste D9). `versao: 1` sem chaves novas no `office.yaml`; os contratos v1

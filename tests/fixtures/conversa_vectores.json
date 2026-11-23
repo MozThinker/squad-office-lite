@@ -1,0 +1,26 @@
+{
+  "codigo": "ABCDEFGHIJKLMNOPQRSTUVWX",
+  "codigo_mostrado": "ABCD-EFGH-IJKL-MNOP-QRST-UVWX",
+  "sal_ponte": "00112233445566778899aabbccddeeff",
+  "sal_office": "ffeeddccbbaa99887766554433221100",
+  "iteracoes": 600000,
+  "chave": "76edf82323601bfe7f1d78aa640513ea5a5b1fe18e02a1874649af0fa53a6d33",
+  "kid": "a1b2c3d4e5f60718",
+  "verificador": "3aa945cf9e2d4c8593b725a7ab1c7734a4903c27a8dbfcf5002c34e51c8c71b8",
+  "verificador_sha256": "1ee6fe9e07d68697ca5f3ea48bc454a66757174dfedb96e80e585fc0d2a5a479",
+  "pedido": {
+    "acao": "enviar",
+    "conversa": "20261123-120000-abc123",
+    "texto": "Olá «mundo»\nlinha 2",
+    "modo": "normal",
+    "modelo": "omissao",
+    "permissoes": "cartao",
+    "pid": "0123456789abcdef",
+    "t": 1795435200000
+  },
+  "canonico": "{\"acao\":\"enviar\",\"conversa\":\"20261123-120000-abc123\",\"modelo\":\"omissao\",\"modo\":\"normal\",\"permissoes\":\"cartao\",\"pid\":\"0123456789abcdef\",\"t\":1795435200000,\"texto\":\"Olá «mundo»\\nlinha 2\"}",
+  "assinatura": "64676a3e7d4124ddc14e6f636e96f4e63794f4bf425f77d5221eeeb4177d97a6",
+  "desafio": "d5b7e64964f8fd5a154c42aa0f393d2ff27456459d88609d21adb550747f19b2",
+  "entrar": "entrar\nd5b7e64964f8fd5a154c42aa0f393d2ff27456459d88609d21adb550747f19b2",
+  "assinatura_entrar": "c195b65a63ec0114e078b0f9aa297c41323bd036f313322fab3f6e10e19d3534"
+}

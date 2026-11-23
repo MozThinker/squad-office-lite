@@ -28,6 +28,7 @@ try {
   var temaF = function () { if (temaEscolha === "auto") temaAplicar("auto"); };
   if (temaMq) temaMq.addEventListener ? temaMq.addEventListener("change", temaF) : temaMq.addListener(temaF);
 } catch (e) {}
+try { if (localStorage.getItem("animacoes") === "0") document.documentElement.dataset.anim = "off"; } catch (e) {}
 </script>
 <style>
 :root {
@@ -61,13 +62,22 @@ body { margin: 0; background: var(--bg); color: var(--text); }
 </style>
 <link rel="stylesheet" href="office.css">
 <link rel="stylesheet" href="lateral.css">
+<link rel="stylesheet" href="estado.css">
 </head>
 <body>
+<svg hidden style="display:none">
+<symbol id="i-office" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="1"/><path d="M9 7h2M13 7h2M9 11h2M13 11h2M10 21v-4h4v4"/></symbol>
+<symbol id="i-biblioteca" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V5a2 2 0 0 1 2-2h14v18H6a2 2 0 0 1-2-2zm0 0a2 2 0 0 1 2-2h14M9 7h6"/></symbol>
+<symbol id="i-quadro" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="1"/><path d="M9 4v16M15 4v16M5.5 8h1M11.5 8h1M17.5 8h1"/></symbol>
+<symbol id="i-definicoes" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M10.2 4.8L10.4 2.1L13.6 2.1L13.8 4.8L15.8 5.7L17.8 3.9L20.1 6.2L18.3 8.2L19.2 10.2L21.9 10.4L21.9 13.6L19.2 13.8L18.3 15.8L20.1 17.8L17.8 20.1L15.8 18.3L13.8 19.2L13.6 21.9L10.4 21.9L10.2 19.2L8.2 18.3L6.2 20.1L3.9 17.8L5.7 15.8L4.8 13.8L2.1 13.6L2.1 10.4L4.8 10.2L5.7 8.2L3.9 6.2L6.2 3.9L8.2 5.7z"/></symbol>
+<symbol id="i-conversa" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16v11H10l-6 4z"/><path d="M8 10.5h.01M12 10.5h.01M16 10.5h.01"/></symbol>
+<symbol id="i-replay" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5"/></symbol>
+</svg>
 <header>
-  <h1>▣ Squad Office</h1>
-  <button id="bib-b" type="button" aria-pressed="false" aria-label="Biblioteca">▤<span class="lg"> Biblioteca</span></button>
-  <button id="quad-b" type="button" aria-pressed="false" aria-label="Quadro">▦<span class="lg"> Quadro</span></button>
-  <button id="def-b" type="button" aria-label="Definições" aria-haspopup="dialog">⚙</button>
+  <h1><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-office"/></svg><span>Squad Office</span></h1>
+  <button id="bib-b" type="button" aria-pressed="false" aria-label="Biblioteca" title="Biblioteca"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-biblioteca"/></svg><span class="lg">Biblioteca</span></button>
+  <button id="quad-b" type="button" aria-pressed="false" aria-label="Quadro" title="Quadro"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-quadro"/></svg><span class="lg">Quadro</span></button>
+  <button id="def-b" type="button" aria-label="Definições" title="Definições" aria-haspopup="dialog"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-definicoes"/></svg></button>
   <div id="live"><i></i><span>a ligar…</span></div>
 </header>
 <p id="aviso" role="status" hidden></p>
@@ -195,7 +205,7 @@ function aplicarCfg(c) {
   try { TZ = cfg.fuso ? new Intl.DateTimeFormat("en", { timeZone: cfg.fuso }).resolvedOptions().timeZone : undefined; } catch { TZ = undefined; } // fuso que o browser não conhece: o local
   ROOMS = salasDe(cfg); SQS = Object.keys(ROOMS); SQC = Object.fromEntries(SQS.map((k, i) => [k, SQ_COR[i % SQ_COR.length]]));
   if (roomKey && !ROOMS[roomKey]) roomKey = null;
-  $("header h1").textContent = "▣ " + cfg.marca;
+  $("header h1 span").textContent = cfg.marca;
   $("#aviso").textContent = cfg.aviso ? "Configuração com problemas, a usar o exemplo: " + cfg.aviso : "";
   $("#aviso").hidden = !cfg.aviso;
 }
@@ -206,6 +216,7 @@ async function lerCfg() {
     if (!r.ok) throw new Error(r.status);
     aplicarCfg(await r.json());
     paint(false);
+    conversa();
   } catch { setTimeout(lerCfg, 5000); }
 }
 
@@ -386,7 +397,7 @@ function progHtml(p) {
 function fly(from, to) {
   const g = document.getElementById("fly");
   const seats = R().seats;
-  if (!g || !seats[from] || !seats[to] || rp || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  if (!g || !seats[from] || !seats[to] || rp || matchMedia("(prefers-reduced-motion: reduce)").matches || document.documentElement.dataset.anim === "off") return;
   const [x1, y1] = seats[from].map((v, i) => v + (i ? 4 : 2)), [x2, y2] = seats[to].map((v, i) => v + (i ? 4 : 2));
   const el = document.createElementNS("http://www.w3.org/2000/svg", "g");
   el.innerHTML = `<rect x="0" y="2" width="12" height="9" fill="#ffca28"/><rect x="0" y="0" width="5" height="2" fill="#ffb300"/><rect x="2" y="5" width="8" height="2" fill="#fff8e1"/>`;
@@ -400,7 +411,7 @@ function fly(from, to) {
 // confetti curto quando há PR novo (nada com reduced-motion)
 function confetti() {
   const g = document.getElementById("fly");
-  if (!g || rp || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  if (!g || rp || matchMedia("(prefers-reduced-motion: reduce)").matches || document.documentElement.dataset.anim === "off") return;
   for (let i = 0; i < 40; i++) {
     const el = document.createElementNS("http://www.w3.org/2000/svg", "rect"), x = 10 + Math.random() * 300, y = -6 - Math.random() * 30;
     el.setAttribute("width", 3); el.setAttribute("height", 2);
@@ -427,7 +438,7 @@ function statusClass(t) {
 function renderRooms() {
   setHtml($("#rooms"), Object.entries(ROOMS).map(([k, r]) =>
     `<button aria-pressed="${k === roomKey}" data-room="${k}"><span class="dot ${state.tasks.some((t) => sq(t) === k && t.running) ? "run" : ""}"></span>${esc(r.name)}</button>`).join("")
-    + `<button id="rp-b" aria-pressed="${!!rp}" aria-label="Rever o dia em acelerado">↺<span> Replay</span></button>`);
+    + `<button id="rp-b" aria-pressed="${!!rp}" aria-label="Rever o dia em acelerado" title="Replay"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-replay"/></svg><span>Replay</span></button>`);
   $("#rp-b").onclick = () => (rpP ||= import("./replay.js")).then((m) => m.abrir(rpApi()), () => { rpP = null; });
   $("#rooms").querySelectorAll("[data-room]").forEach((b) => (b.onclick = () => { if (b.dataset.room === roomKey) return; roomKey = b.dataset.room; selected = null; picked = null; paint(false); }));
 }
@@ -692,7 +703,7 @@ function paint(animate) {
   renderApr();
   fab?.render(state);
   topo?.render(state);
-  lat?.render(state);
+  lat?.render(state, ti);
   renderInfo(ti);
   renderAjuda();
   musicRoom();
@@ -811,7 +822,11 @@ function renderApr() {
     }
     aSync(el);
   });
+  EST?.ligar();
 }
+let EST = null;
+const adS = (e, x) => (EST ? EST.pintar($("#ad-s"), e, x, Date.now()) : ($("#ad-s").textContent = x));
+import("./estado.js").then((m) => { EST = m; if (state) renderApr(); }, () => {});
 async function aprSend(k) {
   const p = aFind(k), u = aUi(k), c = u.confirm;
   if (!p || !c || u.busy) return;
@@ -872,7 +887,7 @@ async function aprFull(p) {
   if (!p) return;
   const n = ++adSeq;
   $("#ad-h").textContent = p.titulo;
-  $("#ad-s").textContent = "A carregar…";
+  adS("a-processar", "a carregar");
   $("#ad-b").innerHTML = "";
   $("#apr-dlg").showModal();
   try {
@@ -883,7 +898,8 @@ async function aprFull(p) {
     $("#ad-b").innerHTML = md(d.corpo);
     $("#ad-s").textContent = `${p.fonte} · ${p.ficheiro}` + (d.cortado ? " · pedido longo: só o início" : "");
   } catch (e) {
-    if (n === adSeq) $("#ad-s").textContent = e.message === "404" ? "Este pedido já não está pendente." : "Não foi possível carregar o pedido.";
+    const m = e.message === "404" ? "Este pedido já não está pendente." : "Não foi possível carregar o pedido.";
+    if (n === adSeq) adS("erro", m);
   }
 }
 $("#ad-x").onclick = () => $("#apr-dlg").close();
@@ -901,6 +917,7 @@ async function tick() {
     state = next;
     stateEm = Date.now();
     paint(!firstPaint);
+    cvB?.then((m) => m?.pintar(state.conversa));
     // lembra quem estava a trabalhar para animar as passagens seguintes
     prevWorking = Object.fromEntries(state.tasks.map((t) => [t.id, t.working]));
     if (prev) for (const t of state.tasks) {
@@ -909,6 +926,7 @@ async function tick() {
       if (newPr(old, t)) confetti();
     }
     alertsTick();
+    if (prev && S) for (const [s, k] of S.sonsDoPoll(prev, next, jg())) tocar(s, k);
     if (jt?.update(prev, next, musicOn && !document.hidden && !!eng).length) eng.jingle(); // um jingle por poll
     firstPaint = false;
     $("#live").className = "";
@@ -1050,7 +1068,7 @@ addEventListener("hashchange", qRoute);
 let defP = null, agP = null;
 const agentes = () => (agP ||= import("./agentes.js")).then((m) => m.abrir({ cfg, getState: () => state }), () => { agP = null; alert("Não foi possível abrir «Squads e agentes»."); });
 $("#def-b").onclick = async () => {
-  try { (await (defP ||= import("./definicoes.js"))).abrir({ esc, cfg, swReady, isIOS, getState: () => state, musica, tema, agentes, notif: { estado: notifEstado, alternar: bellToggle },
+  try { (await (defP ||= import("./definicoes.js"))).abrir({ esc, cfg, swReady, isIOS, getState: () => state, musica, tema, agentes, tocar, notif: { estado: notifEstado, alternar: bellToggle },
     repintar: () => { paint(false); qP?.then((m) => m.repintar(), () => {}); } }); }
   catch { defP = null; alert("Não foi possível abrir as definições."); }
 };
@@ -1068,19 +1086,24 @@ import("./lateral.js").then((m) => { m.iniciar({ esc, ROOMS: () => ROOMS, cfg: (
   demo: () => !!demo, replay: () => !!rp, getState: () => state, sala: () => roomKey, tarefa: () => selected, picked: () => picked, abrirTarefa: qTarefa,
   repintar: () => paint(false), seguir: (s, id, r) => { sair(); roomKey = s; selected = id; picked = ROOMS[s]?.seats[r] ? r : "general"; paint(false); } }); lat = m; paint(false); }, () => {});
 import("./ambiente.js").then((m) => { amb = m; paint(false); }, () => {});
+import("./som.js").then((m) => { S = m; T = m.criarSom({ ctx: () => actx, agora: Date.now, visivel: () => !document.hidden, prefs: () => m.lerPrefs(lsS()), vibrar: (p) => navigator.vibrate?.(p) }); }, () => {});
 import("./fabrica.js").then((m) => { m.iniciar({ esc, fmtT, fmtNum, fmtUsd, fmtDT, ctx, quem, getState: () => state, sala: () => roomKey || SQS[0],
   ir: (it) => it?.tipo === "aprovacao" && verApr(it.fonte, it.ficheiro) }); fab = m; paint(false); }, () => {});
 });
+
+// ---- sons (som.js): actx da música, nasce no gesto
+let S = null, T = null; const lsS = () => { try { return localStorage; } catch {} }, somOn = () => S?.lerPrefs(lsS()).on, tocar = (e, k) => T?.(e, k), jg = () => musicOn && !!eng;
+["click", "touchend", "keydown"].forEach((n) => addEventListener(n, () => unlock(musicOn || somOn())?.catch(() => {}), true));
 
 // ---- música de fundo (music.js só carrega ao ligar; prefs lidas aqui, regra do readPrefs; o AudioContext nasce no gesto: iOS; controlos no ⚙)
 const pref = (() => { try { const v = localStorage.getItem("musicVol"); return [localStorage.getItem("music") === "1", /^\d{1,3}$/.test(v) && v <= 100 ? +v : 30]; } catch { return [false, 30]; } })();
 let musicOn = pref[0], vol = pref[1], M = null, eng = null, actx = null, jt = null, loadP = null;
 const loadMusic = () => (loadP ||= import("./music.js").then((m) => { M = m; jt = m.createJingleTracker(); return m; },
   () => { loadP = null; musicOn = false; actx?.suspend(); })); // falhou: desliga, o clique seguinte tenta de novo
-function unlock() { if (musicOn) { actx ||= new (window.AudioContext || window.webkitAudioContext)(); return actx.resume(); } } // síncrono, dentro do gesto
+function unlock(on = musicOn) { if (on) { actx ||= new (window.AudioContext || window.webkitAudioContext)(); return actx.resume(); } } // síncrono, dentro do gesto
 function syncMusic() { // depois do load
   if (!M || !actx) return;
-  if (!eng) { if (!musicOn) return actx.suspend(); eng = M.createEngine({ ctx: actx }); }
+  if (!eng) { if (!musicOn) return somOn() || actx.suspend(); eng = M.createEngine({ ctx: actx, manter: somOn }); }
   eng.setVolume(vol);
   if (musicOn) { musicRoom(); eng.start(); if (document.hidden) eng.suspend(); } else eng.stop();
 }
@@ -1099,6 +1122,9 @@ document.addEventListener("visibilitychange", () => { if (eng && musicOn) docume
 
 // arranque: a config primeiro (ou as omissões, se falhar), depois as rotas e o estado
 boot.then(lerCfg).then(() => { bibRoute(); qRoute(); tick(); setInterval(tick, 8000); });
+// Conversa (ADR-023): só o botão do cabeçalho (conversa_botao.js, com ela ligada); a Conversa abre na origem própria
+let cvB = null;
+function conversa() { if (cfg.conversa?.ativa === true) cvB ||= import("./conversa_botao.js").then((m) => (m.montar(cfg.conversa, $("#def-b")), m.pintar(state?.conversa), m), () => (cvB = null)); }
 </script>
 </body>
 </html>

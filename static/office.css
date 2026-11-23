@@ -12,12 +12,15 @@ body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 var(
 /* cabeçalho numa linha: marca, Biblioteca, Quadro, ⚙ e «ao vivo»; música, volume, tema e notificações estão no ⚙ */
 header { display: flex; align-items: center; gap: 8px 12px; padding: 8px 16px; border-bottom: 1px solid var(--line); }
 header h1 { font-size: 16px; margin: 0 auto 0 0; letter-spacing: .5px; white-space: nowrap; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+/* ícones do sprite do index.html (currentColor, 20 px); só o ícone abaixo de 520 px (aria-label e title nos botões) */
+.ico { width: 20px; height: 20px; vertical-align: middle; flex: none; }
+header h1 .ico { margin-right: 6px; vertical-align: -4px; }
 /* Biblioteca e Quadro: contorno; preenchidos só na vista activa */
 #quad-b, #bib-b, #def-b { min-height: 44px; min-width: 44px; padding: 4px 12px; background: var(--panel); color: var(--text); border: 1px solid var(--ctl);
-  font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; }
+  font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
 #quad-b[aria-pressed="true"], #bib-b[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
 #quad-b:focus-visible, #bib-b:focus-visible, #def-b:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
-#def-b { position: relative; padding: 4px 8px; font-size: 18px; font-weight: 400; }
+#def-b { position: relative; padding: 4px 8px; font-weight: 400; }
 /* notificações bloqueadas no browser: ponto --warn no ⚙ (o aviso está lá dentro) */
 #def-b.warn::after { content: ""; position: absolute; top: 5px; right: 5px; width: 8px; height: 8px; background: var(--warn); }
 @media (max-width: 520px) { header { padding: 4px 8px; gap: 6px; } header .lg { display: none; } #quad-b, #bib-b { padding: 4px 8px; } }

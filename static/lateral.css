@@ -62,7 +62,22 @@
 .fim { margin-top: 8px; font-size: 13px; overflow-wrap: anywhere; }
 /* botão «Replay» no fim da barra das salas (≥ 44 px); a ≤ 520 px só o ícone «↺» */
 #rooms { align-items: center; }
-#rooms #rp-b { min-height: 44px; min-width: 44px; margin-left: auto; }
+#rooms #rp-b { min-height: 44px; min-width: 44px; margin-left: auto; display: inline-flex; align-items: center; gap: 6px; }
 #rooms #rp-b[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
 #rooms #rp-b:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 @media (max-width: 520px) { #rooms #rp-b span { display: none; } }
+
+/* faixa «Agora» (agora.js, fase 2 de UX): só a ≤ 900 px, por baixo do escritório; linhas de 44 px com a peça de estado */
+#agora { display: none; }
+@media (max-width: 900px) {
+  #agora { display: block; background: var(--panel); border: 1px solid var(--line); padding: 4px 12px; overflow-wrap: anywhere; min-width: 0; }
+  #agora * { margin: 0; font-size: 15px; }
+  #agora h2 { padding: 6px 0; font-weight: 600; }
+  #agora ul, #agora li { display: block; padding: 0; list-style: none; }
+  #agora button { width: 100%; min-height: 44px; background: none; color: var(--text); border: 0; font: inherit; text-align: left; cursor: pointer; }
+  #agora .estado { margin-right: 8px; white-space: normal; }
+  #agora .ag-p { color: var(--muted); }
+  #agora .vazio { color: var(--muted); padding: 10px 0; }
+  #agora :focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+  #agora [hidden] { display: none; }
+}

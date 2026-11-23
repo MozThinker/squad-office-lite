@@ -1,6 +1,7 @@
 // Biblioteca do Office: módulo carregado com import() só ao abrir #biblioteca (como o music.js).
 // As funções puras exportadas são testadas em node (tests/biblioteca_test.mjs); o DOM só se toca dentro de abrir()/rota()/sair().
 // Regra de HTML: tudo o que vem do servidor entra por esc()/escU() ou md() (que escapa tudo); helpers «…H()» devolvem HTML já escapado.
+import { html as estH, pintar as peca } from "./estado.js"; // a carregar / erro (fase 1 de UX)
 
 // produtos = projectos da config + «geral»; fontes = rótulos da config. configurar(cfg) troca-os (abrir() chama-o)
 export const produtosCfg = (cfg) => [...(cfg?.projectos || []).map((p) => [p.id, p.nome]), ["geral", "Geral"]];
@@ -375,7 +376,7 @@ function abrirAlvo(a) {
 async function carregar() {
   const n = ++S.lseq;
   S.cur = S.rend = null;
-  if (!S.itens) { q(".bib-cards").innerHTML = SKEL; q(".bib-cnt").textContent = "A carregar…"; q(".bib-vazio").textContent = ""; }
+  if (!S.itens) { q(".bib-cards").innerHTML = SKEL; peca(q(".bib-cnt"), "a-processar", "a carregar", Date.now()); q(".bib-vazio").textContent = ""; }
   try {
     const modo = S.modo;
     const r = await fetch(modo ? "api/biblioteca?arquivo=1" : "api/biblioteca");
@@ -394,7 +395,7 @@ async function carregar() {
     } else {
       q(".bib-cards").innerHTML = "";
       q(".bib-cnt").textContent = "";
-      q(".bib-vazio").innerHTML = `<p class="bib-msg">Não foi possível carregar a biblioteca.</p><button type="button" class="bib-btn" data-a="actualizar">Tentar de novo</button>`;
+      q(".bib-vazio").innerHTML = `<p class="bib-msg">${estH("erro", "Não foi possível carregar a biblioteca.")}</p><button type="button" class="bib-btn" data-a="actualizar">Tentar de novo</button>`;
       return;
     }
   }
@@ -499,7 +500,7 @@ const recentesH = (l) => l.map((it) => {
 const barraH = () => `<div class="bib-bar"><button type="button" class="bib-btn" data-a="voltar">‹ Biblioteca</button></div>`;
 function aCarregarH(it) {
   return barraH() + (it ? `<p class="sub">${esc(fonteDe(it.raiz))}</p><h2 tabindex="-1">${esc(it.titulo)}</h2>` : "")
-    + `<p class="bib-msg" role="status">A carregar…</p><ul class="bib-grid bib-sk" aria-hidden="true"><li><i></i></li><li><i></i></li><li><i></i></li><li><i></i></li></ul>`;
+    + `<p class="bib-msg" role="status">${estH("a-processar", "a carregar")}</p><ul class="bib-grid bib-sk" aria-hidden="true"><li><i></i></li><li><i></i></li><li><i></i></li><li><i></i></li></ul>`;
 }
 const tamH = (f) => `<span class="sub">${esc(fmtBytes(f.bytes))}</span>`;
 function dlBtnH(f) {

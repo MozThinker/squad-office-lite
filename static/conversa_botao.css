@@ -1,0 +1,12 @@
+/* Botão da Conversa no cabeçalho do Office (conversa_botao.js): como os outros do cabeçalho (≥ 44 px; a < 520 px só o ícone, o
+   .lg do office.css), com o contador dos pedidos à espera; e a explicação sem site/TLS. */
+#cv-b, #cv-x { position: relative; min-height: 44px; min-width: 44px; padding: 4px 12px; background: var(--panel); color: var(--text); border: 1px solid var(--ctl);
+  font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 6px; text-decoration: none; }
+:is(#cv-b, #cv-x):focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+#cv-b .cv-n { position: absolute; top: -6px; right: -6px; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 10px; background: var(--warn);
+  color: var(--on-warn); font-size: 12px; line-height: 20px; text-align: center; }
+#cv-b .cv-n[hidden] { display: none; }
+#cv-dlg { width: min(520px, calc(100vw - 16px)); padding: 0; background: var(--panel); color: var(--text); border: 1px solid var(--line); }
+#cv-dlg::backdrop { background: var(--backdrop); }
+#cv-dlg p { margin: 12px; overflow-wrap: anywhere; }
+#cv-dlg a { color: var(--accent); }

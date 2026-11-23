@@ -40,7 +40,7 @@ purchasers are guaranteed them for **at least 12 months from the date of purchas
 The same command as the installation (see the README, “Updating”):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/MozThinker/squad-office-lite/v0.5.2/get.sh | bash
+curl -fsSL https://raw.githubusercontent.com/MozThinker/squad-office-lite/v0.6.0/get.sh | bash
 ```
 
 It downloads the latest published version, checks its sha256 and runs `install.sh`. The previous version stays in
@@ -67,5 +67,21 @@ allowlist, Claude credentials kept outside the Office container.
 The Lite's known limits are in the README, “Security” section (for example: the agent runs as your user, and a program
 it runs can read whatever you can read). A report about an already documented limit is welcome if it shows an impact
 that isn't described there.
+
+The Conversa (ADR-023 in `DECISIONS.md`, guardian revision; `CONVERSA.en.md`) is also the Lite's: the guardian
+(`chat_host/guardiao.py`, user `office-conversa`, the only piece holding the browsers' keys), the bridge,
+`instalar-conversa.sh` and the units. The Conversa code is single-use and only registers one browser, which generates
+its own random, non-extractable key; later sign-ins use challenge–response; another browser needs `sudo
+./instalar-conversa.sh --novo-codigo` and `--revogar` deletes the registered browsers. A registrable domain different
+from the Office's is recommended for the Conversa. By default (`conversa.tls: externo`) the Conversa's TLS terminates
+outside the Office user, in a tunnel of the owner connected to the guardian socket, and the Office cannot reach the
+socket. A request reaching `verificados/` without the owner's click, a key read by any user other than
+`office-conversa`, a code that works twice, the installer accepting a Lite copy (or a folder above it) that the owner or
+the Office can write, or the guardian starting with an `/opt/office-conversa` that does not match its `SHA256SUMS` are
+vulnerabilities to report. Known limits: with `conversa.tls: caddy` (only on purpose) TLS terminates in the Office
+user's Caddy and whoever controls it can serve their own JS on the Conversa origin; whoever reaches the Conversa address
+can fill the 15-minute lockout; the launchers' `ask` rules are best effort, bypassable by obfuscation, especially in
+`espelho`; with external voice the server only enforces the 5 MB, not the 2 minutes; the assistant writes what the owner
+writes; the installation trusts once the Lite copy root extracted and checked.
 
 See the [English README](README.en.md) for the sections mentioned above.

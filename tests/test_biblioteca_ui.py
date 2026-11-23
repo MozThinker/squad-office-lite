@@ -47,7 +47,7 @@ class EntradaTest(unittest.TestCase):
         # v3 CA-1: cabeçalho numa linha; a ≤ 520 px o botão mostra só o ícone (aria-label dá o nome)
         h = SRC[SRC.index("<header>"):SRC.index("</header>")]
         OCSS = (ROOT / "static" / "office.css").read_text(encoding="utf-8")
-        self.assertIn('<button id="bib-b" type="button" aria-pressed="false" aria-label="Biblioteca">▤<span class="lg"> Biblioteca</span></button>', h)
+        self.assertIn('<button id="bib-b" type="button" aria-pressed="false" aria-label="Biblioteca" title="Biblioteca"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-biblioteca"/></svg><span class="lg">Biblioteca</span></button>', h)
         self.assertLess(h.index('id="bib-b"'), h.index('id="def-b"'))
         self.assertLess(h.index("<h1>"), h.index('id="bib-b"'))
         self.assertRegex(OCSS, r"#quad-b, #bib-b, #def-b \{[^}]*min-height:\s*44px")
@@ -173,7 +173,7 @@ class BibliotecaJsTest(unittest.TestCase):
         self.assertIn("if (zipRecente(zip.dataset.ok, Date.now())) return;", BIB)
 
     def test_microcopy_e_acessibilidade(self):
-        for s in ("▤<span class=\"lg\"> Biblioteca", "‹ Escritório", "‹ Biblioteca", "↻ Actualizar", "Mostrar mais (", "Limpar filtros", "Limpar pesquisa",
+        for s in ("<use href=\"#i-biblioteca\"/></svg><span class=\"lg\">Biblioteca", "‹ Escritório", "‹ Biblioteca", "↻ Actualizar", "Mostrar mais (", "Limpar filtros", "Limpar pesquisa",
                   "pesquisar na biblioteca", "Pesquisar na biblioteca por título, nome do ficheiro ou produto", "Abrir lote",
                   "⤓ Descarregar tudo (zip)", "A preparar…", "Peças finais (", "Textos e legendas (", "Revisão e parecer jurídico (",
                   "Folha do lote", "Ficheiros de trabalho (", "✕ Fechar", "‹ Anterior", "Seguinte ›", "Copiar texto", "✓ Copiado",
@@ -197,7 +197,7 @@ class BibliotecaJsTest(unittest.TestCase):
         self.assertNotRegex(css, r"outline:\s*none(?![^}]*\}\s*/\*)")  # o único outline:none tem substituto (cartão)
 
     def test_peso(self):
-        self.assertLess(len(BIB.encode()), 48_000)
+        self.assertLess(len(BIB.encode()), 48_300)   # + peça de estado (fase 1 de UX, 0.6.0)
         self.assertLess(len(CSS.read_bytes()), 16_000)
 
 

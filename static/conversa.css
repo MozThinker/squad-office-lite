@@ -1,0 +1,221 @@
+/* Conversa (ADR-023, revisão do guardião): a página da origem própria (conversa.html), autónoma: os tokens dos temas vêm aqui
+   (escuro por omissão, claro com o sistema em claro; o tema do Office fica noutra origem). Sem estilos inline (CSP style-src 'self').
+   O painel ocupa a página: em coluna até 900 px de largura, centrado acima disso. Movimento só com os tokens --dur-* do estado.css. */
+:root {
+  --bg: #12141c; --panel: #1b1f2b; --line: #2c3245; --text: #e8eaf2; --muted: #9aa3b8; --ok: #66bb6a; --warn: #ffb74d; --bad: #ef5350; --accent: #64b5f6;
+  --sunk: #232838; --ctl: #6a7493; --ok-bg: #1e3a2a; --warn-bg: #2e2716; --bad-bg: #2e1719; --on-accent: #0d0f15; --backdrop: #000000bb; --focus: #64b5f6;
+  --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) { :root {
+  --bg: #f4f5f9; --panel: #ffffff; --line: #d5d9e3; --text: #171a24; --muted: #5c6577; --ok: #1a6e33; --warn: #a04e00; --bad: #c62828; --accent: #2460d0;
+  --sunk: #e3e6ee; --ctl: #7f8698; --ok-bg: #dcf3e2; --warn-bg: #fff3e6; --bad-bg: #fde3e3; --on-accent: #ffffff; --backdrop: #0a0c14b3; --focus: #2460d0;
+  color-scheme: light; } }
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 var(--sans); }
+.cv-sprite { display: none; } /* o [hidden] não chega a todos os <svg> */
+.ico { width: 20px; height: 20px; vertical-align: middle; flex: none; }
+.mono, pre, code { font-family: var(--mono); }
+.cv-nojs { margin: 16px; }
+
+/* página */
+#cv-painel { display: flex; flex-direction: column; width: 100%; max-width: 900px; height: 100dvh; margin: 0 auto; background: var(--panel); color: var(--text); }
+@media (min-width: 900px) { #cv-painel { border-left: 1px solid var(--line); border-right: 1px solid var(--line); } }
+#cv-painel [hidden] { display: none !important; }
+@media (max-width: 899px) {
+  /* A1: com um pedido à espera o cartão leva o ecrã; a linha tracejada, «Mais N» (o título diz «1 de N»), Modelo e Planear saem */
+  #cv-painel.cp-pedido .cp-act { max-height: none; }
+  #cv-painel.cp-pedido :is(.cv-linha, .cv-op label), .cp-act .cp-mais { display: none; }
+  /* M1: a palavra «Modelo» só para leitores de ecrã (o <label> mantém o nome; o subtítulo já diz «Modelo: …») */
+  .cp-lm { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+}
+
+.cv-vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.sub { color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }
+#cv-painel :is(button, a, input, select, textarea, summary):focus-visible, #cv-painel [tabindex="-1"]:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+#cv-painel #cp-h:focus-visible { outline: 0; } /* B2: o título não é um controlo (no telemóvel o anel parecia um campo); o h3 do cartão mantém-no */
+
+.cp-top { display: flex; align-items: center; gap: 2px; min-height: 48px; padding: 4px 4px 0 12px; }
+.cp-top h1 { flex: 1 1 auto; min-width: 0; margin: 0; font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cp-sub { margin: 0; padding: 0 12px 6px; font-size: 13px; overflow-wrap: anywhere; }
+.cv .estado{white-space:normal}
+.cv-b { min-height: 44px; padding: 6px 12px; background: var(--bg); color: var(--text); border: 1px solid var(--ctl); font: inherit; font-size: 14px; cursor: pointer; }
+.cv-b:disabled { opacity: .45; cursor: not-allowed; }
+.cv-pri { background: var(--accent); color: var(--on-accent); border-color: var(--accent); font-weight: 600; }
+.cv-stop { background: var(--bad-bg); color: var(--text); border-color: var(--bad); font-weight: 600; }
+.cp-i { min-width: 44px; padding: 0; border-color: transparent; background: transparent; font-size: 18px;
+  display: inline-flex; align-items: center; justify-content: center; }
+.cv-ponte { margin: 0 12px 8px; padding: 8px 10px; border: 1px solid var(--warn); background: var(--warn-bg); }
+.cv-lm, .cv-st, .cv-cm, .cv-fm { margin: 6px 0; font-size: 13px; }
+.cv-cm:empty, .cv-st:empty, .cv-fm:empty, .cv-lm:empty { display: none; }
+
+/* lista: «Nova conversa» e a pesquisa ficam em cima; só a lista faz scroll */
+.cv-lv { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 8px; padding: 8px 12px 0; border-top: 1px solid var(--line); }
+.cp-nova { width: 100%; }
+.cv-q { width: 100%; min-height: 44px; padding: 6px 10px; background: var(--bg); color: var(--text); border: 1px solid var(--ctl); font: inherit; font-size: 16px; }
+.cv-l { flex: 1 1 auto; min-height: 0; max-height: none; overflow-y: auto; overscroll-behavior: contain; list-style: none; margin: 0; padding: 0 0 12px; }
+.cv-it { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; width: 100%; min-height: 44px; padding: 8px 12px; margin-bottom: 4px; background: var(--bg);
+  border: 1px solid var(--line); color: var(--text); font: inherit; text-align: left; cursor: pointer; overflow-wrap: anywhere; }
+.cv-it .sub { font-size: 13px; }
+.cv-tag { font-size: 12px; padding: 0 6px; border: 1px solid var(--ctl); color: var(--muted); }
+
+/* conversa: só o fluxo faz scroll; pedido activo e caixa presos em baixo */
+.cv-cv { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; border-top: 1px solid var(--line); }
+.cp-flx { flex: 1 1 0; min-height: 64px; overflow-y: auto; overscroll-behavior: contain; padding: 8px 12px; }
+.cv-ev { list-style: none; margin: 0; padding: 0; max-height: none; overflow: visible; display: flex; flex-direction: column; gap: 8px; }
+.cp-arq { margin: 12px 0 0; text-align: center; }
+.cp-arq .cv-b { background: transparent; color: var(--muted); }
+.cv-msg { overflow-wrap: anywhere; min-width: 0; }
+.cv-msg > .sub { display: block; font-size: 12px; }
+.cv-dono { align-self: flex-end; max-width: 88%; padding: 6px 10px; background: var(--sunk); border: 1px solid var(--line); }
+.cv-tx { white-space: pre-wrap; }
+.cv-fe { font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
+.cv-fe summary, .cv-feito summary { min-height: 44px; padding: 10px 0; color: inherit; cursor: pointer; }
+.cv-fe ul { list-style: none; margin: 0; padding: 0 0 0 12px; border-left: 2px solid var(--line); }
+.cv-fe li { margin: 4px 0; }
+.cv-fe b { color: var(--text); font-family: var(--mono); font-weight: 400; }
+.cv-pre { margin: 6px 0; padding: 6px 8px; max-height: 260px; overflow: auto; background: var(--bg); border: 1px solid var(--line); color: var(--text);
+  font-size: 13px; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; }
+.cv-av { padding: 6px 10px; border: 1px solid var(--warn); background: var(--warn-bg); overflow-wrap: anywhere; }
+.cv-meta { font-size: 12px; color: var(--muted); text-align: center; }
+.cv-linha { padding: 6px 10px; border: 1px dashed var(--warn); font-size: 13px; overflow-wrap: anywhere; }
+
+/* cartões (resolvidos no fluxo, activo preso em baixo) */
+.cv-card { padding: 0 12px; background: var(--panel); border: 1px solid var(--line); overflow-wrap: anywhere; }
+.cv-feito { font-size: 13px; }
+.cv-feito h3 { display: none; }
+.cv-card h3 { font-size: 15px; margin: 0; }
+.cv-card p { margin: 4px 0; }
+.cv-sha { margin: 0; font-size: 12px; }
+.cv-exp { font-family: var(--mono); font-size: 13px; white-space: nowrap; }
+.cv-brief { margin-top: 6px; }
+.cv-card fieldset { border: 0; padding: 0; margin: 8px 0 0; min-width: 0; }
+.cv-card legend { padding: 0; font-weight: 600; }
+.cv-cab { display: inline-block; margin-right: 6px; padding: 0 6px; font-size: 12px; font-weight: 400; border: 1px solid var(--ctl); color: var(--muted); }
+.cv-ops { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
+.cv-opc { display: flex; flex-direction: column; align-items: flex-start; text-align: left; width: 100%; min-height: 48px; }
+.cv-opc .sub { font-size: 13px; }
+.cv-opc[aria-pressed="true"] { border-color: var(--accent); border-width: 2px; background: var(--sunk); }
+.cv-opc[aria-pressed="true"] b::before { content: "✓ "; }
+.cv-out { margin-top: 6px; }
+.cv-card textarea, .cv-f textarea { display: block; width: 100%; margin-top: 6px; padding: 6px 8px; background: var(--bg); color: var(--text);
+  border: 1px solid var(--ctl); font: inherit; font-size: 16px; line-height: 1.4; }
+
+.cp-act { flex: 0 1 auto; min-height: 0; max-height: 60dvh; display: flex; flex-direction: column; padding: 8px 8px 0; border-top: 1px solid var(--line); }
+#cv-painel.cp-tudo .cp-flx { display: none; }
+#cv-painel.cp-tudo .cp-act { flex: 1 1 auto; min-height: 0; max-height: none; }
+.cp-act .cv-card { flex: 0 1 auto; min-height: 0; display: flex; flex-direction: column; padding: 8px 12px; border: 2px solid var(--warn); }
+.cp-act .cv-card.cv-del { border-color: var(--bad); }
+.cp-cab { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; flex: none; }
+.cp-corpo { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+.cp-act .cv-alvo { max-height: none; overflow: visible; } /* D1/A1: o alvo todo, um só scroll (o do .cp-corpo); «Ver tudo» dá o painel ao cartão */
+.cp-act .cv-plano { max-height: none; }
+.cv-vt { width: 100%; }
+.cp-act .btns { flex: none; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+.cp-act .btns .cv-b { min-height: 48px; }
+.cp-act .btns .no-b { order: 2; }
+.cp-act .btns > :not(.ok-b, .no-b) { order: 3; grid-column: 1 / -1; }
+.cp-act .btns > :only-child { grid-column: 1 / -1; }
+.cv-card .ok-b { background: var(--ok-bg); border-color: var(--ok); font-weight: 600; }
+.cv-card .no-b { border-color: var(--bad); }
+.cp-mais { flex: none; font-size: 13px; }
+.cp-mais:empty { display: none; }
+
+/* caixa de escrita: 1 linha, cresce até 8 (depois scroll) */
+/* flex 0 1 + scroll interno: na folha de baixo do telemóvel o formulário nunca passa do ecrã (o painel é fixed) */
+.cv-f { flex: 0 1 auto; min-height: 0; overflow-y: auto; padding: 8px 12px calc(8px + env(safe-area-inset-bottom)); border-top: 1px solid var(--line); background: var(--panel); }
+.cv-f textarea { margin-top: 0; min-height: 44px; max-height: calc(8 * 1.4em + 14px); overflow-y: auto; resize: none; }
+.cv-op { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin-top: 6px; }
+.cv-op label { display: flex; align-items: center; gap: 6px; min-height: 44px; font-size: 14px; }
+.cv-op select { min-height: 44px; background: var(--bg); color: var(--text); border: 1px solid var(--ctl); font: inherit; font-size: 16px; }
+.cv-op input[type="checkbox"] { width: 20px; height: 20px; }
+.cv-env { margin-left: auto; min-width: 80px; }
+/* microfone (ADR-020): ao lado da caixa de texto, ≥ 44 × 44; a gravar diz «Parar» a vermelho; inactivo com aria-disabled (o title explica) */
+.cv-cx { display: flex; align-items: flex-end; gap: 8px; }
+.cv-cx textarea { flex: 1 1 auto; min-width: 0; }
+#cv-mic { flex: none; min-width: 44px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 6px 10px; }
+#cv-mic span:empty { display: none; }
+#cv-mic.cv-rec { background: var(--bad-bg); border-color: var(--bad); font-weight: 600; }
+#cv-mic[aria-disabled="true"] { opacity: .6; cursor: not-allowed; }
+/* toque registado logo (< 100 ms): premido ao toque e, à espera da permissão, com a borda do destaque */
+#cv-mic { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+#cv-mic:active { transform: translateY(1px); background: var(--sunk); }
+#cv-mic.cv-pedir { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); background: var(--sunk); }
+/* a gravar: tempo, nível e «Cancelar»; a transcrever: só o texto (o estilo do «a trabalhar…») */
+.cv-voz { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin: 6px 0 0; font-size: 13px; }
+.cv-vtempo { min-width: 3ch; color: var(--text); }
+.cv-vn { flex: 0 1 80px; height: 8px; border: 1px solid var(--ctl); background: var(--sunk); overflow: hidden; }
+.cv-vn i { display: block; height: 100%; background: var(--ok); transform: scaleX(0); transform-origin: left; }
+.cv-voz .cv-b { margin-left: auto; }
+/* a gravar: ponto vermelho a pulsar; a pedir e a transcrever: barra indeterminada; texto ditado: destaque curto na caixa.
+   Com prefers-reduced-motion: nada pulsa nem corre, fica só a cor e o texto */
+.cv-vponto { flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--bad); }
+.cv-vgrava .cv-vm { color: var(--text); font-weight: 600; }
+.cv-vprog { flex: 1 1 24px; max-width: 80px; height: 4px; background: var(--sunk); overflow: hidden; position: relative; }
+.cv-vprog i { position: absolute; inset: 0 auto 0 0; width: 40%; background: var(--accent); }
+.cv-cx textarea.cv-ditado { border-color: var(--ok); box-shadow: inset 0 0 0 1px var(--ok); }
+.cv-fm { color: var(--text); } /* bloqueios e erros da voz destacam-se das dicas */
+@media (prefers-reduced-motion: reduce) { .cv-vprog { display: none; } } /* parada a 40 % lia-se como progresso encravado */
+@media (prefers-reduced-motion: no-preference) {
+  .cv-vponto { animation: cv-pulsa var(--dur-pontos) ease-in-out infinite; }
+  .cv-vprog i { animation: cv-corre var(--dur-pontos) ease-in-out infinite; }
+  .cv-vn i { transition: transform var(--dur-micro) linear; }
+  .cv-cx textarea { transition: box-shadow var(--dur-media), border-color var(--dur-media); }
+}
+@keyframes cv-pulsa { 50% { opacity: .35; transform: scale(.8); } }
+@keyframes cv-corre { from { transform: translateX(-100%); } to { transform: translateX(250%); } }
+.cv-dica { margin: 4px 0 0; font-size: 12px; }
+@media (pointer: coarse) { .cv-dica { display: none; } }
+
+/* markdown do assistente (md.js): blocos largos fazem scroll dentro do próprio bloco */
+.cv-md { overflow-wrap: anywhere; }
+.cv-md > :first-child { margin-top: 0; }
+.cv-md > :last-child { margin-bottom: 0; }
+.cv-md p { margin: 6px 0; white-space: pre-line; }
+.cv-md h1 { font-size: 15px; margin: 12px 0 4px; }
+.cv-md :is(h2, h3) { font-size: 14px; margin: 10px 0 4px; }
+.cv-md :is(ul, ol) { list-style: revert; max-height: none; overflow: visible; margin: 6px 0; padding-left: 22px; }
+.cv-md li { display: list-item; margin: 2px 0; }
+.cv-md i { width: auto; height: auto; margin: 0; }
+.cv-md code { font-family: var(--mono); font-size: 13px; padding: 0 3px; background: var(--sunk); }
+.cv-md pre { margin: 6px 0; padding: 6px 8px; overflow-x: auto; background: var(--bg); border: 1px solid var(--line); font: 13px/1.45 var(--mono);
+  white-space: pre; overflow-wrap: normal; }
+.cv-md pre code { padding: 0; background: none; }
+.cv-md table { display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; margin: 6px 0; font-size: 13px; overflow-wrap: normal; }
+.cv-md :is(th, td) { padding: 3px 8px; border: 1px solid var(--line); text-align: left; vertical-align: top; }
+.cv-md blockquote { margin: 6px 0; padding-left: 10px; border-left: 3px solid var(--ctl); color: var(--muted); }
+.cv-md hr { border: 0; border-top: 1px solid var(--line); margin: 10px 0; }
+.cv-md a { color: var(--accent); text-decoration: underline; }
+.md-c { color: var(--muted); font-style: italic; }
+.md-s { color: var(--ok); }
+
+/* Lite: nome e gasto do dia no cabeçalho; entrada (sem HTTPS / código); nota do ditado; avisos (tokens, voz externa) */
+.cp-quem { margin: 0; padding: 0 12px 6px; font-size: 13px; overflow-wrap: anywhere; }
+.cp-quem b { color: var(--text); }
+.cp-gasto:empty { display: none; }
+.cp-gasto::before { content: "· "; }
+.cp-ent { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 12px; border-top: 1px solid var(--line); overflow-wrap: anywhere; }
+.cp-ent-m { margin: 0 0 8px; }
+.cp-tls a { display: inline-flex; align-items: center; min-height: 44px; color: var(--accent); text-decoration: underline; }
+.cp-cod { display: flex; flex-direction: column; gap: 6px; }
+.cp-cod label { font-weight: 600; }
+.cp-cod input { min-height: 44px; padding: 6px 10px; background: var(--bg); color: var(--text); border: 1px solid var(--ctl); font: 16px var(--mono); letter-spacing: 1px; }
+.cp-cod .sub { margin: 0; font-size: 13px; }
+.cp-dita { margin: 6px 0 0; font-size: 13px; }
+.cp-dlg { width: min(460px, calc(100vw - 24px)); padding: 16px; background: var(--panel); color: var(--text); border: 1px solid var(--line); }
+.cp-dlg::backdrop { background: var(--backdrop); }
+.cp-dlg h2 { margin: 0 0 8px; font-size: 16px; }
+.cp-dlg p { margin: 0 0 12px; overflow-wrap: anywhere; }
+.cp-dlg .btns { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+.cp-dlg :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+/* Definições da Conversa (no fim da lista): nome do assistente (Guardar / Repor) e o que está em vigor */
+.cp-def { flex: none; padding: 0 0 12px; border-top: 1px solid var(--line); }
+.cp-def summary { min-height: 44px; padding: 10px 0; cursor: pointer; font-weight: 600; }
+.cp-nomef label { font-weight: 600; }
+.cp-nomel { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+#cp-nome-in { flex: 1 1 12ch; min-width: 0; min-height: 44px; padding: 4px 8px; background: var(--bg); color: var(--text); border: 1px solid var(--ctl); font: inherit; font-size: 16px; }
+.cp-defm { margin: 6px 0 0; }
+.cp-defm:empty { display: none; }
+.cp-defi { margin: 6px 0 0; padding-left: 20px; }

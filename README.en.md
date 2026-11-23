@@ -12,6 +12,9 @@ projects. You write a card on the Quadro (board), drag it to «Em curso» ("In p
 work: it creates a branch, writes the code, tests it and opens a pull request on GitHub for you to review. Everything
 runs on your own VPS or on your PC, with Docker Desktop.
 
+**The Conversa (0.6.0, VPS mode only):** your Claude Code on your phone, with an approval card for every action,
+mandatory HTTPS and optional voice. It consumes tokens from your account. Guide: [CONVERSA.en.md](CONVERSA.en.md).
+
 ## Installation
 
 There are two ways to install the Lite:
@@ -55,17 +58,17 @@ There are two ways to install the Lite:
    [Claude credentials](#claude-credentials)).
    Install `gh` following the [official instructions for Ubuntu](https://github.com/cli/cli/blob/trunk/docs/install_linux.md);
    for `gh auth login`, preferably use a [token limited to the Office repositories](#github-token).
-3. **Download and install the Office.** The URL is pinned to the version (`v0.5.2`), so you always read the same
+3. **Download and install the Office.** The URL is pinned to the version (`v0.6.0`), so you always read the same
    script that the book and this README describe.
    **Careful way** (recommended: you read the script before running it):
    ```bash
-   curl -fsSLO https://raw.githubusercontent.com/MozThinker/squad-office-lite/v0.5.2/get.sh
+   curl -fsSLO https://raw.githubusercontent.com/MozThinker/squad-office-lite/v0.6.0/get.sh
    less get.sh
-   bash get.sh --versao 0.5.2
+   bash get.sh --versao 0.6.0
    ```
    **One command:**
    ```bash
-   curl -fsSL https://raw.githubusercontent.com/MozThinker/squad-office-lite/v0.5.2/get.sh | bash -s -- --versao 0.5.2
+   curl -fsSL https://raw.githubusercontent.com/MozThinker/squad-office-lite/v0.6.0/get.sh | bash -s -- --versao 0.6.0
    ```
    > This command downloads a script from the internet and runs it on your server, as your user. Only do it with
    > URLs you trust, and preferably read it first. `get.sh` checks the package's sha256: that catches a corrupted
@@ -78,14 +81,14 @@ There are two ways to install the Lite:
    that is what the careful way is for. Options (after `bash -s --` in the one-line command, or after `bash get.sh`):
    - `--sem-perguntas` (no questions): the answers come from the environment (see the header of `install.sh`;
      `OFFICE_GIT_NOME` and `OFFICE_GIT_EMAIL` for the git identity; without them, and with no identity in git, it only
-     warns). E.g.: `curl -fsSL …/get.sh | bash -s -- --versao 0.5.2 --sem-perguntas`;
-   - `--versao X.Y.Z`: installs that version instead of the latest (`… | bash -s -- --versao 0.5.2`);
+     warns). E.g.: `curl -fsSL …/get.sh | bash -s -- --versao 0.6.0 --sem-perguntas`;
+   - `--versao X.Y.Z`: installs that version instead of the latest (`… | bash -s -- --versao 0.6.0`);
    - any other options are passed on to `install.sh` (e.g. `--proxy traefik --rede <rede>`).
 
    **Optional origin check.** The sha256 only confirms that the package is not corrupted. To confirm that it was
    built by the public repository (GitHub attestation; needs `gh` logged in), download the package manually and run:
    ```bash
-   gh attestation verify squad-office-lite-0.5.2.tar.gz --repo MozThinker/squad-office-lite
+   gh attestation verify squad-office-lite-0.6.0.tar.gz --repo MozThinker/squad-office-lite
    ```
    Only versions published with an attestation pass. A failure here is a reason not to install and to report it (see
    [`SECURITY.en.md`](SECURITY.en.md)).
@@ -126,13 +129,15 @@ needs no restart. If you changed the `raizes`, run `./install.sh` again (it does
 
 The same `get.sh`, without `--versao` (it installs the latest published version; read the warning in “Installation”):
 ```bash
-curl -fsSL https://raw.githubusercontent.com/MozThinker/squad-office-lite/v0.5.2/get.sh | bash
+curl -fsSL https://raw.githubusercontent.com/MozThinker/squad-office-lite/v0.6.0/get.sh | bash
 ```
 The installed version moves to `~/squad-office-lite.anterior-<data>` and the new one goes to `~/squad-office-lite`.
 `~/office-lite` (config, `.env`, credentials and data) is not touched by `get.sh`; `install.sh` only asks again for
 what is missing (without `claude.env`, for example, it asks for the credentials again: choose 2 or 3 if you use the
 token or the `claude` login). To roll back: `… | bash -s -- --versao <versão anterior>`. Delete the `.anterior-*`
-folders when you no longer need them. See what changed in `CHANGELOG.md` (in Portuguese). If you installed with
+folders when you no longer need them. See what changed in `CHANGELOG.md` (in Portuguese). If the Conversa is already installed (0.6.0), run
+`sudo ./instalar-conversa.sh` again from a new Lite copy owned by root only, checked against `SHA256SUMS` (not from the
+`get.sh` folder, which the installer refuses): see «Updating» in [CONVERSA.en.md](CONVERSA.en.md). If you installed with
 `git`, after `git pull` run `./install.sh` again (0.1.3 mounts a new folder in the container; without it the Office
 says «O runner ainda não deu sinal», "The runner has not checked in yet").
 
@@ -447,17 +452,17 @@ your PC. You don't install `claude`, `gh`, `git` or Python: they come in the run
    ```bash
    mkdir -p ~/office && cd ~/office
    ```
-3. **Download the `compose.yaml`** for version 0.5.2. The Office and runner images are pinned by digest: what runs is
+3. **Download the `compose.yaml`** for version 0.6.0. The Office and runner images are pinned by digest: what runs is
    always what was published with this version.
    In PowerShell (it's `curl.exe`, not `curl`):
    ```powershell
-   curl.exe -fsSLO https://github.com/MozThinker/squad-office-lite/releases/download/v0.5.2/compose.yaml
+   curl.exe -fsSLO https://github.com/MozThinker/squad-office-lite/releases/download/v0.6.0/compose.yaml
    ```
    In the Terminal:
    ```bash
-   curl -fsSLO https://github.com/MozThinker/squad-office-lite/releases/download/v0.5.2/compose.yaml
+   curl -fsSLO https://github.com/MozThinker/squad-office-lite/releases/download/v0.6.0/compose.yaml
    ```
-   You can also download it with the browser, from the `v0.5.2` release page, and save it in this folder as
+   You can also download it with the browser, from the `v0.6.0` release page, and save it in this folder as
    `compose.yaml`. To change the port or the projects folder, see
    [Changing the port, the address or the projects folder](#changing-the-port-the-address-or-the-projects-folder) (optional).
    **On Linux**, create the `.env` with your user and group now, before step 4, so that the project files belong to
@@ -537,7 +542,7 @@ Without a `.env` the defaults apply. To change them, download the release's `env
 `compose.yaml` folder, remove the `#` from the lines you want to change and run `docker compose up -d` (on Linux you
 already have a `.env` from step 3: don't replace it, add the lines to it):
 ```powershell
-curl.exe -fsSLo .env https://github.com/MozThinker/squad-office-lite/releases/download/v0.5.2/env.example
+curl.exe -fsSLo .env https://github.com/MozThinker/squad-office-lite/releases/download/v0.6.0/env.example
 ```
 (in the Terminal, `curl` instead of `curl.exe`). The attachment is called `env.example` because GitHub renames
 attachments whose names start with a dot.
@@ -820,6 +825,7 @@ messages never repeat the refused value.
 | `colunas` | labels for `ideias`, `a-fazer`, `em-curso`, `a-espera`, `feito` (fixed keys and order), 1–30; without `a-espera`: «À espera de <`utilizador.nome`>» (an empty value doesn't validate) |
 | `biblioteca[]` | 0–12 sources: `id`, `rotulo`, `pasta` (relative to `<dados>/biblioteca`), `media` (`false`), optional `tipo` (`relatorios`, `estudos`, `planos`, `conhecimento`, `textos`); optional `arquivo_dias`, 7–3650: the runner archives on its own, at most once a day, the source's items unchanged for more than N days (ADR-012; without the key it never archives anything without a request; see [Biblioteca archive](#biblioteca-archive-adr-011)) |
 | `runner` | `tecto_diario` 1–100 (10), `paralelo` 1–4 (1), `rotacao_dias` 1–365 (14), `permission_mode` `dontAsk` (default), `auto`, `acceptEdits`, `default` or `bypassPermissions`; `settings` (`""`, absolute path to a JSON file merged with the default denials); `ferramentas` 0–100 rules for `--allowedTools` (`Nome` or `Nome(regra)`, no spaces or commas outside the parentheses, no leading `-`; default: the list in [Runner](#runner)); optional `max_usd`, cost cap in USD per `claude` start (`--max-budget-usd`), a number > 0 and ≤ 1000 with up to 2 decimals (`5`, `2.5`); optional `modelo`, `--model` (an alias such as `sonnet` or a full name; letters, digits, `.`, `_`, `-`, up to 64, no leading `-`). Without either: no flag (`claude` uses its own defaults) |
+| `conversa` | optional, the Conversa (ADR-023): `ativa` (`false`; with `false` nothing changes), `pasta` absolute path without `..`, up to 200 characters (required with `ativa: true`; the one from `instalar-conversa.sh`, e.g. `/srv/office-conversa`), `site` lowercase DNS name without a port, up to 253 characters (the Conversa's own address, e.g. `conversa.exemplo.com`, with DNS pointing at the server; required with `ativa: true` and `tls: caddy`; must differ from `--dominio`), `tls` `externo` (default: TLS terminates outside the `fabrica`, in your own tunnel or proxy in front of the guardian's socket; see «Tunnel» in CONVERSA.en.md) or `caddy` (only on purpose: the Office's Caddy serves the `site` over HTTPS; requires `install.sh --dominio`, not available with Traefik; TLS terminates in the `fabrica`'s Caddy and whoever controls it can serve JS on the Conversa origin). Permissions and voice are `instalar-conversa.sh` options and the assistant name is changed in the Conversa itself, never in this file. With `ativa: true` the compose mounts only `<pasta>/publico` in `office` and, with `tls: caddy`, `<pasta>/sock` and `Caddyfile.conversa` in `caddy` (all read-only), and refuses to be generated without those folders |
 
 Launchable = each `worktree` squad × each project.
 
@@ -1511,7 +1517,10 @@ Set by the generated compose: `OFFICE_CONFIG` (default `/config/office.yaml`), `
 `ARQUIVO_FILA_DIR` (default `/data/arquivo-fila`), `RUNNER_ESTADO_DIR` (default `/data/runner-estado`), `AGENTES_DIR`, `AGENTES_RASCUNHOS_DIR` and `AGENTES_FILA_DIR`
 (defaults `/data/agentes`, `/data/agentes-rascunhos` and `/data/agentes-fila`), `ACCOES_SAUDE_DIR` (default
 `/data/accoes-saude`, read-only; the server reads only `saude.json`), `PUSH_CONTACTO` (optional) and
-`BIBLIOTECA_MINI_DIR` (default `/tmp/miniaturas`); `PORT` (8080). In Docker mode also `OFFICE_MODO=docker`
+`BIBLIOTECA_MINI_DIR` (default `/tmp/miniaturas`); `PORT` (8080). Only with `conversa.ativa: true` (ADR-023):
+`CONVERSA_PUBLICO_DIR` (default `/data/conversa-publico`, read-only; the server reads only the guardian's
+`publico.json`, up to 4 KB, and treats the Conversa as stopped if it is missing, invalid or older than 120 s). The
+`tools/verificar_compose_conversa.py` refuses a compose with `CONVERSA_TLS_TESTE` (only for the guardian's tests). In Docker mode also `OFFICE_MODO=docker`
 (`GET /api/config` gains `"modo": "docker"`, otherwise `"vps"`; «Primeiros passos» shows the
 `docker compose …` commands) and `OFFICE_PROXY_SEGREDO_FILE=/proxy/segredo` instead of `OFFICE_PROXY_SEGREDO`: the
 secret comes from that file (written by `configurar`) and, while it's missing, the Office answers 503

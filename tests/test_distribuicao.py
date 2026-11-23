@@ -80,7 +80,8 @@ class CIActiva(unittest.TestCase):   # CA-A3.1, CA-A3.2, CA-A2.4: as propostas d
         p = CI.read_text(encoding="utf-8")
         self.assertIn("\n\n  fumo-docker:\n", p)
         job = p[p.index("\n\n  fumo-docker:\n") + 1:]
-        self.assertEqual(re.findall(r"(?m)^  ([\w-]+):$", job), ["fumo-docker", "fumo-rootless"])
+        self.assertEqual(re.findall(r"(?m)^  ([\w-]+):$", job), ["fumo-docker", "fumo-rootless", "e2e-conversa",
+                                                              "fumo-conversa"])   # 23/11: a Conversa (PR #37)
         rootless = job[job.index("\n  fumo-rootless:\n") + 1:]
         job = job[:job.index("\n  fumo-rootless:\n") + 1]
         self.assertIn("    needs: checks\n", rootless)

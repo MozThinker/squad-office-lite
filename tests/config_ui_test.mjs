@@ -70,7 +70,7 @@ test("config ausente: omissões sensatas (marca genérica, uma sala Dev)", () =>
 
 test("AC-a5/a7: título, cabeçalho, fuso e aviso vêm da config; a config é lida antes do 1.º estado", () => {
   assert.match(HTML, /document\.title = \(demo \? "\[demo\] " : ""\) \+ \(n > 0 \? `\(\$\{n\}\) ` : ""\) \+ cfg\.marca;/);   // v3: «[demo] » no modo demonstração
-  assert.match(HTML, /\$\("header h1"\)\.textContent = "▣ " \+ cfg\.marca;/);
+  assert.match(HTML, /\$\("header h1 span"\)\.textContent = cfg\.marca;/);
   assert.match(HTML, /<p id="aviso" role="status" hidden><\/p>/);
   assert.match(HTML, /fetch\("api\/config", \{ cache: "no-store" \}\)/);
   assert.match(HTML, /catch \{ setTimeout\(lerCfg, 5000\); \}/);

@@ -1,0 +1,24 @@
+# Squad Office Lite: ponte da Conversa (ADR-023). Unit de UTILIZADOR do dono (corre com o login do `claude` dele,
+# nunca como root nem como o utilizador do Office). Instalada pelo `sudo ./instalar-conversa.sh`, que copia este
+# ficheiro para ~dono/.config/systemd/user/ e escreve o ambiente da instalação no drop-in
+# office-conversa.service.d/instalacao.conf (CONVERSA_CLAUDE, CONVERSA_CWD, CONVERSA_VERIFICADOS_DIR, CONVERSAS_DIR,
+# CONVERSA_ESTADO_DIR, CONVERSA_PERMISSOES, CONVERSA_LANCADORES, CONVERSA_FUSO, CONVERSA_VOZ e, com a voz local,
+# CONVERSA_STT_PYTHON e CONVERSA_STT_MODELOS).
+# Nunca ANTHROPIC_* aqui: o motor corre com um ambiente por lista branca e usa as credenciais do próprio dono.
+[Unit]
+Description=Squad Office Lite: ponte da Conversa (Claude Code do dono)
+After=default.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 -I /opt/office-conversa/chat_host/ponte.py
+Restart=always
+RestartSec=5
+# a ponte mata os seus motores no SIGTERM (killpg); as squads lançadas (setsid) não morrem com a unit
+KillMode=process
+# voz externa: CONVERSA_STT_URL, CONVERSA_STT_MODELO e CONVERSA_STT_CHAVE (0600, só do dono; a chave só chega ao
+# trabalhador da voz, nunca ao motor nem ao Office)
+EnvironmentFile=-%h/.config/office-conversa/voz.env
+
+[Install]
+WantedBy=default.target

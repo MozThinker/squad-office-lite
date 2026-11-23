@@ -118,7 +118,7 @@ export function writePrefs(storage, { on, vol }) {
 
 // ---- motor: um só agendador com lookahead sobre o relógio do ctx ("A Tale of Two Clocks").
 // ctx injectado: AudioContext da página (criado no gesto, por causa do iOS) ou OfflineAudioContext (gravação + renderUntil)
-export function createEngine({ ctx, destination } = {}) {
+export function createEngine({ ctx, destination, manter } = {}) { // manter(): ctx partilhado (som.js)
   ctx ||= new (globalThis.AudioContext || globalThis.webkitAudioContext)();
   const C = MUSIC_CONFIG, offline = typeof ctx.startRendering === "function", now = () => ctx.currentTime;
   const master = ctx.createGain(), lim = ctx.createDynamicsCompressor();
@@ -196,7 +196,7 @@ export function createEngine({ ctx, destination } = {}) {
     }
     for (const p of players) if (p.until <= now()) { p.lp.disconnect(); p.out.disconnect(); }
     players = players.filter((p) => p.until > now());
-    if (stopping !== null && now() >= stopping) { stopping = null; disarm(); ctx.suspend(); }
+    if (stopping !== null && now() >= stopping) { stopping = null; disarm(); manter?.() || ctx.suspend(); }
   }
   const arm = () => { if (!offline && !timer) timer = setInterval(() => schedule(now() + C.scheduler.lookahead), C.scheduler.intervalMs); };
   const disarm = () => { clearInterval(timer); timer = null; };

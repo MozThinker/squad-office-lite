@@ -261,6 +261,9 @@ class Ficheiros(unittest.TestCase):
         self.assertIn("reverse_proxy office:8080", c)
         # o cabeçalho só é posto depois do basic_auth e substitui o do cliente (header_up = set)
         self.assertRegex(c, r"reverse_proxy office:8080 \{\s+header_up X-Office-Segredo \{\$OFFICE_PROXY_SEGREDO\}\s+\}")
+        # ADR-023 (guardião): o Office já não lê o X-Forwarded-Proto; a Conversa entra pelo import, na última linha
+        self.assertNotIn("X-Forwarded-Proto", c[:c.index("import ")])
+        self.assertTrue(c.endswith("\nimport /etc/caddy/conversa/*.caddy\n"))
 
     def test_caddyfile_cabecalhos(self):  # CA-A2.1, CA-A2.2
         c = (ROOT / "Caddyfile").read_text()

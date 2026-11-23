@@ -35,7 +35,7 @@ test("AC-a7: nomes genéricos (manifest estático, <title>, <h1> e iOS dizem «S
   assert.equal(m.short_name, "Squad Office");
   assert.match(HTML, /<title>Squad Office<\/title>/);
   assert.match(HTML, /<meta name="apple-mobile-web-app-title" content="Squad Office">/);
-  assert.match(HTML, /<h1>▣ Squad Office<\/h1>/);
+  assert.match(HTML, /<h1><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-office"\/><\/svg><span>Squad Office<\/span><\/h1>/);
 });
 
 test("AC-22: apple-touch-icon 180 no <head> e metas do iOS", () => {

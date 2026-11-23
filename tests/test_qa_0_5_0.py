@@ -82,7 +82,8 @@ class Config(unittest.TestCase):
         self.assertIn("\nversao: 1\n", "\n" + ex)
         for f in ("officecfg.py", "office.example.yaml"):
             self.assertNotIn("accoes", ler(f).lower(), f)
-            self.assertNotIn("conversa", ler(f).lower(), f)
+        # 0.6.0 (ADR-023): só o bloco opcional `conversa` da Conversa, comentado no exemplo e ainda com versao: 1
+        self.assertNotIn("\nconversa:", "\n" + ex)
 
 
 _PATCH_CI = ROOT / "docs" / "propostas-ci" / "ci-accoes.patch"

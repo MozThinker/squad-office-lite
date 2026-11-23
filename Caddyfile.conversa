@@ -1,0 +1,16 @@
+# Squad Office Lite: a Conversa (ADR-023, revisão do guardião), noutra origem à frente do guardião do host.
+# Montado pelo compose em /etc/caddy/conversa/conversa.caddy só com conversa.ativa: true e tls: caddy (opção
+# explícita; a omissão é externo, um túnel do dono): aqui o TLS termina no Caddy da fabrica e quem a controle pode
+# servir JS na origem da Conversa. Entra pelo import do Caddyfile. CONVERSA_SITE = conversa.site (TLS automático). O basic auth do Office repete-se aqui e o
+# Authorization nunca chega ao guardião; os cabeçalhos de segurança (CSP incluída) são do guardião.
+{$CONVERSA_SITE} {
+	header Strict-Transport-Security "max-age=31536000"
+	basic_auth {
+		{$OFFICE_AUTH_USER} {$OFFICE_AUTH_HASH}
+	}
+	reverse_proxy unix//run/office-conversa/guardiao.sock {
+		header_up -Authorization
+		header_up -X-Office-Segredo
+		header_up X-Forwarded-Proto {scheme}
+	}
+}

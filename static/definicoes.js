@@ -4,6 +4,8 @@
 // v3 (CA-1, 2, 39): por cima, música (ligar e volume), tema e notificações neste browser, que saíram do cabeçalho, e «Dia e noite»;
 // o estado e as chaves do localStorage («music», «musicVol», «tema», «notify») continuam no index.html (api.musica, api.tema, api.notif).
 
+import { lerPrefs } from "./som.js";
+
 export const EVENTOS = [["concluida", "Tarefa concluída"], ["falhada", "Tarefa falhada ou parada"], ["pr", "PR aberto"],
   ["alertas", "Alertas (tarefas paradas)"], ["aprovacoes", "Aprovações novas"], ["fases", "Progresso por fase"]];
 // fases das tarefas Dev goal (progresso.FASES) e o nome visível
@@ -81,11 +83,17 @@ function html() {
   return `<div class="rd-top"><h2 id="def-h">Definições</h2><button type="button" data-a="fechar">fechar</button></div><div class="def-b">
 <section aria-labelledby="def-mh"><h3 id="def-mh">Música</h3><label class="def-c"><input type="checkbox" id="def-mus"> Música de fundo</label>
 <label class="def-r" id="def-vr">Volume <input type="range" id="def-vol" min="0" max="100" step="10"></label></section>
+<section id="def-sv" aria-labelledby="def-sh"><h3 id="def-sh">Som e vibração</h3>${caixa("som", "Sons", ' data-v="som"')}
+<label class="def-r">Volume dos sons <select id="def-svol" data-v="somVol"><option>baixo</option><option value="medio">médio</option><option>alto</option></select></label>
+${globalThis.navigator?.vibrate ? caixa("vibrar", "Vibrar", ' data-v="vibrar"') : ""}<button type="button" class="def-bt" data-a="exemplo">Ouvir exemplo</button>
+<p class="sub">Curtos e discretos: tarefa concluída, erro e aprovação nova. Nunca com o separador escondido.</p></section>
 <section aria-labelledby="def-th"><h3 id="def-th">Tema</h3><select id="def-tema" aria-label="Tema">${TEMAS.map(([v, r]) => `<option value="${v}">${r}</option>`).join("")}</select></section>
 <section aria-labelledby="def-ah"><h3 id="def-ah">Squads e agentes</h3><p class="sub">Agentes, skills e modelos de cada squad, squads a partir de um modelo e rotinas.</p>
 <button type="button" class="def-bt" data-a="agentes">Abrir «Squads e agentes»</button></section>
 <section aria-labelledby="def-eh"><h3 id="def-eh">Escritório</h3>${AMB.map(([k, r]) => caixa(k, r, ` data-v="${k}"`)).join("")}
 <p class="sub">Desligado: sempre de dia. A hora é a do fuso da configuração.</p></section>
+<section aria-labelledby="def-anh"><h3 id="def-anh">Movimento</h3><label class="def-c"><input type="checkbox" id="def-anim"> Animações</label>
+<p class="sub">Com o sistema em «reduzir movimento» nada anima, mesmo ligado.</p></section>
 <section aria-labelledby="def-nh"><h3 id="def-nh">Notificações neste browser</h3>
 <label class="def-c"><input type="checkbox" id="def-nb"> Avisar quando um goal termina ou há um alerta (com o separador escondido)</label>
 <p class="def-msg" id="def-nm" role="status" aria-live="polite"></p></section>
@@ -241,10 +249,14 @@ function sincPrefs() {
   const m = A.musica, n = A.notif?.estado();
   if (m) { $("#def-mus").checked = m.on(); $("#def-vol").value = m.volume(); $("#def-vr").hidden = !m.on(); }
   if (A.tema) $("#def-tema").value = A.tema.valor();
+  $("#def-anim").checked = ler("animacoes");
+  const p = lerPrefs({ getItem: (k) => localStorage.getItem(k) }), v = $('[data-v="vibrar"]'); // som.js: Vibrar e o exemplo só com Sons ligado
+  $('[data-v="som"]').checked = p.on; $("#def-svol").value = p.vol; $('[data-a="exemplo"]').disabled = !p.on;
+  if (v) { v.checked = p.vib; v.disabled = !p.on; }
   if (n) { $("#def-nb").checked = n === "on"; $("#def-nb").disabled = !["on", "off"].includes(n); msg("#def-nm", MSG_NB[n] ?? ""); }
 }
 
-// api = { esc, cfg (GET api/config), swReady, isIOS, getState(), repintar(), musica, tema, notif, agentes() (abre «Squads e agentes») }
+// api = { esc, cfg (GET api/config), swReady, isIOS, getState(), repintar(), musica, tema, notif, agentes() (abre «Squads e agentes»), tocar }
 export async function abrir(api) {
   A = api;
   SQ = squadsDe(api.cfg);
@@ -259,15 +271,18 @@ export async function abrir(api) {
     $("#def-f").addEventListener("submit", guardar);
     $("#def-f").elements["e-fases"].addEventListener("change", ligarFases);
     dlg.addEventListener("click", (e) => { const a = e.target.closest("[data-a]")?.dataset.a; a === "fechar" ? dlg.close() : a === "teste" ? teste(e.target.closest("[data-a]"))
-      : a === "agentes" && (dlg.close(), A.agentes?.()); });
+      : a === "exemplo" ? A.tocar?.("concluido") : a === "agentes" && (dlg.close(), A.agentes?.()); });
     dlg.addEventListener("change", (e) => { const k = e.target.dataset.v; if (!k) return;
-      try { localStorage.setItem(k, e.target.checked ? "1" : "0"); } catch {}
-      A.repintar(); });
+      try { localStorage.setItem(k, e.target.tagName === "SELECT" ? e.target.value : e.target.checked ? "1" : "0"); } catch {}
+      A.repintar(); sincPrefs(); });
     dlg.addEventListener("close", () => document.getElementById("def-b")?.focus());
     // alternar() no próprio clique: o AudioContext e o pedido de permissão têm de nascer no gesto (iOS)
     $("#def-mus").addEventListener("change", () => A.musica?.alternar().then(sincPrefs, sincPrefs));
     $("#def-vol").addEventListener("input", (e) => A.musica?.setVolume(+e.target.value));
     $("#def-tema").addEventListener("change", (e) => A.tema?.aplicar(e.target.value));
+    $("#def-anim").addEventListener("change", (e) => {
+      // «Animações»: localStorage.animacoes "0" ⇔ <html data-anim="off"> (o <head> do index.html lê-o antes do 1.º paint)
+      const on = e.target.checked; document.documentElement.dataset.anim = on ? "on" : "off"; try { localStorage.setItem("animacoes", on ? "1" : "0"); } catch {} });
     $("#def-nb").addEventListener("change", () => { const p = A.notif?.alternar(); sincPrefs(); p?.then(sincPrefs, sincPrefs); });
   }
   sincPrefs();

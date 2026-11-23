@@ -1,7 +1,10 @@
 // v3 (CA-24…27, 35, 45, 46): separadores «Tarefa | Agentes | Entregas» no #info, lista de agentes de todas as squads com
 // pesquisa «/» e «Seguir», «4/7», linhas, modelo e ramo por agente e o contador das entregas por ler. Carregado no arranque
 // (import() no index.html); entregas.js só no 1.º clique em «Entregas». As exportadas no topo são puras (testes em node).
+// Faixa «Agora» a ≤ 900 px (agora.js, fase 2 de UX): quem está a trabalhar na tarefa à vista, com a peça de estado.
 import { contadores, terminalTexto } from "./topo.js";
+import { MAX, cabecalho, linhas, reconciliar } from "./agora.js";
+import { ligar } from "./estado.js";
 
 // ---- puras
 
@@ -95,12 +98,12 @@ export const limpaLidas = (lidas) => [...lidas].slice(-MAX_LIDAS);
 
 // ---- DOM
 
-let A = null, st = null, sep = "tarefa", seg = null, q = "", entP = null, lidas = new Set();
+let A = null, st = null, sep = "tarefa", seg = null, q = "", entP = null, lidas = new Set(), aberto = false, chaveA, ultT;
 const $ = (s) => document.querySelector(s);
 const SEPS = [["tarefa", "Tarefa", "info-t"], ["agentes", "Agentes", "info-a"], ["entregas", "Entregas", "info-e"]];
 const ls = (k, v) => { try { return v === undefined ? localStorage.getItem(k) : localStorage.setItem(k, v); } catch { return null; } };
 const setHtml = (el, h) => { if (el._h !== h) { el.innerHTML = h; el._h = h; } };
-const reduz = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
+const reduz = () => matchMedia("(prefers-reduced-motion: reduce)").matches || document.documentElement.dataset.anim === "off";
 const salas = () => Object.keys(A.ROOMS());
 
 // api = { esc, ROOMS(), cfg(), rl(role, sala), label(role, sala), sq, roleOf, leadOf, nowOf, agoraH, fmtT, fmtDur, demo(), replay(),
@@ -114,6 +117,13 @@ export function iniciar(api) {
   info.insertAdjacentHTML("beforeend", `<div id="info-a" role="tabpanel" aria-labelledby="sep-agentes" hidden>`
     + `<input id="ag-q" type="search" aria-keyshortcuts="/" aria-label="Pesquisar agentes por nome, papel, projecto ou acção" placeholder="pesquisar agente ( / )" autocomplete="off">`
     + `<div id="ag-l"></div></div><div id="info-e" role="tabpanel" aria-labelledby="sep-entregas" hidden></div>`);
+  $("#office").insertAdjacentHTML("afterend", `<section id="agora" aria-labelledby="agora-h"><h2 id="agora-h"></h2><ul id="agora-l" aria-live="polite"></ul>`
+    + `<button type="button" id="agora-mais"></button></section>`);
+  // faixa: tocar numa linha segue esse agente (nada no replay); «+N» mostra as escondidas
+  $("#agora-l").addEventListener("click", (e) => { const b = e.target.closest("[data-role]");
+    if (b && !A.replay?.()) { A.seguir(A.sala(), A.tarefa(), b.dataset.role); separador("tarefa");
+      $("#who")?.scrollIntoView({ block: "nearest", behavior: reduz() ? "auto" : "smooth" }); } });
+  $("#agora-mais").addEventListener("click", () => pintarAgora(ultT, aberto = !aberto));
   s.addEventListener("click", (e) => { const b = e.target.closest("[role=tab]"); if (b) separador(b.dataset.s); });
   s.addEventListener("keydown", (e) => {
     const i = SEPS.findIndex(([k]) => k === sep), d = { ArrowLeft: -1, ArrowRight: 1 }[e.key], n = e.key === "Home" ? 0 : e.key === "End" ? 2 : d ? (i + d + 3) % 3 : -1;
@@ -138,12 +148,29 @@ export function iniciar(api) {
   separador("tarefa"); // arranca sempre em «Tarefa» (CA-24)
 }
 
-export function render(s) {
+export function render(s, t) {
   if (!A || !s) return;
   st = s;
   rotulos();
   if (sep === "agentes") pintarAgentes();
+  pintarAgora(t);
   anel();
+}
+
+// «+N» fecha ao mudar de sala/tarefa; terminal sem minutos (não se anuncia o tempo); o poll não rouba o foco
+function pintarAgora(t) {
+  const R = A.ROOMS()[A.sala()], L = t && A.leadOf(t), a = Date.now(), b = $("#agora-mais");
+  if (chaveA !== (chaveA = A.sala() + t?.id)) aberto = false;
+  setHtml($("#agora-h"), cabecalho(R?.name, t, a));
+  const ul = $("#agora-l"), f = document.activeElement?.closest?.("#agora-l li")?.dataset.k, ls = linhas(ultT = t, { esc, papel: (r) => A.rl(r, R),
+    roleOf: A.roleOf, lider: L?.lead, coord: L?.coord, acao: (x, r = acaoDe(x, a)) => r.tt ? { ...r, acao: "💻 terminal" } : r });
+  aberto &&= ls.length > MAX;
+  const n = reconciliar(ul, ls, aberto ? 1 / 0 : MAX);
+  f && !ul.contains(document.activeElement) && ul.querySelector(`li[data-k="${CSS.escape(f)}"] button`)?.focus({ preventScroll: true });
+  b.hidden = !(n || aberto);
+  b.textContent = aberto ? "mostrar menos" : "+" + n;
+  b.setAttribute("aria-expanded", aberto);
+  ligar();
 }
 export const separadorActual = () => sep;
 

@@ -215,6 +215,9 @@ const dets = (k, resumo, ...filhos) => h("details", { class: "ag-mudar", open: a
 const erroDe = (fk) => (errs[fk] ? h("p", { class: "ag-erro", role: "alert" }, errs[fk]) : null);
 const botao = (t, fn, at = {}) => h("button", { type: "button", class: "ag-btn", ...at, onclick: fn }, t);
 const p = (t, cls = "sub") => h("p", { class: cls }, t);
+// peça de estado (estado.js/estado.css, fase 1 de UX) feita com h(), como o resto do módulo (sem dependências)
+const aCarregar = () => h("p", { class: "sub" }, h("span", { class: "estado", "data-estado": "a-processar", "aria-live": "polite" },
+  h("span", { class: "estado-x" }, "a carregar os agentes"), h("span", { class: "estado-t", "aria-hidden": "true" })));
 const mostraMsg = (al) => (msgs.has(al) ? h("p", { class: "ag-erro", role: "alert" }, msgs.get(al)) : null);
 const escrita = () => D?.escrita === true;
 
@@ -280,7 +283,7 @@ function render() {
 }
 
 function conteudo() {
-  if (!D) return [carga ? h("div", { class: "ag-erro", role: "alert" }, carga, " ", botao("Tentar de novo", carregar, { "data-k": "repetir" })) : p("A carregar…")];
+  if (!D) return [carga ? h("div", { class: "ag-erro", role: "alert" }, carga, " ", botao("Tentar de novo", carregar, { "data-k": "repetir" })) : aCarregar()];
   return [
     carga ? h("p", { class: "ag-erro", role: "alert" }, carga) : null,
     escrita() ? null : h("p", { class: "ag-aviso" }, "Só leitura: ", MSG.fila),

@@ -1,0 +1,26 @@
+/* movimento (fase 1 de UX, auditoria §7.2): tokens; a 0 com reduced-motion ou data-anim=off */
+:root { --dur-micro: 100ms; --dur-curta: 200ms; --dur-media: 300ms; --dur-longa: 500ms; --dur-pulso: 1600ms; --dur-pontos: 1200ms;
+  --ease-padrao: cubic-bezier(.2, 0, 0, 1); --ease-entrar: cubic-bezier(.05, .7, .1, 1); --ease-sair: cubic-bezier(.3, 0, .8, .15); }
+@media (prefers-reduced-motion: reduce) { :root {--dur-micro:0s;--dur-curta:0s;--dur-media:0s;--dur-longa:0s;--dur-pulso:0s;--dur-pontos:0s} }
+:root[data-anim="off"] {--dur-micro:0s;--dur-curta:0s;--dur-media:0s;--dur-longa:0s;--dur-pulso:0s;--dur-pontos:0s}
+/* CA-32: com reduced-motion ou «Animações» desligado (data-anim=off, posto pelo <head>) nada anima nem transita */
+@media (prefers-reduced-motion: reduce) { *, ::before, ::after { animation: none !important; transition: none !important; } }
+[data-anim="off"] *, [data-anim="off"] ::before, [data-anim="off"] ::after { animation: none !important; transition: none !important; }
+/* estado.js; só pulsam os que acabam em r */
+.estado{display:inline-flex;gap:.4em;white-space:nowrap}
+.estado::before{content:var(--es,"●");color:var(--ec,var(--ok));animation:est-pulso var(--dur-pulso) infinite alternate}
+.estado:not([data-estado$=r])::before{animation:none}
+[data-estado=a-processar]::before{animation:est-pulso var(--dur-pontos) steps(3) infinite alternate}
+[data-estado=a-processar]{--es:"◐";--ec:var(--accent)}
+[data-estado=a-espera]{--es:"◆";--ec:var(--warn)}
+[data-estado=concluido]{--es:"✓"}
+[data-estado=erro]{--es:"✕";--ec:var(--bad)}
+[data-estado=desligado]{--es:"○";--ec:var(--muted)}
+.estado-t{color:var(--muted);font-variant-numeric:tabular-nums}
+.estado-t:empty{display:none}
+@keyframes est-pulso{to{opacity:.45}}
+@keyframes est-entra{from{scale:.8}}
+@keyframes est-abana{20%,60%{translate:-4px}40%,80%{translate:4px}}
+.est-novo,.ok-novo{animation:est-entra var(--dur-curta) var(--ease-entrar)}
+.est-novo[data-estado=erro]{animation-name:est-abana}
+.ok-novo{transform-box:fill-box;transform-origin:center}

@@ -62,6 +62,12 @@ AGENTES_FILA_DIR: 6.ª pasta em que o serviço escreve. Quem escreve agentes, ra
 
 Saúde do serviço accoes (ADR-022): /api/state leva "accoes" (opcional) lido só de ACCOES_SAUDE_DIR/saude.json (só
 leitura, nome fixo, sem listar a pasta; inválido ou ausente ⇒ sem a chave).
+
+Conversa (ADR-023, revisão do guardião): o Office não está no caminho dela. A UI e a API vivem no guardião do host,
+noutra origem (`conversa.site`); aqui /api/conversa/* dá sempre 404. Só com `conversa.ativa: true`: /api/config leva
+"conversa" {ativa, url} e /api/state leva "conversa" {ativa, nome, pendentes, dia_usd}, lido só de
+CONVERSA_PUBLICO_DIR/publico.json (só leitura, não sensível; velho, inválido ou ausente ⇒ ativa false). Desligada, as
+duas rotas ficam byte a byte como antes.
 """
 from __future__ import annotations
 
@@ -253,6 +259,13 @@ ACCOES_PARADO_S = 600
 ACCOES_AVISOS_MAX = 10
 ACCOES_AVISO_MAX = 200
 ACCOES_CONTROLO = re.compile(r"[\x00-\x1f\x7f-\x9f]")
+# Conversa (ADR-023, revisão do guardião): só o publico.json do guardião (só leitura, nome fixo, sem listar a pasta)
+CONVERSA_PUBLICO_DIR = Path(os.environ.get("CONVERSA_PUBLICO_DIR") or "/data/conversa-publico")
+CONVERSA_PUBLICO_MAX = 4096
+CONVERSA_PUBLICO_CHAVES = ("v", "em", "nome", "ativa", "pendentes", "dia_usd")
+CONVERSA_VELHO_S = 120
+CONVERSA_NOME_MAX = 40
+CONVERSA_PENDENTES_MAX = 10000
 
 
 def _ler_segredo(caminho: str) -> str:
@@ -314,7 +327,11 @@ def configurar(cfg: dict, aviso: str | None = None) -> None:
     FORMATO = {s["id"]: s["formato"] for s in cfg["squads"]}
     LOCAL_TZ = _load_tz(cfg["fuso"])
     modo = "docker" if os.environ.get("OFFICE_MODO") == "docker" else "vps"
-    CONFIG_BODY = json.dumps({**officecfg.publico(cfg, aviso), "modo": modo}, ensure_ascii=False).encode()
+    pub = {**officecfg.publico(cfg, aviso), "modo": modo}
+    conv = cfg.get("conversa") or {}
+    if conv.get("ativa"):   # desligada: byte a byte como antes (CA-1); sem site (tls: externo) o botão explica
+        pub["conversa"] = {"ativa": True, "url": f"https://{conv['site']}/" if conv.get("site") else None}
+    CONFIG_BODY = json.dumps(pub, ensure_ascii=False).encode()
     contacto = cfg["utilizador"]["contacto"]
     PUSH.tz = LOCAL_TZ
     PUSH.contacto = os.environ.get("PUSH_CONTACTO") or (f"mailto:{contacto}" if contacto else "mailto:office@localhost")
@@ -330,8 +347,13 @@ def configurar(cfg: dict, aviso: str | None = None) -> None:
 
 
 def _num(v) -> float | int | None:
-    # número finito ≥ 0 (bool não conta)
-    if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) or v < 0:
+    # número finito ≥ 0 (bool não conta; um inteiro que não cabe num float também não: o isfinite dava OverflowError)
+    if isinstance(v, bool) or not isinstance(v, (int, float)):
+        return None
+    try:
+        if not math.isfinite(v) or v < 0:
+            return None
+    except OverflowError:
         return None
     return v
 
@@ -1309,6 +1331,8 @@ def build_state(now: float | None = None) -> dict:
     acc = accoes_saude(now)
     if acc is not None:
         estado["accoes"] = acc
+    if (CFG.get("conversa") or {}).get("ativa"):   # desligada: sem a chave (CA-1)
+        estado["conversa"] = conversa_publico(now)
     return estado
 
 
@@ -1382,6 +1406,50 @@ def accoes_saude(now: float) -> dict | None:
     except (OverflowError, OSError, ValueError):
         return None
     return {"avisos": [] if parado else list(avisos), "em": d["em"], "parado": parado, "desde": desde}
+
+
+def conversa_publico(now: float) -> dict:
+    # <CONVERSA_PUBLICO_DIR>/publico.json do guardião: ficheiro regular (sem symlink), <= 4 KB, chaves exactas, v == 1,
+    # nome 1–40 sem controlo, ativa bool, pendentes 0–10000, dia_usd >= 0 ou null, em ISO com fuso. Em falta ou
+    # inválido ⇒ ativa false sem nome; com o `em` a mais de 120 s (nos dois sentidos) ⇒ ativa false, só com o nome
+    desligada = {"ativa": False, "nome": None, "pendentes": 0, "dia_usd": None}
+    try:
+        fd = os.open(CONVERSA_PUBLICO_DIR / "publico.json", os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC)
+    except OSError:
+        return desligada
+    try:
+        if not stat.S_ISREG(os.fstat(fd).st_mode):
+            return desligada
+        raw = os.read(fd, CONVERSA_PUBLICO_MAX + 1)
+    except OSError:
+        return desligada
+    finally:
+        os.close(fd)
+    try:
+        d = json.loads(raw.decode("utf-8")) if len(raw) <= CONVERSA_PUBLICO_MAX else None
+    except ValueError:
+        return desligada
+    if not isinstance(d, dict) or sorted(d) != sorted(CONVERSA_PUBLICO_CHAVES) or type(d["v"]) is not int \
+            or d["v"] != 1 or not isinstance(d["ativa"], bool):
+        return desligada
+    nome, pend = d["nome"], d["pendentes"]
+    if not isinstance(nome, str) or not 1 <= len(nome) <= CONVERSA_NOME_MAX or not nome.strip() \
+            or ACCOES_CONTROLO.search(nome):
+        return desligada
+    if type(pend) is not int or not 0 <= pend <= CONVERSA_PENDENTES_MAX:
+        return desligada
+    if d["dia_usd"] is not None and _num(d["dia_usd"]) is None:
+        return desligada
+    try:
+        em = datetime.fromisoformat(d["em"])
+        if em.tzinfo is None:
+            return desligada
+        velho = abs(now - em.timestamp()) > CONVERSA_VELHO_S
+    except (TypeError, ValueError, OverflowError, OSError):
+        return desligada
+    if velho:
+        return {**desligada, "nome": nome}
+    return {"ativa": d["ativa"], "nome": nome, "pendentes": pend, "dia_usd": d["dia_usd"]}
 
 
 def _log_delivery(path: Path) -> str | None:
@@ -1662,6 +1730,9 @@ class Handler(SimpleHTTPRequestHandler):
 
     def do_GET(self):
         path, _, query = self.path.partition("?")
+        if path.startswith("/api/conversa/"):   # ADR-023: a Conversa vive no guardião (outra origem), nunca aqui
+            self._err(404, "não encontrado")
+            return
         if path == "/api/biblioteca" or path.startswith("/api/biblioteca/"):
             biblioteca.handle(self, "GET", path, query, BIBLIOTECA, BIBLIOTECA_ARQ, ARQUIVO_FILA)
             return

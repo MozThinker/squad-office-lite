@@ -513,6 +513,9 @@ class LayoutTest(unittest.TestCase):
         modos = {str(p): m for m, p in ps}
         self.assertEqual(modos["/d/push"], "0700")
         self.assertEqual({m for c, m in modos.items() if c != "/d/push"}, {"0750"})
+        # ADR-023 (guardião): a Conversa não tem pastas nos dados (as preferências são do guardião)
+        cfg["conversa"] = {**cfg["conversa"], "ativa": True, "pasta": "/srv/office-conversa"}
+        self.assertEqual(officecfg.pastas(cfg), ps)
 
     def test_runner_estado(self):  # CA-D15.2: pasta própria em dados, fora de <dados>/runner, montada só de leitura
         cfg = self.cfg(dados="/d", projectos="/p", claude_projects="/c")

@@ -15,7 +15,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo, available_timezones
 
 EXEMPLO = Path(__file__).resolve().parent / "office.example.yaml"
-VERSAO = "0.5.2"   # versão do produto: única fonte (runner: estado.json e doctor); = 1.ª «## Lite X.Y.Z» do CHANGELOG
+VERSAO = "0.6.0"   # versão do produto: única fonte (runner: estado.json e doctor); = 1.ª «## Lite X.Y.Z» do CHANGELOG
 
 SUB = {"tasks": "tasks", "inbox": "tasks/inbox", "quadro": "quadro", "quadro_lancar": "quadro-lancar",
        "decisoes": "decisoes", "decisoes_fila": "decisoes-fila", "push": "push", "biblioteca": "biblioteca",
@@ -241,6 +241,14 @@ _MAX_USD = re.compile(r"(?:0|[1-9]\d{0,3})(?:\.\d{1,2})?")
 _MODELO = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}")
 CLAUDE_ENV = "claude.env"   # credenciais do claude, ao lado do office.yaml; nunca montado no contentor
 _TIPOS_BIB = ("relatorios", "estudos", "planos", "conhecimento", "textos")
+# Conversa (ADR-023, revisão do guardião): bloco opcional; os mounts só entram no compose com `ativa: true`. As
+# permissões e a voz são do instalar-conversa.sh (root) e o nome muda-se na Conversa, nunca neste ficheiro (que a
+# fabrica escreve). `tls`: externo por omissão (o TLS termina fora da fabrica, ex. num túnel do dono ligado ao
+# socket); caddy só por opção (o TLS termina no Caddy da fabrica: quem a controle pode servir JS na origem da Conversa)
+CONVERSA_TLS = ("externo", "caddy")
+# nome DNS em minúsculas, sem porta (a regex ANFITRIAO do chat.py sem o `:porta`)
+_SITE = re.compile(r"(?=.{1,253}$)[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*")
+_PASTA_ABS = re.compile(r"/[A-Za-z0-9._/-]{0,199}")
 
 
 def _c(campo, k):
@@ -428,6 +436,29 @@ def _max_usd(v):
     return v
 
 
+def _conversa(v):
+    _mapa_de(v, "conversa", ("ativa", "pasta", "site", "tls"))
+    ativa = v.get("ativa", False)
+    if not isinstance(ativa, bool):
+        raise ConfigErro("conversa.ativa: tem de ser true ou false")
+    pasta = v.get("pasta")
+    if pasta is not None and (not isinstance(pasta, str) or not _PASTA_ABS.fullmatch(pasta)
+                              or any(p in (".", "..") for p in pasta.split("/")) or "//" in pasta
+                              or pasta.rstrip("/") == ""):
+        raise ConfigErro("conversa.pasta: caminho absoluto sem .. (ex.: /srv/office-conversa)")
+    if ativa and pasta is None:
+        raise ConfigErro("conversa.pasta: obrigatório com ativa: true")
+    site = v.get("site")
+    if site is not None:
+        _padrao(site, "conversa.site", _SITE, "nome DNS em minúsculas, sem porta, ex.: conversa.exemplo.com")
+    tls = v.get("tls", "externo")
+    if tls not in CONVERSA_TLS:
+        raise ConfigErro("conversa.tls: tem de ser externo ou caddy")
+    if ativa and tls == "caddy" and site is None:
+        raise ConfigErro("conversa.site: obrigatório com ativa: true e tls: caddy")
+    return {"ativa": ativa, "pasta": None if pasta is None else pasta.rstrip("/"), "site": site, "tls": tls}
+
+
 def _invisiveis(v, campo):
     # Cf/Co/Cs (bidi, privados, surrogates) em chaves e textos, salvo o ZWJ (emojis compostos); a mensagem só leva o
     # caminho do campo, nunca o valor
@@ -450,7 +481,7 @@ def validar(d):
     """Esquema §3.3 -> config normalizada (omissões preenchidas). ConfigErro com o campo, nunca com o valor."""
     _invisiveis(d, "")
     _mapa_de(d, "", ("versao", "marca", "utilizador", "fuso", "raizes", "squads", "projectos", "colunas",
-                     "biblioteca", "runner"), ("squads", "projectos"))
+                     "biblioteca", "runner", "conversa"), ("squads", "projectos"))
     if d.get("versao", 1) != 1 or type(d.get("versao", 1)) is not int:
         raise ConfigErro("versao: só a versão 1 é suportada")
     u = _mapa_de(d.get("utilizador", {}), "utilizador", ("nome", "contacto"))
@@ -473,7 +504,8 @@ def validar(d):
             "utilizador": {"nome": nome, "contacto": contacto}, "fuso": fuso,
             "raizes": _raizes(d.get("raizes", {})), "squads": _squads(d["squads"]),
             "projectos": _projectos(d["projectos"]), "colunas": colunas,
-            "biblioteca": _biblioteca(d.get("biblioteca", [])), "runner": _runner(d.get("runner", {}))}
+            "biblioteca": _biblioteca(d.get("biblioteca", [])), "runner": _runner(d.get("runner", {})),
+            "conversa": _conversa(d.get("conversa", {}))}
 
 
 # ---------------------------------------------------------------- carregar, layout, API pública

@@ -59,3 +59,17 @@ runner:
   #   - Write
   #   - Bash(git *)
   #   - Bash(npm test *)
+# Conversa (o teu Claude Code no telemóvel; ver CONVERSA.md): desligada por omissão. Abre noutro endereço (o `site`),
+# servida pelo guardião do host; o Office só mostra um botão para lá. Depois de correr `sudo ./instalar-conversa.sh`
+# (que define as permissões e a voz; o nome do assistente muda-se na própria Conversa), liga-a aqui e volta a correr
+# o install.sh.
+# conversa:
+#   ativa: false
+#   # pasta criada pelo instalar-conversa.sh (obrigatória com ativa: true)
+#   pasta: /srv/office-conversa
+#   # endereço próprio da Conversa (o do botão no Office; de preferência noutro domínio registável que não o do Office)
+#   site: conversa.exemplo.com
+#   # externo (omissão): o TLS termina fora da fabrica, num túnel teu ligado ao socket do guardião (ver CONVERSA.md);
+#   # caddy: o Caddy do Office serve o site (precisa do install.sh com --dominio, noutro nome), mas aí o TLS termina
+#   # na fabrica e quem a controle pode servir JS na origem da Conversa
+#   tls: externo

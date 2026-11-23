@@ -1,0 +1,40 @@
+# Squad Office Lite: guardião da Conversa (ADR-023, revisão S2/S5). Unit de SISTEMA, utilizador `office-conversa`
+# (sem casa nem shell): serve a origem da Conversa num socket Unix atrás do proxy, tem a chave HMAC e escreve os
+# pedidos aceites em <pasta>/verificados/. Instalada pelo `sudo ./instalar-conversa.sh`, que escreve o ambiente da
+# instalação no drop-in office-conversa-guardiao.service.d/instalacao.conf (CONVERSA_PASTA, CONVERSA_ESCUTA,
+# CONVERSA_PERMISSOES, CONVERSA_VOZ, CONVERSA_VOZ_IDIOMA, CONVERSA_FUSO, ReadWritePaths e, com outro Python, o
+# ExecStart). Nunca CONVERSA_TLS_TESTE aqui (só testes).
+[Unit]
+Description=Squad Office Lite: guardião da Conversa (origem própria, chave HMAC)
+After=network.target
+
+[Service]
+Type=simple
+User=office-conversa
+Group=office-conversa
+ExecStart=/usr/bin/python3 -I /opt/office-conversa/chat_host/guardiao.py
+StateDirectory=office-conversa
+StateDirectoryMode=0700
+UMask=0077
+Restart=always
+RestartSec=5
+# 78 = SHA256SUMS que não bate, web/ com ficheiros a mais ou configuração inválida: não reinicia
+RestartPreventExitStatus=78
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_UNIX
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+RestrictNamespaces=yes
+LockPersonality=yes
+SystemCallFilter=@system-service
+MemoryMax=256M
+
+[Install]
+WantedBy=multi-user.target

@@ -36,6 +36,12 @@ SEGREDO = "${OFFICE_PROXY_SEGREDO:?falta no .env, corre o install.sh}"
 # ADR-022: o office lê só o saude.json do serviço accoes nesta pasta (só de leitura, nos dois modos); nunca monta o
 # accoes-entrada (mensagens dos clientes e vistas)
 ACCOES_SAUDE_OFFICE = "/data/accoes-saude"
+# ADR-023 (revisão do guardião), só com conversa.ativa: true: o office monta só o publico/ (ro); com tls: externo (a
+# omissão) o TLS termina fora da fabrica e o caddy não monta nada da Conversa; só com tls: caddy (opção explícita: o
+# TLS termina na fabrica) monta o sock/ (ro) e o bloco da Conversa (Caddyfile.conversa, entra pelo import do Caddyfile)
+CONVERSA_PUBLICO = "/data/conversa-publico"
+CONVERSA_SOCK = "/run/office-conversa"
+CONVERSA_SNIPPET = "/etc/caddy/conversa/conversa.caddy"
 _DOMINIO = re.compile(r"^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$")
 
 
@@ -54,8 +60,29 @@ def _accoes_host(cfg):   # pastas do serviço accoes no VPS que o office nunca m
             ("estado do accoes", Path("/srv/office-accoes")))
 
 
+def _conversa(cfg, proxy, dominio):
+    """(pasta do publico/ ou None, pasta do sock/ ou None) da Conversa; (None, None) desligada. As pastas têm de existir
+    (criadas pelo instalar-conversa.sh com os donos certos): sem elas o Docker criava-as como root."""
+    conv = cfg.get("conversa") or {}
+    if not conv.get("ativa"):
+        return None, None
+    caddy = conv.get("tls", "externo") == "caddy"   # S2: só por opção explícita
+    if caddy and proxy == "traefik":
+        raise officecfg.ConfigErro("conversa.tls: com o Traefik só externo (o socket do guardião fica fora do Traefik)")
+    if caddy and not dominio:
+        raise officecfg.ConfigErro("conversa.site: a Conversa só abre com HTTPS; corre o install.sh com --dominio")
+    if caddy and conv["site"] == dominio:
+        raise officecfg.ConfigErro("conversa.site: tem de ser outro nome que não o --dominio do Office")
+    pasta = Path(conv["pasta"])
+    for sub in ("publico", "sock") if caddy else ("publico",):
+        if not (pasta / sub).is_dir():
+            raise officecfg.ConfigErro(f"conversa.pasta: falta {sub}/; corre primeiro o sudo ./instalar-conversa.sh")
+    return pasta / "publico", (pasta / "sock" if caddy else None)
+
+
 def gerar(cfg, config, proxy="caddy", rede=None, certresolver="letsencrypt", dominio=None, repo=REPO):
     contacto = cfg["utilizador"]["contacto"]
+    publico, sock = _conversa(cfg, proxy, dominio)
     push = f"https://{dominio}" if dominio else (f"mailto:{contacto}" if contacto else None)
     out = ["# Gerado por runner/gerar_compose.py a partir do office.yaml; não editar à mão (corre de novo o install.sh).",
            "name: office-lite", "services:", "  office:", f"    build: {_q(repo)}", "    restart: unless-stopped",
@@ -67,6 +94,8 @@ def gerar(cfg, config, proxy="caddy", rede=None, certresolver="letsencrypt", dom
            "      OFFICE_CONFIG: /config/office.yaml", f"      OFFICE_PROXY_SEGREDO: {SEGREDO}"]
     out += [f"      {var}: {destino}" for _, destino, _, var in officecfg.MOUNTS]
     out.append(f"      ACCOES_SAUDE_DIR: {ACCOES_SAUDE_OFFICE}")
+    if publico:
+        out.append(f"      CONVERSA_PUBLICO_DIR: {CONVERSA_PUBLICO}")
     if push:
         out.append(f"      PUSH_CONTACTO: {_q(push)}")
     out.append("    volumes:")
@@ -85,6 +114,11 @@ def gerar(cfg, config, proxy="caddy", rede=None, certresolver="letsencrypt", dom
         raise officecfg.ConfigErro(f"raizes: a pasta montada em {ACCOES_SAUDE_OFFICE} contém o "
                                    f"{officecfg.CLAUDE_ENV}")
     out += _bind(saude, ACCOES_SAUDE_OFFICE, True)
+    if publico:
+        if publico == cred or publico in cred.parents:
+            raise officecfg.ConfigErro(f"conversa: a pasta montada em {CONVERSA_PUBLICO} contém o "
+                                       f"{officecfg.CLAUDE_ENV}")
+        out += _bind(publico, CONVERSA_PUBLICO, True)
     out += _bind(Path(os.path.abspath(config)), "/config/office.yaml", True)
     out += ["    tmpfs:", "      - /tmp/miniaturas:size=128m,uid=${OFFICE_UID},gid=${OFFICE_GID},mode=0700"]
     if proxy == "traefik":
@@ -112,8 +146,13 @@ def gerar(cfg, config, proxy="caddy", rede=None, certresolver="letsencrypt", dom
         if dominio:
             out.append('      - "443:443"')
         out += ["    environment:", "      OFFICE_SITE: ${OFFICE_SITE}", "      OFFICE_AUTH_USER: ${OFFICE_AUTH_USER}",
-                "      OFFICE_AUTH_HASH: ${OFFICE_AUTH_HASH}", f"      OFFICE_PROXY_SEGREDO: {SEGREDO}", "    volumes:"]
+                "      OFFICE_AUTH_HASH: ${OFFICE_AUTH_HASH}", f"      OFFICE_PROXY_SEGREDO: {SEGREDO}"]
+        if sock:
+            out.append(f"      CONVERSA_SITE: {cfg['conversa']['site']}")
+        out.append("    volumes:")
         out += _bind(Path(repo) / "Caddyfile", "/etc/caddy/Caddyfile", True)
+        if sock:
+            out += _bind(sock, CONVERSA_SOCK, True) + _bind(Path(repo) / "Caddyfile.conversa", CONVERSA_SNIPPET, True)
         out += ["      - caddy_data:/data", "      - caddy_config:/config",
                 "volumes:", "  caddy_data:", "  caddy_config:"]
     return "\n".join(out) + "\n"

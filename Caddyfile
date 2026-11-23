@@ -18,3 +18,7 @@
 		header_up X-Office-Segredo {$OFFICE_PROXY_SEGREDO}
 	}
 }
+# ADR-023: o bloco da Conversa (Caddyfile.conversa, outro site à frente do guardião), montado pelo compose só com
+# conversa.ativa: true e tls: caddy (opção explícita; com externo, a omissão, o glob fica vazio); sem ele o Caddy só
+# avisa e nada muda
+import /etc/caddy/conversa/*.caddy

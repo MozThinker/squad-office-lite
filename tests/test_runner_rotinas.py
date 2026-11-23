@@ -310,6 +310,8 @@ def test_squad_de_modelo_sem_ensaio_do_lead(ctx):
     a.decidir(cfg, MD)
     passar(ctx, NOW + 60)
     assert len(tarefas(cfg)) == 1
+    hb = officecfg.caminho(cfg, "tasks") / tarefas(cfg)[0] / "heartbeat"
+    os.utime(hb, (NOW + 60, NOW + 60))   # heartbeat no NOW simulado, não no relógio real (senão «a correr» para sempre)
     a.agente(cfg, "dev", "plantao", raw + "mudou\n")   # outro lead: precisa de novo ensaio
     linhas = passar(ctx, NOW + a.DIA + 60)
     assert len(tarefas(cfg)) == 1 and "rotina dev/r1 não lançada: ensaio do lead por refazer" in linhas

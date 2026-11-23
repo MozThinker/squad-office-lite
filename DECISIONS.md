@@ -710,3 +710,154 @@ uid (`chown` ao arrancar, `0755`). Se o `saude.json` não se puder gravar, os av
 passagem e o alerta não aparece. Tirar o serviço deixa o último `saude.json`, e o dashboard mostra «Serviço de ações
 parado» até se apagar (ver `ACCOES.md`). **Reverter:** tirar o mount e a variável do office no `gerar_compose.py` (o
 servidor sem ficheiro não mostra nada); o serviço pode continuar a gravar o ficheiro.
+
+## ADR-023 · Conversa no Lite: ponte do dono no host, pedidos assinados no browser e TLS obrigatório (2026-11-23)
+**Contexto:** porte da Conversa do Office (o seu ADR-019/020) para a 0.6.0, antes da venda do livro. No Office tudo
+corre com o mesmo utilizador; no Lite há dois: a `fabrica` (Office, runner e squads com `Bash`) e o `dono` (com `sudo`
+e o Claude Code dele). Dar a um browser o `claude` do `dono` não pode dar esse poder à `fabrica`.
+
+**Decisão:**
+- **Dois lados, sem porta.** O contentor (`chat.py`, rotas `/api/conversa/*`) só escreve pedidos numa fila e lê as
+  conversas; nunca tem credenciais, nunca chama modelos nem a rede (teste por AST). A ponte (`chat_host/`) corre como
+  unit de utilizador do `dono` (`office-conversa.service`, `Restart=always`, `flock`, *linger*), instalada por
+  `sudo ./instalar-conversa.sh` (padrão do ADR-021): pasta da Conversa (omissão `/srv/office-conversa`; `fila/` da
+  `fabrica` com ACL do `dono`, `conversas/` do `dono` com leitura da `fabrica`), cópia em `/opt/office-conversa`,
+  estado, sessões do `claude`, auditoria e chaves em `~dono/.local/state/office-conversa/` (`0700`, nunca montado).
+  O motor é o `claude` do `dono` com as credenciais que ele já tem; o Lite não recolhe, guarda nem passa credenciais.
+- **Pedidos assinados de ponta a ponta.** O instalador gera um código da Conversa (24 caracteres base32, mostrado uma
+  vez) e dois sais. O browser deriva dele, por PBKDF2-SHA256 (600 000 iterações), um verificador (com `sal_office`)
+  e uma chave HMAC não extraível em IndexedDB (com `sal_ponte`). O Office só conhece `sha256(verificador)`; a ponte só
+  a chave. Cada pedido leva `pid`, `t` e `assinatura` (HMAC-SHA256 do JSON canónico); a ponte recusa sem assinatura
+  válida, com mais de 5 min de desvio ou `pid` repetido. Uma squad que escreva na fila não aprova nem envia nada.
+- **Entrada:** sem TLS a Conversa não liga (`X-Forwarded-Proto: https` posto pelo proxy, só aceite com o segredo do
+  proxy); sessão própria (cookie `HttpOnly; Secure; SameSite=Strict`, 12 h, em memória), CSRF, `Origin`, 30 POST/min
+  e bloqueio global de 15 min após 5 códigos errados (o Caddy rootless não vê o IP). O Cloudflare Access à frente é
+  opcional e só documentado. Modo Docker (PC): Caddy só HTTP, logo sem Conversa.
+- **Permissões:** `cartao` por omissão (cada `Bash`, `Write`, `Edit`, `MultiEdit`, `NotebookEdit`, `WebFetch` pede um
+  clique, com nonce de uso único de 10 min); `espelho` (`--permission-mode auto`) só se a unit **e** o `office.yaml`
+  o pedirem, e os lançadores do kit continuam a pedir cartão (regras `ask`). Só o clique num cartão gera uma
+  resposta; texto escrito ou ditado nunca aprova.
+- **Desligada por omissão** (`conversa.ativa`, bloco opcional do `office.yaml`, `versao: 1`); nome do assistente nas
+  Definições (omissão «Assistente»); gasto do dia visível, sem limite; aviso de consumo de tokens aceite uma vez.
+- **Voz** (`conversa.voz`): `desligada` (omissão), `local` (faster-whisper num venv do `dono`, só pelo
+  `instalar-conversa.sh --voz local`, com 2 048 MB livres) ou `externa` (endpoint compatível com
+  `/v1/audio/transcriptions`, URL e chave do leitor em `~dono/.config/office-conversa/voz.env`; chama a ponte; aviso
+  por fornecedor aceite com um clique). O texto vai só para a caixa; o áudio apaga-se; a auditoria não guarda o texto.
+
+**Alternativas recusadas:** a ponte no contentor (credenciais do dono na `fabrica`); só sessão + nonce como no Office
+(a `fabrica` lê o nonce em `conversas/` e forja a aprovação na fila); reaproveitar o basic auth (o browser e o Office
+conhecem-no); WebAuthn (cripto assimétrica fora da stdlib na ponte); o JWT do Access obrigatório (nem todo o leitor
+usa Cloudflare).
+
+**Risco residual:** quem controle a `fabrica` pode trocar o JS servido pelo Office e apanhar o código quando o dono o
+escrever, lê o texto das conversas (mascarado) e pode atrasar ou apagar pedidos. Telemóvel com o relógio desviado
+mais de 5 min vê os pedidos recusados (o Office responde 400). Da revisão de segurança ficam também:
+- **S2 (desenho):** como a `fabrica` serve o JS da Conversa (p. ex. uma squad com Bash no Docker rootless), um JS
+  trocado pode usar a chave guardada no browser para assinar aprovações sem o dono voltar a escrever o código. As
+  mitigações possíveis (servir a UI da Conversa a partir do lado do `dono`, não persistir a chave no browser, assinar
+  o sha256 do cartão mostrado) ficam por decidir pelo dono do projecto.
+- **S4:** as regras `ask` dos lançadores casam por texto e são melhor esforço (contornáveis por ofuscação, p. ex.
+  `l\ancar` ou um script), sobretudo em `espelho`, onde são o único cartão.
+- **S8:** na voz externa o tecto do servidor é o dos 5 MB; os 2 min só se conferem no browser.
+
+**Consequências:** um serviço e um utilizador a mais no host (*linger*, ACL); a cópia em `/opt/office-conversa` tem
+de acompanhar cada actualização (voltar a correr o instalador); o contrato fica em `docs/conversa-contrato.md`
+(`CONTRATO = 1`, com as diferenças do Office). **Reverter:** `conversa.ativa: false` (todas as rotas dão 404) e
+`systemctl --user disable --now office-conversa` como `dono`; a auditoria e as conversas ficam como registo.
+
+### Revisão: guardião (S2/S5) (2026-11-23)
+**Porquê:** o dono do projecto recusou fundir com dois achados da revisão abertos. S2: a `fabrica` servia o JS da
+Conversa e esse JS usava a chave HMAC guardada no IndexedDB da origem do Office (um JS trocado assinava aprovações
+sem o dono). S5: a ponte e o motor (`claude`) correm os dois como `dono`, por isso o motor lia
+`~/.local/state/office-conversa/chave` (`cat`, `base64`, `xxd`) e a chave saía nos eventos. Tapar o hex não chega.
+
+**Decisão (substitui, no texto acima, «Dois lados, sem porta», a entrada pelo Office e a chave na ponte):**
+- **Guardião, um terceiro processo com uid próprio.** Utilizador de sistema `office-conversa` (sem casa nem shell,
+  como o `office-accoes` do ADR-021), unit de **sistema** `office-conversa-guardiao.service` endurecida
+  (`ProtectSystem=strict`, `ProtectHome=yes`, `NoNewPrivileges`, `RestrictAddressFamilies=AF_UNIX`,
+  `ReadWritePaths` mínimos). O código está em `/opt/office-conversa` (do root) com um `SHA256SUMS` escrito pelo
+  instalador. O guardião confere-o no arranque (código e UI), carrega a UI para memória e recusa arrancar se algo não
+  bater. O estado fica em `/var/lib/office-conversa` (`0700`, só ele): chave HMAC, `entrada.json` (sais e
+  `sha256(verificador)`), `pids`, preferências. As sessões continuam só em memória. Python ≥ 3.11 (o mesmo da ponte;
+  reutiliza o `chat.py` e a máscara do `reader.py`). Nem o `dono`, nem o motor, nem a `fabrica` lêem a chave.
+- **A Conversa passa a ter origem própria, servida pelo guardião.** `conversa.site` no `office.yaml` (ex.:
+  `conversa.<domínio>`), um 2.º bloco do Caddy (`Caddyfile.conversa`, importado só com a Conversa ligada) com
+  `reverse_proxy` para o socket Unix do guardião (`<pasta>/sock/guardiao.sock`, `0660`, grupo do Office: só o Caddy
+  lá chega). O guardião serve a UI com CSP estrita (`script-src 'self'`, sem inline, `frame-ancestors 'none'`) e
+  todas as rotas `/api/conversa/*`: sessão por código (cookie `__Host-`, `HttpOnly; Secure; SameSite=Strict`), CSRF,
+  `Origin` igual a `https://<Host>`, 30 POST/min, bloqueio de 15 min ao fim de 5 falhas, limites do áudio. Como a
+  origem é outra, o IndexedDB com a `CryptoKey` deixa de estar ao alcance do JS do Office. O guardião continua a
+  exigir a assinatura HMAC, o `t` e o `pid` novo em cada pedido. A `fabrica` chega ao socket, mas um pedido sem a
+  chave é recusado (403) e não fica escrito em lado nenhum.
+- **O guardião verifica e a ponte executa.** Os pedidos aceites vão para `<pasta>/verificados/`, onde só o guardião
+  escreve e o `dono` lê por ACL. A ponte deixa de ter a chave e de conferir HMAC: lê essa pasta, regista o que tratou
+  (`vistos`, na pulsação) e o guardião apaga o que foi visto, o áudio também. Nem a `fabrica` nem o motor conseguem pôr
+  lá uma aprovação. A ponte continua a escrever `conversas/`; quem lê agora é o guardião (ACL), já não a `fabrica`.
+- **O Office sai do caminho.** Sem rotas `/api/conversa/*` (404), sem fila nem mounts da Conversa, sem `chat.py` na
+  imagem. Fica um botão no cabeçalho com o nome e o contador, lidos de `<pasta>/publico/publico.json` (nome,
+  pendentes, `dia_usd`, `ativa`, `em`; escrito pelo guardião, montado só de leitura). O botão abre a origem da Conversa
+  em navegação de topo (`noopener`), nunca num iframe. Sem `conversa.site`, explica como pôr o domínio.
+- **Configuração de segurança fora do `office.yaml`** (a `fabrica` escreve-o). `permissoes`, `voz`, `voz_idioma`
+  passam a ser opções do `instalar-conversa.sh`, gravadas nas units pelo root; o nome muda na própria Conversa. O
+  bloco `conversa` fica com `ativa`, `pasta`, `site` e `tls` (`externo`, omissão desde a ronda 3, ou `caddy`). Nada
+  disto chegou a ser publicado: `versao: 1` mantém-se. `CONTRATO` da ponte passa a 2 (no guardião e na ponte; o
+  `chat.py` fica só com a forma dos pedidos, dos eventos e do `meta.json`).
+- **Instalador:** cria o utilizador e as pastas, migra (apaga a chave antiga do estado do `dono`, o `entrada.json` em
+  `conversas/` e a ACL da `fabrica` em `conversas/`; gera um código novo) e recusa correr a partir de uma cópia do
+  Lite em que o utilizador do Office ou o `dono` consigam escrever (ronda 3, G1). O código copiado para `/opt` não
+  pode vir da `fabrica` nem do `dono`.
+
+**Ronda 3 (G1–G5 e S2 por omissão):**
+- **G1/G5, cópia e pastas só do root.** O instalador recusa um `$REPO` com um ficheiro que o Office ou o `dono`
+  escrevam ou que seja deles (`runuser -u … -- find "$REPO" \( -writable -o -user … \)`) e cada pasta acima dele até
+  `/` que um deles escreva ou tenha; o mesmo para a `--pasta` e as acima dela. O caminho documentado: como root,
+  conferir o `SHA256SUMS` da release (como o `get.sh`) e extraí-la, ex. para `/usr/local/src/office-lite-<versão>`,
+  e correr o instalador daí. O `dono` sai da lista de confiança porque o motor corre como ele.
+- **G2, código de uso único.** O código deixa de ser equivalente à chave (PBKDF2 com sal público, apanhável por
+  phishing ou por um gestor de palavras-passe): só regista **um** browser, que gera a sua própria chave aleatória e
+  **não extraível** (o guardião guarda-a em `chaves.json`); o código morre aí. As entradas seguintes são por
+  desafio–resposta. Outro browser: `sudo ./instalar-conversa.sh --novo-codigo`; `--revogar` apaga os browsers
+  registados (`/var/lib/office-conversa/chaves.json`) e gera um código novo. Recomenda-se para a Conversa um domínio
+  registável diferente do do Office. O G3 (código no terminal do dono, ex. num `tmux`) deixa de importar: o código
+  morre no 1.º uso.
+- **G4, grupo do socket.** Com `--grupo-socket`, o instalador recusa se o utilizador do Office pertencer a esse grupo;
+  com `tls: externo` o grupo é obrigatório.
+- **S2 por omissão: `conversa.tls: externo`** (no `officecfg`, no instalador e no gerador do compose). O TLS da
+  Conversa termina fora da `fabrica`, num túnel do dono (ex. Cloudflare Tunnel, `service:
+  unix:<pasta>/sock/guardiao.sock`, a correr num grupo sem o Office); o Caddy do Office não monta nada da Conversa.
+  `caddy` fica como opção explícita, com o aviso no instalador e na documentação: «o TLS termina no Caddy da
+  fabrica; quem a controle pode servir JS na origem da Conversa».
+
+**Alternativas recusadas:**
+- WebAuthn: precisa de verificar ECDSA no servidor, o que obriga a criptografia escrita à mão ou a uma dependência
+  fora da stdlib. O RP ID continuaria a ser uma origem servida por alguém.
+- Chave só na memória da ponte, com o mesmo uid do motor: frágil (`ptrace_scope`, core dumps, `/proc`), obriga a
+  voltar a escrever o código em cada reinício e não resolve o S2.
+- Guardião a correr como o `dono`: o motor lia a chave (S5 continuava aberto).
+- UI da Conversa num iframe dentro do Office: a página de fora é da `fabrica`, que podia sobrepor ou induzir o clique.
+  Por isso `frame-ancestors 'none'`.
+- Manter o Office como proxy e assinar o `sha256` do cartão mostrado: o JS continuaria a vir da `fabrica`, que mostra
+  uma coisa e assina outra.
+- Origem por porta (`:8443`) em vez de subdomínio: mais uma porta na firewall, e continua a ser o mesmo *site* para
+  os cookies. O subdomínio pede só uma linha de DNS.
+- TLS terminado pelo próprio guardião: precisaria de ACME feito à mão. Recusado.
+
+**Risco residual (depois da ronda 3):** com `tls: externo` (a omissão), o S2 e o S5 ficam fechados: a `fabrica`
+não termina o TLS da Conversa nem chega ao socket, e nem ela nem o motor lêem as chaves dos browsers. Resta:
+- **Negação de serviço do bloqueio:** quem chegue ao endereço da Conversa pode encher o bloqueio de 15 min (5 falhas
+  seguidas). Não pode adivinhar o código (≈ 120 bits, de uso único) nem a chave de um browser.
+- **S4:** as regras `ask` dos lançadores são melhor esforço (casam pelo texto). E o motor corre como `dono`, por isso
+  escreve o que o `dono` escreve (`conversas/`, estado da ponte): em `cartao` só depois de um clique num `Bash`, em
+  `espelho` sem clique.
+- **S8:** na voz externa o servidor só impõe os 5 MB, não os 2 minutos.
+- **Confiança na cópia do root:** a instalação confia uma vez na release que o root extraiu e conferiu com o
+  `SHA256SUMS`.
+- Só com `tls: caddy` (opção explícita): o Caddy, que termina o TLS, corre no Docker rootless da `fabrica`; quem a
+  controle pode reconfigurá-lo e servir JS seu na origem da Conversa, ou ler o tráfego (o S2 volta a ficar aberto).
+
+**Consequências:** mais um utilizador de sistema e uma unit de sistema. Mais uma linha de DNS e um certificado.
+Com `tls: externo` (omissão) o dono mantém um túnel seu; com `caddy`, Docker rootless + Caddy. O proxy Traefik só
+funciona com `externo`. Actualizar o Lite obriga a
+voltar a correr o instalador (o `/opt` e o `SHA256SUMS`). **Reverter:** `conversa.ativa: false`,
+`systemctl disable --now office-conversa-guardiao` e a unit da ponte. O estado em `/var/lib/office-conversa` e as
+conversas ficam como registo.

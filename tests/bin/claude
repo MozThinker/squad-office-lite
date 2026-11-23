@@ -16,6 +16,7 @@ FAKE_CLAUDE_DORME=<s> dorme antes de responder (timeouts). FAKE_CLAUDE_CWD=<fich
 Como o claude 2.1.x: `--agent X` tem de existir em `--agents` (JSON ou, com -p, ficheiro) ou em .claude/agents/ (só se
 --setting-sources incluir project); senão «--agent 'X' not found» no stderr e exit 1. FAKE_CLAUDE_AGENTS=<ficheiro>
 anexa o JSON de --agents. FAKE_CLAUDE_STDERR=<texto> escreve-o no stderr quando falha.
+Com --permission-prompt-tool no argv (a ponte da Conversa) passa a ser o tests/claude_conversa_falso.py.
 """
 import hashlib
 import json
@@ -26,6 +27,9 @@ import time
 import uuid
 
 argv = sys.argv[1:]
+if "--permission-prompt-tool" in argv:   # a ponte da Conversa (stream-json com MCP): o falso dela
+    falso = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "claude_conversa_falso.py")
+    os.execv(sys.executable, [sys.executable, falso, *argv])
 entrada = sys.stdin.read()
 if os.environ.get("FAKE_CLAUDE_ARGV"):
     with open(os.environ["FAKE_CLAUDE_ARGV"], "a", encoding="utf-8") as f:

@@ -31,7 +31,7 @@ jobs:
       - name: Python 3.10 (officecfg e runner no host)
         run: |
           "$PY" -m pip install -q pytest
-          "$PY" -m pytest -q tests/test_officecfg.py tests/test_runner_*.py
+          "$PY" -m pytest -q tests/test_officecfg.py tests/test_runner_*.py tests/test_chat.py
         env:
           PY: ${{ steps.py310.outputs.python-path }}
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
@@ -98,10 +98,18 @@ jobs:
         run: shellcheck install.sh get.sh scripts/*.sh
       - name: Script do serviço accoes (modo VPS)
         run: shellcheck instalar-accoes.sh
+      - name: Script da Conversa (modo VPS, 0.6.0)
+        run: shellcheck instalar-conversa.sh
+      - name: Testes da Conversa (ficheiros novos da 0.6.0, já incluídos na suite completa)
+        run: python -m pytest -q tests/test_chat*.py tests/test_guardiao*.py tests/test_office_conversa.py tests/test_instalar_conversa.py tests/test_runner_conversa.py tests/test_conversa.py
       - name: Compose de exemplo válido
         run: OFFICE_UID=1000 OFFICE_GID=1000 OFFICE_SITE=:80 OFFICE_AUTH_USER=x OFFICE_AUTH_HASH=x OFFICE_PROXY_SEGREDO=x docker compose -f docker-compose.example.yml config -q
       - name: Só o serviço accoes vê o accoes.env (CA-18c, CA-29)
         run: python tools/verificar_compose_accoes.py compose.example.yaml
+      - name: Nenhum serviço vê as credenciais do dono nem a Conversa fora do previsto (ADR-023)
+        run: |
+          python tools/verificar_compose_conversa.py compose.example.yaml
+          python tools/verificar_compose_conversa.py docker-compose.example.yml
       - name: Genérico (AC-a6, AC-b1, AC-b4, AC-e4)
         run: |
           falha=0
@@ -789,3 +797,110 @@ jobs:
         if: always()
         run: |
           if [ -f ~/office-lite/docker-compose.yml ]; then docker compose -f ~/office-lite/docker-compose.yml down -v || true; fi
+
+  # Proposta 0.6.0: e2e da Conversa no browser (Playwright fora do repo, como as capturas). Só corre se o script existir.
+  e2e-conversa:
+    name: E2E Conversa (${{ matrix.browser }})
+    needs: checks
+    strategy:
+      fail-fast: false
+      matrix:
+        # webkit corre com o perfil de iPhone dentro do script (devices["iPhone 13"])
+        browser: [chromium, webkit]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.13"
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22"
+      - name: Playwright (fora do repo; não há package.json)
+        run: |
+          npm i --prefix "$RUNNER_TEMP/pw" playwright@1.64.1
+          "$RUNNER_TEMP/pw/node_modules/.bin/playwright" install --with-deps "$BROWSER"
+        env:
+          BROWSER: ${{ matrix.browser }}
+      - name: Pergunta, cartão, aprovar, resposta (CA-37; claude falso, CONVERSA_TLS_TESTE só aqui)
+        run: |
+          if [ ! -f tools/e2e_conversa.mjs ]; then echo "sem tools/e2e_conversa.mjs: nada a correr"; exit 0; fi
+          PLAYWRIGHT_DIR="$RUNNER_TEMP/pw" E2E_BROWSER="$BROWSER" node tools/e2e_conversa.mjs
+        env:
+          BROWSER: ${{ matrix.browser }}
+
+  # Proposta 0.6.0 (ADR-023, revisão S2/S5): o instalar-conversa.sh a sério, como root, com dois utilizadores. Prova
+  # com uids distintos o que os testes locais só simulam (test_guardiao_chave/web).
+  fumo-conversa:
+    name: Fumo da Conversa (guardião e instalar-conversa.sh como root)
+    needs: checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Utilizadores, acl, o grupo do túnel e a cópia do Lite do root (G1)
+        run: |
+          sudo apt-get install -y acl xxd
+          sudo useradd -m -s /bin/bash fabrica
+          sudo useradd -m -s /bin/bash dono
+          sudo groupadd cloudflared
+          sudo chmod 0750 ~dono
+          sudo cp -a . ~dono/lite
+          sudo chown -R dono:dono ~dono/lite
+          sudo cp -a . /usr/local/src/office-lite-teste
+          sudo chown -R root:root /usr/local/src/office-lite-teste
+          sudo chmod -R go-w /usr/local/src/office-lite-teste
+          sudo install -D -o dono -g dono -m 0755 tests/bin/claude ~dono/.local/bin/claude
+          sudo chown -R dono:dono ~dono/.local   # o install -D cria as pastas-mãe como root
+      - name: Recusas do instalador (G1 cópia do dono, G4 grupo com a fabrica)
+        run: |
+          if (cd ~dono/lite && sudo ./instalar-conversa.sh --office fabrica --dono dono --grupo-socket cloudflared); then
+            echo "instalou de uma cópia que o dono escreve"; exit 1
+          fi
+          sudo usermod -aG cloudflared fabrica
+          if (cd /usr/local/src/office-lite-teste && sudo ./instalar-conversa.sh --office fabrica --dono dono --grupo-socket cloudflared); then
+            echo "instalou com a fabrica no grupo do socket"; exit 1
+          fi
+          sudo gpasswd -d fabrica cloudflared
+      - name: Instalar como root a partir da cópia do root (tls externo, a omissão)
+        run: |
+          cd /usr/local/src/office-lite-teste
+          sudo ./instalar-conversa.sh --office fabrica --dono dono --grupo-socket cloudflared
+          sleep 3
+          systemctl is-active office-conversa-guardiao
+          sudo test -s /srv/office-conversa/publico/publico.json
+      - name: Nem o dono nem a fabrica lêem a chave ou escrevem em verificados/; a fabrica não lê conversas/ (S5)
+        run: |
+          for u in dono fabrica; do
+            for c in cat base64 xxd; do
+              if sudo -u "$u" "$c" /var/lib/office-conversa/chave; then echo "o $u leu a chave com $c"; exit 1; fi
+            done
+            if sudo -u "$u" touch /srv/office-conversa/verificados/x.json; then echo "o $u escreveu em verificados/"; exit 1; fi
+          done
+          if sudo -u fabrica ls /srv/office-conversa/conversas; then echo "a fabrica lê conversas/"; exit 1; fi
+      - name: A fabrica não chega ao socket (S2, tls externo); um pedido sem assinatura é recusado e não fica escrito
+        run: |
+          if sudo -u fabrica curl -s -o /dev/null --unix-socket /srv/office-conversa/sock/guardiao.sock \
+            http://conversa.exemplo.test/; then echo "a fabrica chegou ao socket"; exit 1; fi
+          code=$(sudo curl -s -o /dev/null -w '%{http_code}' \
+            --unix-socket /srv/office-conversa/sock/guardiao.sock -H 'Origin: https://conversa.exemplo.test' \
+            -H 'X-Forwarded-Proto: https' -H 'Content-Type: application/json' -d '{"acao": "parar"}' \
+            http://conversa.exemplo.test/api/conversa/pedido)
+          case "$code" in 401|403) ;; *) echo "esperava 401 ou 403, veio $code"; exit 1 ;; esac
+          [ -z "$(sudo find /srv/office-conversa/verificados -type f)" ]
+      - name: --revogar apaga os browsers registados
+        run: |
+          cd /usr/local/src/office-lite-teste
+          sudo ./instalar-conversa.sh --office fabrica --dono dono --grupo-socket cloudflared --revogar > /dev/null
+          if sudo test -e /var/lib/office-conversa/chaves.json; then echo "ficou o chaves.json"; exit 1; fi
+      - name: Um byte trocado na UI em /opt e o guardião fica parado com 78; o instalador repõe
+        run: |
+          printf 'x' | sudo tee -a /opt/office-conversa/web/conversa.js > /dev/null
+          sudo systemctl restart office-conversa-guardiao || true
+          sleep 3
+          if systemctl is-active --quiet office-conversa-guardiao; then echo "arrancou com o /opt alterado"; exit 1; fi
+          [ "$(systemctl show -p ExecMainStatus --value office-conversa-guardiao)" = 78 ]
+          cd /usr/local/src/office-lite-teste && sudo ./instalar-conversa.sh --office fabrica --dono dono --grupo-socket cloudflared > /dev/null
+          sleep 3
+          systemctl is-active office-conversa-guardiao

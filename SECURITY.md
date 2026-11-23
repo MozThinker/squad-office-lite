@@ -43,7 +43,7 @@ purchase.*
 O mesmo comando da instalação (ver README, «Actualizar»):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/MozThinker/squad-office-lite/v0.5.2/get.sh | bash
+curl -fsSL https://raw.githubusercontent.com/MozThinker/squad-office-lite/v0.6.0/get.sh | bash
 ```
 
 Descarrega a última versão publicada, confirma o sha256 e corre o `install.sh`. A versão anterior fica em
@@ -70,3 +70,19 @@ credenciais fora do contentor do Office.
 Os limites conhecidos do Lite estão no README, secção «Segurança» (por exemplo: o agente corre com o teu utilizador e
 um programa que ele execute lê o que tu lês). Um relatório sobre um limite já documentado é bem-vindo se mostrar um
 impacto que lá não está.
+
+A Conversa (ADR-023 no `DECISIONS.md`, revisão do guardião; `CONVERSA.md`) também é do Lite: o guardião
+(`chat_host/guardiao.py`, utilizador `office-conversa`, a única peça com as chaves dos browsers), a ponte, o
+`instalar-conversa.sh` e as units. O código da Conversa é de uso único e só regista um browser, que gera a sua própria
+chave aleatória e não extraível; as entradas seguintes são por desafio–resposta; outro browser precisa de `sudo
+./instalar-conversa.sh --novo-codigo` e `--revogar` apaga os browsers registados. Recomenda-se para a Conversa um
+domínio registável diferente do do Office. Por omissão (`conversa.tls: externo`) o TLS da Conversa termina fora do
+utilizador do Office, num túnel do dono ligado ao socket do guardião, e o Office não chega ao socket. Um pedido que
+chegue a `verificados/` sem o clique do dono, uma chave lida por outro utilizador que não o `office-conversa`, um código
+que sirva duas vezes, o instalador a aceitar uma cópia do Lite (ou uma pasta acima dela) que o dono ou o Office
+escrevam, ou o guardião a arrancar com um `/opt/office-conversa` que não bate com o `SHA256SUMS` são falhas a reportar.
+Limites conhecidos: com `conversa.tls: caddy` (só por opção) o TLS termina no Caddy do utilizador do Office e quem o
+controle pode servir JS seu na origem da Conversa; quem chegue ao endereço da Conversa pode encher o bloqueio de 15 min;
+as regras `ask` dos lançadores são melhor esforço, contornáveis por ofuscação, sobretudo em `espelho`; na voz externa o
+servidor só impõe os 5 MB, não os 2 minutos; o assistente escreve o que o dono escreve; a instalação confia uma vez na
+cópia do Lite que o root extraiu e conferiu.

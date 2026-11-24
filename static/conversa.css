@@ -107,6 +107,9 @@ body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 var(
 #cv-painel.cp-tudo .cp-act { flex: 1 1 auto; min-height: 0; max-height: none; }
 .cp-act .cv-card { flex: 0 1 auto; min-height: 0; display: flex; flex-direction: column; padding: 8px 12px; border: 2px solid var(--warn); }
 .cp-act .cv-card.cv-del { border-color: var(--bad); }
+/* ADR-024: o que o «Aprovar» faz, por palavras e ícone (nunca só pela cor) */
+.cv-aviso-ap { flex: none; margin: 6px 0 0; padding: 4px 8px; border-left: 3px solid var(--warn); font-weight: 600; overflow-wrap: anywhere; }
+.cv-aviso-ap.cv-lanca { border-left-color: var(--bad); }
 .cp-cab { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; flex: none; }
 .cp-corpo { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
 .cp-act .cv-alvo { max-height: none; overflow: visible; } /* D1/A1: o alvo todo, um só scroll (o do .cp-corpo); «Ver tudo» dá o painel ao cartão */

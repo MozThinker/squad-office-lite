@@ -861,3 +861,54 @@ funciona com `externo`. Actualizar o Lite obriga a
 voltar a correr o instalador (o `/opt` e o `SHA256SUMS`). **Reverter:** `conversa.ativa: false`,
 `systemctl disable --now office-conversa-guardiao` e a unit da ponte. O estado em `/var/lib/office-conversa` e as
 conversas ficam como registo.
+
+## ADR-024 · Aprovações que lançam: a marca `[lança: <slug>]` à vista e o sinal do kit num ficheiro só de leitura (2026-11-23)
+**Contexto:** com o `lancar-aprovados` do kit (1.6.0) ligado, aprovar no Office uma linha
+`- [L1] Lançar \`<slug>\` [lança: <slug>]` arranca o `lancar <slug>` (trabalho pago). Até à 0.6.0 o Lite mostrava a
+marca como texto cru e o mesmo botão «Aprovar» de uma linha que só regista. Por omissão o kit vem desligado e aprovar
+não lança nada (Dia 5 do livro). O livro vai mostrar este ecrã. Não se mexe no kit nesta versão.
+
+**Decisão:**
+- **Só apresentação.** A linha e a fila v1 não mudam: o `aprovacoes.py` tira a marca do texto e acrescenta a cada
+  decisão do `/api/state` `lanca` (slug ou `null`) e `lancamento` (`null` sem marca; `desligado`, `ligado`, `espera` ou
+  `lancada`). O POST `/api/decisao` e o JSON da fila são os mesmos.
+- **Gramática = a do kit.** Marca válida só no fim do texto (antes do `→ aprovado (…)`), uma só por linha, slug
+  `[a-z0-9][a-z0-9-]{0,47}` (o do `lancar`): é o único caso em que o kit lança. Tudo o resto (duas marcas, slug com
+  maiúsculas ou `/`, marca a meio) é «sem marca» e o texto fica cru, para não esconder o que o kit também ignora.
+- **O sinal:** o ficheiro `<dados>/decisoes/.lancar-aprovados.json`, escrito pelo `lancar-aprovados` do kit em cada
+  volta (atómico, `os.replace`), lido pelo Office na pasta das decisões, que já monta só de leitura (sem volume novo
+  nem mudança no compose). Formato v1:
+  ```json
+  {"v": 1, "ligado": true, "atualizado": 1795000000.0,
+   "decisoes": {"2026-11-23-lancar-loja-v2.md": "pendente"}}
+  ```
+  `atualizado` em segundos epoch; `decisoes` = os ficheiros que o próprio kit criou (só esses lançam) → o estado do
+  slug no registo do kit (`pendente`, `a arrancar`, `lançado`, `falhado`, `recusado`). Ficheiro regular sem symlink,
+  ≤ 64 KiB.
+- **Desligado por omissão.** Sem ficheiro, inválido, `ligado` diferente de `true`, ou `atualizado` com mais de 10 min
+  (o timer corre de minuto a minuto; um timer parado com `disable --now` deixa o ficheiro, mas ele envelhece): o selo
+  diz «Lançamento desligado: aprovar só regista» e o botão é «Aprovar». Uma linha com marca num ficheiro que o kit não
+  listou também (o kit não a lança).
+- **Depois de aprovada:** `a arrancar`/`lançado` → «Aprovado: tarefa lançada»; outro estado com o kit ligado →
+  «Aprovado: à espera do lançamento»; sem sinal → «Aprovado».
+- **Conversa:** o cartão de permissão diz o que o «Aprovar» faz («Aprovar executa agora: <resumo>»; nos lançadores
+  «Aprovar lança a tarefa <slug>», o slug tirado do alvo, senão «uma tarefa da squad»). Só texto: o guardião e a
+  ponte não mudam.
+
+**Mudança no kit (brief à parte, não nesta versão):** o `lancar-aprovados`, no fim de cada volta e só com o timer
+ligado, escreve `~/office-lite/dados/decisoes/.lancar-aprovados.json` (formato acima, `fabrica`, 0644, escrita
+atómica), com `decisoes` tirado do seu registo (`pedidos` + `lancados`/`falhados`/`recusados`). Ao desligar
+(`systemctl --user disable --now lancar-aprovados.timer`) o ficheiro envelhece e o Office volta a «desligado» em
+≤ 10 min; o `fabrica doctor` pode apagá-lo. Até o kit 1.6.x o escrever, o Lite mostra sempre «desligado», que é a
+omissão do kit e o que o Dia 5 diz.
+
+**Alternativas recusadas:**
+- Ler o registo do kit (`~/.local/state/fabrica/lancar-aprovados.json`) por um volume novo: mais uma montagem no
+  office, e o registo não diz se o timer está ligado.
+- Uma chave no `office.yaml` (`aprovacoes.lancar: true`): o dono teria de a manter igual ao timer à mão; esquecer-se
+  mostrava «lança» com o kit desligado, o erro caro.
+- Mostrar «lança» em toda a linha com marca: mentia com o kit desligado (a omissão).
+
+**Consequências:** um ficheiro escondido na pasta das decisões (não é `.md`: não aparece como pedido nem na
+Biblioteca). Um selo a mais por linha. **Reverter:** voltar a mostrar `d.texto` com a marca e ignorar `lanca`; o
+ficheiro do kit pode ficar.

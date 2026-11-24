@@ -1,5 +1,26 @@
 # Changelog
 
+## Lite 0.6.1 (2026-11-23)
+
+Aprovações que lançam bem à vista (ADR-024). Só muda a apresentação: a fila de decisões v1 e o formato das linhas
+(`- [id] texto [lança: <slug>]`) não mudam, e `versao: 1` do `office.yaml` mantém-se.
+
+- **Aprovações:** uma linha de `## Decisões` que acaba em `[lança: <slug>]` mostra o selo «▶ Aprovar lança a tarefa»
+  com o nome do brief em texto simples, e o botão passa a «Aprovar e lançar» (para o leitor de ecrã, «Aprovar e lançar
+  a tarefa <slug>»); a confirmação diz que lança. A marca crua deixa de aparecer no texto. As linhas sem marca dizem
+  «Aprovar só regista». Com o lançamento desligado, o selo diz «Lançamento desligado: aprovar só regista» e o botão
+  volta a «Aprovar». Depois de aprovada: «Aprovado: tarefa lançada», «Aprovado: à espera do lançamento» ou só
+  «Aprovado». «Aprovar todas» não aparece num pedido com uma linha que lança (um lançamento, um clique).
+- **Como o Lite sabe se lança:** pelo ficheiro `.lancar-aprovados.json` que o `lancar-aprovados` do kit escreve na
+  pasta das decisões a cada volta (só leitura no Office). Sem ele, velho (> 10 min) ou inválido: desligado, a omissão
+  do kit. Só as decisões que o kit criou contam como «lança». Uma marca malformada (duas marcas, slug fora da gramática
+  do `lancar`, ou a marca fora do fim da linha) é tratada como sem marca, como o kit, que não a lança.
+- **Conversa:** o cartão de aprovação diz «Aprovar executa agora: <acção resumida>»; nos lançadores, «Aprovar lança a
+  tarefa <slug>». Os botões de aprovar ficam descritos por esse aviso (leitor de ecrã).
+- **Testes:** parser da marca e sinal (`tests/test_aprovacoes_lanca.py`), `static/lanca.js` (`tests/lanca_test.mjs`),
+  e2e em Chromium e WebKit (`tools/e2e_aprovacoes.mjs`; corre também no fim do `tools/e2e_conversa.mjs`) com capturas
+  a 375 e 1440 px em `docs/capturas/aprovacoes-lanca-*.png`.
+
 ## Lite 0.6.0 (2026-11-23)
 
 A Conversa (ADR-023), a voz e três fases de UX. `versao: 1` do `office.yaml` mantém-se (só uma chave nova opcional) e

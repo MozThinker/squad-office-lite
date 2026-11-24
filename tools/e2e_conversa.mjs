@@ -245,6 +245,8 @@ async function fluxo(nome, browser, perfil, largura) {
     ok(!visto(), `${nome}: o ls não correu antes do clique`);
     const alvo = await page.locator(".cp-act").innerText();
     ok(alvo.includes("ls > visto.txt"), `${nome}: o cartão mostra o comando`);
+    ok(/Aprovar executa agora: /.test(alvo), `${nome}: ADR-024: o cartão diz «Aprovar executa agora: <acção>»`);
+    ok(await page.locator('.cp-act button.ok-b[aria-describedby^="cv-ap-"]').count() === 1, `${nome}: ADR-024: o «Aprovar» descrito pelo aviso (leitor de ecrã)`);
 
     // S2: com o cartão pendente, o contador do Office passa a 1; a origem do Office não tem a chave nem consegue responder
     await off.waitForFunction(() => document.querySelector("#cv-b .cv-n")?.textContent === "1", null, { timeout: 25000 });
@@ -375,6 +377,12 @@ try {
   if (falhas && guardErr) console.error("stderr do guardião:\n" + guardErr.slice(-2000));
   if (falhas && ponteErr) console.error("stderr da ponte:\n" + ponteErr.slice(-2000));
   rmSync(tmp, { recursive: true, force: true });
+}
+// 0.6.1 (ADR-024): o e2e das Aprovações que lançam corre aqui, no mesmo browser, até o job da CI ter um passo próprio
+// (docs/propostas-ci/ci-aprovacoes-lanca.patch, que põe E2E_APROVACOES=0 neste passo)
+if (process.env.E2E_APROVACOES !== "0" && existsSync(path.join(ROOT, "tools/e2e_aprovacoes.mjs"))) {
+  const args = [path.join(ROOT, "tools/e2e_aprovacoes.mjs"), "--browsers", BROWSERS.join(","), ...(CAPTURAS ? [] : ["--sem-capturas"])];
+  try { execFileSync(process.execPath, args, { stdio: "inherit", env: process.env }); } catch { ok(false, "e2e das Aprovações que lançam (tools/e2e_aprovacoes.mjs)"); }
 }
 console.log(falhas ? `${falhas} falha(s)` : "tudo ok");
 process.exit(falhas ? 1 : 0);

@@ -1,4 +1,4 @@
-# Squad Office Lite 0.6.0, modo Docker. Gerado por runner/gerar_compose.py --modo docker.
+# Squad Office Lite 0.6.1, modo Docker. Gerado por runner/gerar_compose.py --modo docker.
 # Primeiro: docker compose run --rm configurar
 # Depois: docker compose up -d e abre http://localhost:8080
 # Opcional: .env ao lado (ver env.example) com OFFICE_ENDERECO, OFFICE_PORTA, OFFICE_PROJECTOS,
@@ -7,7 +7,7 @@
 name: office-lite-pc
 services:
   office:
-    image: ghcr.io/mozthinker/squad-office-lite:0.6.0
+    image: ghcr.io/mozthinker/squad-office-lite:0.6.1
     restart: unless-stopped
     read_only: true
     # Pillow descodifica uma miniatura de cada vez (até ~330 MB) + tmpfs das miniaturas + servidor
@@ -172,7 +172,7 @@ services:
     networks:
       - office
   runner:
-    image: ghcr.io/mozthinker/squad-office-lite-runner:0.6.0
+    image: ghcr.io/mozthinker/squad-office-lite-runner:0.6.1
     restart: unless-stopped
     init: true
     read_only: true
@@ -292,7 +292,7 @@ services:
     networks:
       - runner
   configurar:
-    image: ghcr.io/mozthinker/squad-office-lite-runner:0.6.0
+    image: ghcr.io/mozthinker/squad-office-lite-runner:0.6.1
     profiles:
       - configurar
     entrypoint: ["configurar"]
@@ -423,7 +423,7 @@ services:
     networks:
       - runner
   accoes:
-    image: ghcr.io/mozthinker/squad-office-lite-runner:0.6.0
+    image: ghcr.io/mozthinker/squad-office-lite-runner:0.6.1
     restart: unless-stopped
     read_only: true
     entrypoint: ["accoes"]

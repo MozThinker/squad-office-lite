@@ -40,6 +40,14 @@ NOTA_MAX, UA_MAX, IP_MAX = 2000, 120, 64
 FILA_N = 500                 # JSON da fila lidos por passagem (os mais recentes pelo nome)
 PEDIDO_MAX = 1024 * 1024     # .md maiores são ignorados (não aparecem)
 FILA_SIZE = 16 * 1024        # JSON maiores são ignorados (o POST é ≤ 8 KB; ip/ua/criado acrescentam pouco)
+# Marca «[lança: <slug>]» (ADR-024): só apresentação; a linha e a fila v1 não mudam. Gramática do lancar-aprovados do
+# kit (slug do `lancar`), e só no fim da linha: o kit só lança «… [lança: <slug>] → aprovado (data)». Duas marcas ou
+# um slug fora da gramática = sem marca (o texto fica cru, como o kit, que não lança nenhuma delas).
+MARCA = re.compile(r" ?\[lança: ([a-z0-9][a-z0-9-]{0,47})\]$")
+SINAL = ".lancar-aprovados.json"   # escrito pelo lancar-aprovados do kit na pasta das decisões (ADR-024)
+SINAL_MAX = 64 * 1024
+SINAL_FRESCO_S = 10 * 60     # o timer do kit corre de minuto a minuto (≤ 4 min por volta); mais velho = desligado
+SINAL_LANCADO = ("a arrancar", "lançado")   # estados do registo do kit em que o lancar já arrancou
 
 _fila_lock = threading.Lock()
 
@@ -97,6 +105,53 @@ def _mascara(root, nome: str):
     return reader.mask
 
 
+def marca(texto: str) -> tuple[str, str | None]:
+    """(texto sem a marca, slug) se a linha acaba numa marca válida e única; senão (texto, None)."""
+    m = MARCA.search(texto)
+    if not m or texto.count("[lança:") != 1:
+        return texto, None
+    return texto[:m.start()], m.group(1)
+
+
+def sinal(root: Path, now: float) -> dict | None:
+    """O sinal do lançar depois de aprovar (ADR-024), ou None (= desligado: a omissão do kit). Ligado só com
+    `{"v": 1, "ligado": true, "atualizado": <epoch>}` com menos de SINAL_FRESCO_S (um timer parado deixa de valer);
+    `decisoes` = {ficheiro: estado do slug no registo do kit} das decisões que o próprio kit criou (só essas lançam)."""
+    try:
+        fd = os.open(Path(root) / SINAL, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    except OSError:
+        return None
+    try:
+        with open(fd, "rb") as f:
+            if not stat.S_ISREG(os.fstat(fd).st_mode):
+                return None
+            raw = f.read(SINAL_MAX + 1)
+        d = json.loads(raw) if len(raw) <= SINAL_MAX else None
+    except (OSError, ValueError):
+        return None
+    if not isinstance(d, dict) or d.get("v") != 1 or d.get("ligado") is not True:
+        return None
+    t, dec = d.get("atualizado"), d.get("decisoes")
+    if isinstance(t, bool) or not isinstance(t, (int, float)) or not (now - SINAL_FRESCO_S <= t <= now + 60):
+        return None
+    if not isinstance(dec, dict):
+        return None
+    return {"decisoes": {k: v for k, v in dec.items() if isinstance(k, str) and isinstance(v, str)}}
+
+
+def lancamento(slug: str | None, sin: dict | None, nome: str, feito: str | None) -> str | None:
+    """Estado do lançamento de uma linha para a UI: None (sem marca), «desligado» (aprovar só regista), «ligado»
+    (aprovar lança), «lancada» (o kit já arrancou o lancar) ou «espera» (aprovada, o kit ainda não pegou nela)."""
+    if slug is None:
+        return None
+    est = sin["decisoes"].get(nome) if sin else None
+    if est is None:
+        return "desligado"   # sem sinal, ou uma decisão que o kit não criou: o kit não a lança
+    if feito != "aprovado":
+        return "ligado"
+    return "lancada" if est in SINAL_LANCADO else "espera"
+
+
 def pendente(estado: str) -> bool:
     return estado.startswith(("pendente", "parcial"))   # com maiúsculas não conta (como no aplicador)
 
@@ -141,10 +196,11 @@ def parse_pedido(text: str, nome: str) -> dict | None:
         texto, done = m.group(2), DONE.search(m.group(2))
         if done:
             texto = texto[:done.start()]
-        decisoes.append({"id": m.group(1), "texto": texto, "valor": valor(texto),
+        texto, slug = marca(texto)
+        decisoes.append({"id": m.group(1), "texto": texto, "valor": valor(texto), "lanca": slug,
                          "feito": done.group(1) if done else None, "data": done.group(2) if done else None})
     if not decisoes:
-        decisoes = [{"id": "*", "texto": titulo, "valor": None, "feito": None, "data": None}]
+        decisoes = [{"id": "*", "texto": titulo, "valor": None, "lanca": None, "feito": None, "data": None}]
     return {"titulo": titulo, "criado": front.get("criado", ""), "estado": front.get("estado", ""),
             "resumo": resumo, "datas": datas or None, "decisoes": decisoes,
             "corpo": "\n".join(body)}
@@ -214,6 +270,7 @@ def listar(dirs: dict[str, Path], fila: Path, tz, now: float) -> list[dict]:
     hoje = datetime.fromtimestamp(now, tz).date()
     out = []
     for fonte, root in dirs.items():
+        sin = sinal(root, now)
         try:
             nomes = sorted(e.name for e in os.scandir(root) if e.name.endswith(".md"))
         except OSError:   # pasta inexistente: fonte ignorada
@@ -233,6 +290,7 @@ def listar(dirs: dict[str, Path], fila: Path, tz, now: float) -> list[dict]:
                 rcb = d["feito"] is None and _recebido(rec, fonte, nome, d["id"], sha)
                 decisoes.append({"id": d["id"], "texto": msk(d["texto"]),
                                  "valor": msk(d["valor"]) if d["valor"] else None,
+                                 "lanca": d["lanca"], "lancamento": lancamento(d["lanca"], sin, nome, d["feito"]),
                                  "feito": d["feito"], "data": d["data"], "recebido": rcb,
                                  "aberta": d["feito"] is None and not rcb})
             abertas = sum(d["aberta"] for d in decisoes)

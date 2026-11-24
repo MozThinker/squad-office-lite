@@ -114,6 +114,7 @@ body { margin: 0; background: var(--bg); color: var(--text); }
   <p id="ad-s" class="sub" aria-live="polite" style="margin: 6px 12px 0"></p>
   <div id="ad-b" class="md"></div>
 </dialog>
+<script src="lanca.js"></script>
 <script src="act.js"></script>
 <script>
 "use strict";
@@ -748,24 +749,33 @@ const aName = (id) => (id === "*" ? "o pedido" : id);
 const aSent = (u, p, d) => (u.sent[d.id]?.sha === p.sha256 ? u.sent[d.id].accao : null);
 const aOpen = (u, p) => p.decisoes.filter((d) => d.aberta && !["aprovar", "recusar"].includes(aSent(u, p, d)));
 // «Aprovar todas» só com 2+ decisões em aberto e nunca num pedido de acções externas (ADR-021: uma a uma)
-const aTodas = (p, n) => n >= 2 && !/^accoes-/.test(p.ficheiro);
+// nem quando uma delas lança uma tarefa (ADR-024: cada lançamento com o seu clique)
+const LZ = globalThis.LANCA;
+const aTodas = (p, n) => n >= 2 && !/^accoes-/.test(p.ficheiro) && !p.decisoes.some((d) => d.aberta && globalThis.LANCA?.lanca(d));
 const aTotal = (list) => list.reduce((a, p) => a + aOpen(aUi(aKey(p)), p).length, 0);
 const aVerb = { aprovar: "Aprovar", recusar: "Recusar", comentar: "Enviar comentário em" };
 function aConfirmText(p, c) {
   if (c.id === "*todas") return `Aprovar todas: ${aOpen(aUi(aKey(p)), p).map((d) => d.id).join(", ")}?`;
   const d = p.decisoes.find((x) => x.id === c.id);
+  if (c.accao === "aprovar" && d && LZ?.lanca(d)) return `Aprovar ${aName(c.id)} e lançar a tarefa ${d.lanca}${d.valor ? " — " + d.valor : ""}?`;
   return `${aVerb[c.accao]} ${aName(c.id)}${c.accao === "aprovar" && d?.valor ? " — " + d.valor : ""}?`;
 }
 const aCf = (p, u) => `<div class="cf" role="group" aria-label="Confirmação"><span>${esc(aConfirmText(p, u.confirm))}</span><div class="btns">`
   + `<button type="button" class="ok-b" data-a="ok" data-f="ok">Confirmar</button><button type="button" data-a="no" data-f="no">Cancelar</button></div></div>`;
 const aErr = (u, id) => (u.err?.id === id ? `<p class="msg s-bad" role="alert">${esc(u.err.msg)}</p>` : "");
+// selo da linha (ADR-024): ícone e texto, nunca só a cor; o nome do brief em texto simples
+function aSelo(d) {
+  const z = LZ ? LZ.selo(d) : { icone: "", texto: "Aprovar só regista", slug: null, classe: "lanca-reg" };
+  return `<p class="lanca ${esc(z.classe)}">${z.icone ? `<span class="lanca-i" aria-hidden="true">${esc(z.icone)}</span> ` : ""}<span>${esc(z.texto)}</span>`
+    + (z.slug ? ` <span class="lanca-s">${esc(z.slug)}</span>` : "") + `</p>`;
+}
 function aDecHtml(p, u, d) {
   const head = d.id === "*" ? "" : `<p><b>${esc(d.id)}</b> ${esc(d.texto)}</p>`, sent = aSent(u, p, d);
-  if (d.feito) return `<div class="dec">${head}<p class="${d.feito === "aprovado" ? "s-run" : "s-bad"}">${d.feito === "aprovado" ? "✓ aprovado" : "✗ recusado"}${d.data ? " · " + esc(d.data) : ""}</p></div>`;
-  if (d.recebido || sent === "aprovar" || sent === "recusar") return `<div class="dec">${head}<p class="s-ok">Recebido · a aplicar</p></div>`;
-  const dis = u.busy ? " disabled" : "", lab = aName(d.id);
-  return `<div class="dec">${head}<textarea data-id="${esc(d.id)}" data-f="n:${esc(d.id)}" maxlength="2000" rows="2" aria-label="${esc(`Observação para ${lab}`)}" placeholder="observação (obrigatória para recusar ou comentar)"></textarea>`
-    + `<div class="btns"><button type="button" class="ok-b" data-a="aprovar" data-id="${esc(d.id)}" data-f="aprovar:${esc(d.id)}"${dis}>${esc(d.valor ? "Aprovar · " + d.valor : "Aprovar")}</button>`
+  if (d.feito) return `<div class="dec">${head}<p class="${d.feito === "aprovado" ? "s-run" : "s-bad"}">${esc(d.feito === "aprovado" ? "✓ " + (LZ ? LZ.aprovado(d) : "Aprovado") : "✗ Recusado")}${d.data ? " · " + esc(d.data) : ""}</p></div>`;
+  if (d.recebido || sent === "aprovar" || sent === "recusar") return `<div class="dec">${head}<p class="s-ok">${esc("Recebido · a aplicar" + (sent !== "recusar" && LZ?.lanca(d) ? " · depois lança a tarefa " + d.lanca : ""))}</p></div>`;
+  const dis = u.busy ? " disabled" : "", lab = aName(d.id), bt = LZ ? LZ.botao(d) : { rotulo: d.valor ? "Aprovar · " + d.valor : "Aprovar", aria: null };
+  return `<div class="dec">${head}${aSelo(d)}<textarea data-id="${esc(d.id)}" data-f="n:${esc(d.id)}" maxlength="2000" rows="2" aria-label="${esc(`Observação para ${lab}`)}" placeholder="observação (obrigatória para recusar ou comentar)"></textarea>`
+    + `<div class="btns"><button type="button" class="ok-b" data-a="aprovar" data-id="${esc(d.id)}" data-f="aprovar:${esc(d.id)}"${bt.aria ? ` aria-label="${esc(bt.aria)}"` : ""}${dis}>${esc(bt.rotulo)}</button>`
     + `<button type="button" class="no-b" data-a="recusar" data-id="${esc(d.id)}" data-f="recusar:${esc(d.id)}" data-nota${dis}>Recusar</button>`
     + `<button type="button" data-a="comentar" data-id="${esc(d.id)}" data-f="comentar:${esc(d.id)}" data-nota${dis}>Comentar</button></div>`
     + `<p class="msg sub" data-hint="${esc(d.id)}">escreve o motivo para recusar ou comentar</p>`

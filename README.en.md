@@ -58,17 +58,17 @@ There are two ways to install the Lite:
    [Claude credentials](#claude-credentials)).
    Install `gh` following the [official instructions for Ubuntu](https://github.com/cli/cli/blob/trunk/docs/install_linux.md);
    for `gh auth login`, preferably use a [token limited to the Office repositories](#github-token).
-3. **Download and install the Office.** The URL is pinned to the version (`v0.6.0`), so you always read the same
+3. **Download and install the Office.** The URL is pinned to the version (`v0.6.1`), so you always read the same
    script that the book and this README describe.
    **Careful way** (recommended: you read the script before running it):
    ```bash
-   curl -fsSLO https://raw.githubusercontent.com/MozThinker/squad-office-lite/v0.6.0/get.sh
+   curl -fsSLO https://raw.githubusercontent.com/MozThinker/squad-office-lite/v0.6.1/get.sh
    less get.sh
-   bash get.sh --versao 0.6.0
+   bash get.sh --versao 0.6.1
    ```
    **One command:**
    ```bash
-   curl -fsSL https://raw.githubusercontent.com/MozThinker/squad-office-lite/v0.6.0/get.sh | bash -s -- --versao 0.6.0
+   curl -fsSL https://raw.githubusercontent.com/MozThinker/squad-office-lite/v0.6.1/get.sh | bash -s -- --versao 0.6.1
    ```
    > This command downloads a script from the internet and runs it on your server, as your user. Only do it with
    > URLs you trust, and preferably read it first. `get.sh` checks the package's sha256: that catches a corrupted
@@ -81,14 +81,14 @@ There are two ways to install the Lite:
    that is what the careful way is for. Options (after `bash -s --` in the one-line command, or after `bash get.sh`):
    - `--sem-perguntas` (no questions): the answers come from the environment (see the header of `install.sh`;
      `OFFICE_GIT_NOME` and `OFFICE_GIT_EMAIL` for the git identity; without them, and with no identity in git, it only
-     warns). E.g.: `curl -fsSL …/get.sh | bash -s -- --versao 0.6.0 --sem-perguntas`;
-   - `--versao X.Y.Z`: installs that version instead of the latest (`… | bash -s -- --versao 0.6.0`);
+     warns). E.g.: `curl -fsSL …/get.sh | bash -s -- --versao 0.6.1 --sem-perguntas`;
+   - `--versao X.Y.Z`: installs that version instead of the latest (`… | bash -s -- --versao 0.6.1`);
    - any other options are passed on to `install.sh` (e.g. `--proxy traefik --rede <rede>`).
 
    **Optional origin check.** The sha256 only confirms that the package is not corrupted. To confirm that it was
    built by the public repository (GitHub attestation; needs `gh` logged in), download the package manually and run:
    ```bash
-   gh attestation verify squad-office-lite-0.6.0.tar.gz --repo MozThinker/squad-office-lite
+   gh attestation verify squad-office-lite-0.6.1.tar.gz --repo MozThinker/squad-office-lite
    ```
    Only versions published with an attestation pass. A failure here is a reason not to install and to report it (see
    [`SECURITY.en.md`](SECURITY.en.md)).
@@ -129,7 +129,7 @@ needs no restart. If you changed the `raizes`, run `./install.sh` again (it does
 
 The same `get.sh`, without `--versao` (it installs the latest published version; read the warning in “Installation”):
 ```bash
-curl -fsSL https://raw.githubusercontent.com/MozThinker/squad-office-lite/v0.6.0/get.sh | bash
+curl -fsSL https://raw.githubusercontent.com/MozThinker/squad-office-lite/v0.6.1/get.sh | bash
 ```
 The installed version moves to `~/squad-office-lite.anterior-<data>` and the new one goes to `~/squad-office-lite`.
 `~/office-lite` (config, `.env`, credentials and data) is not touched by `get.sh`; `install.sh` only asks again for
@@ -452,17 +452,17 @@ your PC. You don't install `claude`, `gh`, `git` or Python: they come in the run
    ```bash
    mkdir -p ~/office && cd ~/office
    ```
-3. **Download the `compose.yaml`** for version 0.6.0. The Office and runner images are pinned by digest: what runs is
+3. **Download the `compose.yaml`** for version 0.6.1. The Office and runner images are pinned by digest: what runs is
    always what was published with this version.
    In PowerShell (it's `curl.exe`, not `curl`):
    ```powershell
-   curl.exe -fsSLO https://github.com/MozThinker/squad-office-lite/releases/download/v0.6.0/compose.yaml
+   curl.exe -fsSLO https://github.com/MozThinker/squad-office-lite/releases/download/v0.6.1/compose.yaml
    ```
    In the Terminal:
    ```bash
-   curl -fsSLO https://github.com/MozThinker/squad-office-lite/releases/download/v0.6.0/compose.yaml
+   curl -fsSLO https://github.com/MozThinker/squad-office-lite/releases/download/v0.6.1/compose.yaml
    ```
-   You can also download it with the browser, from the `v0.6.0` release page, and save it in this folder as
+   You can also download it with the browser, from the `v0.6.1` release page, and save it in this folder as
    `compose.yaml`. To change the port or the projects folder, see
    [Changing the port, the address or the projects folder](#changing-the-port-the-address-or-the-projects-folder) (optional).
    **On Linux**, create the `.env` with your user and group now, before step 4, so that the project files belong to
@@ -542,7 +542,7 @@ Without a `.env` the defaults apply. To change them, download the release's `env
 `compose.yaml` folder, remove the `#` from the lines you want to change and run `docker compose up -d` (on Linux you
 already have a `.env` from step 3: don't replace it, add the lines to it):
 ```powershell
-curl.exe -fsSLo .env https://github.com/MozThinker/squad-office-lite/releases/download/v0.6.0/env.example
+curl.exe -fsSLo .env https://github.com/MozThinker/squad-office-lite/releases/download/v0.6.1/env.example
 ```
 (in the Terminal, `curl` instead of `curl.exe`). The attachment is called `env.example` because GitHub renames
 attachments whose names start with a dot.
@@ -1111,6 +1111,15 @@ write, exact keys:
  "id": "P1", "accao": "aprovar", "nota": "", "sha256": "<sha256 do .md que o utilizador viu>",
  "ip": "<último X-Forwarded-For ou IP da ligação>", "ua": "<User-Agent, ≤ 120>"}
 ```
+**Lines that launch (ADR-024):** a line ending in `[lança: <slug>]` (slug `[a-z0-9][a-z0-9-]{0,47}`, one marker per
+line) shows the badge «▶ Aprovar lança a tarefa <slug>» ("approving launches the task") and the button «Aprovar e
+lançar» ("Approve and launch"), only when the kit's `lancar-aprovados` is on: the Office learns that from
+`<dados>/decisoes/.lancar-aprovados.json`, which the kit writes on every run (`{"v": 1, "ligado": true, "atualizado":
+<epoch>, "decisoes": {"<file>.md": "<state>"}}`; older than 10 min, or missing, counts as off). Off: «Lançamento
+desligado: aprovar só regista» ("launching is off: approving only records") and the button «Aprovar». Lines without a
+marker say «Aprovar só regista» ("approving only records"). The marker is hidden from the text; the line and the
+queue don't change.
+
 **What the Office never does:** it doesn't edit or delete the `.md` files (mounted read-only), doesn't apply anything,
 doesn't run commands and doesn't delete or move queue files. The runner is what applies: it checks the `sha256` (it
 only applies on the version you saw, with one exception, below), marks the line (`→ aprovado (…)`), updates `estado`,

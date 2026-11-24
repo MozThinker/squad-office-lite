@@ -95,8 +95,8 @@ class ParseTest(Base):
     def test_sem_secao_decisoes_da_asterisco(self):
         self.put("a.md", pedido())
         [a] = self.listar()
-        self.assertEqual(a["decisoes"], [{"id": "*", "texto": "Campanha X", "valor": None, "feito": None, "data": None,
-                                          "recebido": False, "aberta": True}])
+        self.assertEqual(a["decisoes"], [{"id": "*", "texto": "Campanha X", "valor": None, "lanca": None, "lancamento": None,
+                                          "feito": None, "data": None, "recebido": False, "aberta": True}])
         self.assertEqual(a["abertas"], 1)
 
     def test_titulos_antigos_nao_contam(self):
@@ -115,13 +115,13 @@ class ParseTest(Base):
         p.write_text(p.read_text().replace("## Decisões\n", "## Decisões   \n"))   # espaços finais tolerados
         [a] = self.listar()
         self.assertEqual(a["decisoes"], [
-            {"id": "P1", "texto": "Tecto 145 € para a campanha", "valor": "145 €", "feito": None, "data": None,
+            {"id": "P1", "texto": "Tecto 145 € para a campanha", "valor": "145 €", "lanca": None, "lancamento": None, "feito": None, "data": None,
              "recebido": False, "aberta": True},
-            {"id": "P2", "texto": "Publicar a 1/11", "valor": None, "feito": None, "data": None,
+            {"id": "P2", "texto": "Publicar a 1/11", "valor": None, "lanca": None, "lancamento": None, "feito": None, "data": None,
              "recebido": False, "aberta": True},
-            {"id": "P3", "texto": "Já foi", "valor": None, "feito": "aprovado", "data": "2026-10-24",
+            {"id": "P3", "texto": "Já foi", "valor": None, "lanca": None, "lancamento": None, "feito": "aprovado", "data": "2026-10-24",
              "recebido": False, "aberta": False},
-            {"id": "P4", "texto": "Não", "valor": None, "feito": "recusado", "data": "2026-10-25",
+            {"id": "P4", "texto": "Não", "valor": None, "lanca": None, "lancamento": None, "feito": "recusado", "data": "2026-10-25",
              "recebido": False, "aberta": False}])
         self.assertEqual(a["abertas"], 2)
 

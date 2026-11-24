@@ -7,7 +7,7 @@ import { readFileSync } from "node:fs";
 import vm from "node:vm";
 import {
   ID, MODELOS, ROT_MODELO, envioVisto, idValido, rota, fundir, ultimoEstado, deveSondar, trabalha, segundosAte, fmtSeg, pendente, podeConversa, limpa,
-  camposPedido, respostasDe, pesquisa, ordenar, erroTxt, itemEl, cartaoActivo, lerUltima, gravarUltima,
+  camposPedido, respostasDe, avisoAprovar, pesquisa, ordenar, erroTxt, itemEl, cartaoActivo, lerUltima, gravarUltima,
   pedidoActivo, agrupar, resumoGrupo, fmtDuracao, teclaEnvia, dataRelativa, pecaEstado, mostraParar, modeloEmUso, respondeu, esperarCriada, conversaLinhas,
 } from "../static/conversa.js";
 import * as C from "../static/conversa.js";
@@ -431,7 +431,7 @@ test("A1: «Ver tudo» e o sha256 ficam fora do .cp-corpo, entre o corpo e os bo
   const alvo = Array.from({ length: 30 }, (_, i) => "linha " + i).join("\n");
   const c = cartaoActivo({ n: 1, tipo: "permissao", nonce: N1, ferramenta: "Bash", alvo, sha256: "a".repeat(64), expira: EM(5) });
   const cls = c.kids.map((k) => k.className || k.tagName);
-  assert.deepEqual(cls.slice(0, 5), ["cp-cab", "cp-corpo", "cv-b cv-vt", "sub mono cv-sha", "btns"]);
+  assert.deepEqual(cls.slice(0, 6), ["cp-cab", "cp-corpo", "cv-b cv-vt", "sub mono cv-sha", "cv-aviso-ap", "btns"]);
   const corpo = c.kids[1];
   assert.equal([...corpo.todos()].find((e) => e.tagName === "PRE").textContent, alvo);
   assert.ok(![...corpo.todos()].some((e) => /cv-(vt|sha)/.test(e.className || "")));
@@ -715,4 +715,21 @@ test("R5: os textos da página da Conversa falam da Conversa e do browser, não 
   assert.match(C.VOZ_MSG.explicar, /^O browser vai pedir o microfone/);
   assert.match(src, /"Sem ligação à Conversa\. Fecha e abre de novo daqui a pouco\."/);
   assert.doesNotMatch(src, /Sem ligação ao Office|O Office vai pedir/);
+});
+
+test("ADR-024: o cartão diz o que o «Aprovar» faz: executa agora (acção resumida) ou lança a tarefa <slug>", () => {
+  const exp = new Date(Date.now() + 6e5).toISOString();
+  const perm = { n: 7, tipo: "permissao", nonce: N1, ferramenta: "Bash", alvo: "ls -la", resumo: "listar a pasta", delegacao: false, expira: exp };
+  assert.equal(avisoAprovar(perm).texto, "Aprovar executa agora: listar a pasta");
+  assert.equal(avisoAprovar({ ...perm, resumo: "" }).texto, "Aprovar executa agora: Bash · ls -la");
+  assert.equal(avisoAprovar({ tipo: "permissao" }).texto, "Aprovar executa agora: a acção pedida");
+  for (const alvo of ["/srv/fabrica/bin/lancar loja-v2", "lancar 'loja-v2' --x", "cd /x && lancar loja-v2"])
+    assert.deepEqual(avisoAprovar({ ...perm, delegacao: true, alvo }), { icone: "▶", texto: "Aprovar lança a tarefa loja-v2", lanca: true }, alvo);
+  for (const alvo of ["lancar", "lancar Maius", "xlancar loja", "lancar ../x"])
+    assert.equal(avisoAprovar({ ...perm, delegacao: true, alvo }).texto, "Aprovar lança uma tarefa da squad", alvo);
+  const t = textos(cartaoActivo({ ...perm, delegacao: true, alvo: "lancar loja-v2" })).join("\n");
+  assert.match(t, /Aprovar lança a tarefa loja-v2/);
+  assert.match(textos(cartaoActivo(perm)).join("\n"), /Aprovar executa agora: listar a pasta/);
+  const src = ler("conversa.js");
+  assert.match(src, /setAttribute\("aria-describedby", "cv-ap-" \+ it\.n\)/);
 });

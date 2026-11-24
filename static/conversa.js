@@ -992,6 +992,22 @@ function relogio() {
 }
 
 const pre = (t, cls = "cv-pre") => el("pre", { class: cls, text: str(t) });
+// ADR-024: o que acontece ao aprovar, à vista. Lançador: «Aprovar lança a tarefa <slug>» (o slug do alvo, se o tiver);
+// o resto: «Aprovar executa agora: <acção resumida>». Exportada para os testes.
+const SLUG_LANC = /(?:^|[\s/"'])lancar["']?\s+["']?([a-z0-9][a-z0-9-]{0,47})(?![\w.-])/;
+export function avisoAprovar(it) {
+  if (it?.delegacao === true) {
+    const m = SLUG_LANC.exec(str(it.alvo));
+    return { icone: "▶", texto: m ? `Aprovar lança a tarefa ${m[1]}` : "Aprovar lança uma tarefa da squad", lanca: true };
+  }
+  const accao = str(it?.resumo).trim() ? curto(it.resumo, 80) : [str(it?.ferramenta), curto(it?.alvo, 60)].filter(Boolean).join(" · ");
+  return { icone: "⚡", texto: `Aprovar executa agora: ${accao || "a acção pedida"}`, lanca: false };
+}
+const avisoEl = (it) => {
+  const a = avisoAprovar(it);
+  return el("p", { class: "cv-aviso-ap" + (a.lanca ? " cv-lanca" : ""), id: "cv-ap-" + it.n },
+    el("span", { "aria-hidden": "true", text: a.icone + " " }), a.texto);
+};
 const botao = (txt, a, e, cls = "") => el("button", { type: "button", class: ("cv-b " + cls).trim(), "data-a": a, "data-e": e, text: txt });
 const mdEl = (t, cls = "") => el("div", { class: ("cv-md " + cls).trim() }, materializar(md(str(t))));
 const tituloPedido = (it) => (it.tipo === "permissao" ? (it.delegacao ? "Delegação a uma squad" : "Pedido de permissão") : it.tipo === "plano" ? "Plano proposto" : "Pergunta");
@@ -1066,8 +1082,11 @@ export function cartaoActivo(it, mais = 0) {
     el("div", { class: "cp-cab" }, el("h3", { tabindex: "-1", text: tituloActivo(it, mais) }), el("span", { class: "cv-exp sub", "data-exp": it.expira })),
     el("div", { class: "cp-corpo" }, ...corpo.filter((x) => !fixo(x))));
   c.append(...corpo.filter(fixo)); // A1: «Ver tudo» e o sha256 fora do scroll do corpo, presos entre o corpo e os botões
-  if (it.tipo === "permissao") c.append(el("div", { class: "btns" }, botao(podeConversa(it) ? "Aprovar" : "Aprovar delegação", "perm", "uma_vez", "ok-b"),
-    podeConversa(it) ? botao("Aprovar nesta conversa", "perm", "conversa") : null, botao("Recusar", "perm", "recusar", "no-b")));
+  if (it.tipo === "permissao") {
+    c.append(avisoEl(it), el("div", { class: "btns" }, botao(podeConversa(it) ? "Aprovar" : "Aprovar delegação", "perm", "uma_vez", "ok-b"),
+      podeConversa(it) ? botao("Aprovar nesta conversa", "perm", "conversa") : null, botao("Recusar", "perm", "recusar", "no-b")));
+    for (const b of c.querySelectorAll('.btns button[data-e="uma_vez"], .btns button[data-e="conversa"]')) b.setAttribute("aria-describedby", "cv-ap-" + it.n);
+  }
   else if (it.tipo === "plano") c.append(el("div", { class: "btns" }, botao("Aprovar plano", "plano", "aprovar", "ok-b"), botao("Continuar a planear", "plano", "continuar"),
     botao("Editar", "plano-ed")), el("div", { class: "cv-ed", hidden: true },
     el("label", { class: "cv-vh", for: "cv-ed-" + it.n, text: "Plano editado" }),

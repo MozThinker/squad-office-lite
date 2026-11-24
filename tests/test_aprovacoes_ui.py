@@ -25,6 +25,7 @@ SEGURAS = {
     "dis": 'constante " disabled" ou ""',
     "n": "número (contagem de decisões em aberto)",
     "u.open": "booleano do estado de UI",
+    "aSelo(d)": "HTML do selo (ADR-024) montado no próprio bloco só com esc() do lanca.js e de d.lanca",
 }
 TERNARIO_LITERAL = re.compile(r'^(?:[^"\'`?+]|"[^"]*")*\?\s*"[^"]*"\s*:\s*"[^"]*"$')   # cond ? "a" : "b"
 ESCAPA = re.compile(r"\b(?:esc|inline|md)\(")

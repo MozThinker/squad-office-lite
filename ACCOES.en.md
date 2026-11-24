@@ -1,4 +1,4 @@
-# Approved actions (Squad Office Lite 0.6.0)
+# Approved actions (Squad Office Lite 0.6.1)
 
 [Português](ACCOES.md) · [README](README.en.md) · decisions: ADR-020 and ADR-021 in [DECISIONS.md](DECISIONS.md) (in
 Portuguese)

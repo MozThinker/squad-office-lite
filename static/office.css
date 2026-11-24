@@ -188,6 +188,13 @@ body:is([data-view="quadro"], [data-view="biblioteca"]) #passos { display: none;
 .apr-b > h3 { font-size: 13px; color: var(--muted); margin: 10px 0 2px; }
 .dec { border-top: 1px solid var(--line); margin-top: 10px; padding-top: 8px; overflow-wrap: anywhere; }
 .dec p { margin: 0 0 6px; }
+/* ADR-024: o selo diz por palavras e ícone se aprovar lança uma tarefa (nunca só pela cor) */
+.dec .lanca { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; margin: 4px 0 8px; font-size: 13px; }
+.dec .lanca-on { padding: 6px 10px; border: 2px solid var(--accent); background: var(--panel); font-weight: 600; font-size: 14px; }
+.dec .lanca-off { padding: 4px 10px; border: 1px dashed var(--ctl); color: var(--text); }
+.dec .lanca-reg { color: var(--muted); }
+.dec .lanca-i { font-size: 15px; }
+.dec .lanca-s { font-family: var(--mono); font-weight: 400; overflow-wrap: anywhere; }
 .dec textarea { display: block; width: 100%; min-height: 64px; background: var(--bg); color: var(--text); border: 1px solid var(--ctl);
   padding: 6px 8px; font: inherit; font-size: 16px; resize: vertical; }
 .apr .btns { gap: 6px; margin-top: 6px; }

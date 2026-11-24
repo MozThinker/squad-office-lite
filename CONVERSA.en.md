@@ -1,4 +1,4 @@
-# The Conversa (Squad Office Lite 0.6.0)
+# The Conversa (Squad Office Lite 0.6.1)
 
 [Português](CONVERSA.md) · [README](README.en.md)
 
@@ -72,17 +72,17 @@ different users). Packages: `acl` and `systemd`.
    ```bash
    sudo -i
    mkdir -p /usr/local/src && cd "$(mktemp -d)"
-   curl -fLO https://github.com/MozThinker/squad-office-lite/releases/download/v0.6.0/squad-office-lite-0.6.0.tar.gz
-   curl -fLO https://github.com/MozThinker/squad-office-lite/releases/download/v0.6.0/SHA256SUMS
-   sha256sum -c SHA256SUMS && tar xzf squad-office-lite-0.6.0.tar.gz --no-same-owner -C /usr/local/src
-   mv /usr/local/src/squad-office-lite-0.6.0 /usr/local/src/office-lite-0.6.0
+   curl -fLO https://github.com/MozThinker/squad-office-lite/releases/download/v0.6.1/squad-office-lite-0.6.1.tar.gz
+   curl -fLO https://github.com/MozThinker/squad-office-lite/releases/download/v0.6.1/SHA256SUMS
+   sha256sum -c SHA256SUMS && tar xzf squad-office-lite-0.6.1.tar.gz --no-same-owner -C /usr/local/src
+   mv /usr/local/src/squad-office-lite-0.6.1 /usr/local/src/office-lite-0.6.1
    ```
 3. **The tunnel group** (with `tls: externo`, the default): create a group just for whoever reaches the guardian
    socket (the Office user must not belong to it), e.g. `sudo groupadd cloudflared`, and run `cloudflared` in it (see
    «Tunnel» below).
 4. In the root-owned folder, see what would be done and then install:
    ```bash
-   cd /usr/local/src/office-lite-0.6.0
+   cd /usr/local/src/office-lite-0.6.1
    ./instalar-conversa.sh --office <Office user> --dono <your user> --grupo-socket cloudflared --verificar
    sudo ./instalar-conversa.sh --office <Office user> --dono <your user> --grupo-socket cloudflared
    ```

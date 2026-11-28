@@ -461,6 +461,18 @@ class ServerTest(unittest.TestCase):
                         "week": {"cost_usd": 0, "tasks": 1, "sem_custo": 1}},
         })
 
+    def test_dev_a_preparar_aparece_sem_morrer(self):
+        # meta escrita antes do worktree (runner a copiar o repositório): aparece logo, nunca «morreu» nem «parada?»
+        tid = "20261023-0700-botao"
+        write_json(self.tasks / tid / "meta.json", {"id": tid, "project": "joga", "status": "a preparar", "pid": 1,
+                                                    "started_at": "2026-10-23T07:00:00", "finished_at": None},
+                   age_s=3600)
+        write(self.tasks / tid / "heartbeat", "", age_s=3600)
+        st = server.build_state()
+        [t] = [x for x in st["tasks"] if x["id"] == tid]
+        self.assertEqual((t["status"], t["running"], t["finished"]), ("a preparar", False, None))
+        self.assertNotIn(tid, str(st.get("alerts")))
+
     # --- à tua espera ---
     def test_waiting(self):
         gh = "https://github.com/exemplo-org/joga/pull/"

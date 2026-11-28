@@ -54,17 +54,17 @@ O Lite instala-se de duas formas:
    depois de instalar (o instalador não o pede nem o guarda; ver [Credenciais do Claude](#credenciais-do-claude)).
    O `gh` instala-se pelas [instruções oficiais para Ubuntu](https://github.com/cli/cli/blob/trunk/docs/install_linux.md);
    no `gh auth login` usa de preferência um [token só para os repositórios do Office](#token-do-github).
-3. **Descarrega e instala o Office.** O endereço fica fixado à versão (`v0.6.1`), para leres sempre o mesmo script
+3. **Descarrega e instala o Office.** O endereço fica fixado à versão (`v0.6.2`), para leres sempre o mesmo script
    que o livro e este README descrevem.
    **Forma prudente** (recomendada: lês o script antes de o correr):
    ```bash
-   curl -fsSLO https://raw.githubusercontent.com/MozThinker/squad-office-lite/v0.6.1/get.sh
+   curl -fsSLO https://raw.githubusercontent.com/MozThinker/squad-office-lite/v0.6.2/get.sh
    less get.sh
-   bash get.sh --versao 0.6.1
+   bash get.sh --versao 0.6.2
    ```
    **Com um comando:**
    ```bash
-   curl -fsSL https://raw.githubusercontent.com/MozThinker/squad-office-lite/v0.6.1/get.sh | bash -s -- --versao 0.6.1
+   curl -fsSL https://raw.githubusercontent.com/MozThinker/squad-office-lite/v0.6.2/get.sh | bash -s -- --versao 0.6.2
    ```
    > Este comando descarrega um script da internet e corre-o no teu servidor, com o teu utilizador. Só o faças com
    > endereços em que confias, e de preferência lê-o primeiro. O `get.sh` confere o sha256 do pacote: isso apanha uma
@@ -77,14 +77,14 @@ O Lite instala-se de duas formas:
    prudente. Opções (depois de `bash -s --` no comando de uma linha, ou de `bash get.sh`):
    - `--sem-perguntas`: as respostas vêm do ambiente (ver o cabeçalho do `install.sh`; `OFFICE_GIT_NOME` e
      `OFFICE_GIT_EMAIL` para a identidade do git; sem elas, e sem identidade no git, só avisa). Ex.:
-     `curl -fsSL …/get.sh | bash -s -- --versao 0.6.1 --sem-perguntas`;
-   - `--versao X.Y.Z`: instala essa versão em vez da última (`… | bash -s -- --versao 0.6.1`);
+     `curl -fsSL …/get.sh | bash -s -- --versao 0.6.2 --sem-perguntas`;
+   - `--versao X.Y.Z`: instala essa versão em vez da última (`… | bash -s -- --versao 0.6.2`);
    - as outras opções passam ao `install.sh` (ex.: `--proxy traefik --rede <rede>`).
 
    **Verificação opcional da origem.** O sha256 só confirma que o pacote não se estragou. Para confirmar que foi
    construído pelo repositório público (atestação do GitHub; precisa do `gh` com sessão), descarrega o pacote à mão e:
    ```bash
-   gh attestation verify squad-office-lite-0.6.1.tar.gz --repo MozThinker/squad-office-lite
+   gh attestation verify squad-office-lite-0.6.2.tar.gz --repo MozThinker/squad-office-lite
    ```
    Só as versões publicadas com atestação passam. Uma falha aqui é motivo para não instalar e reportar (ver
    [`SECURITY.md`](SECURITY.md)).
@@ -124,7 +124,7 @@ de reinício. Se mudaste as `raizes`, corre outra vez `./install.sh` (não volta
 
 O mesmo `get.sh`, sem `--versao` (instala a última versão publicada; lê o aviso em «Instalação»):
 ```bash
-curl -fsSL https://raw.githubusercontent.com/MozThinker/squad-office-lite/v0.6.1/get.sh | bash
+curl -fsSL https://raw.githubusercontent.com/MozThinker/squad-office-lite/v0.6.2/get.sh | bash
 ```
 A versão instalada passa para `~/squad-office-lite.anterior-<data>` e a nova fica em `~/squad-office-lite`.
 `~/office-lite` (config, `.env`, credenciais e dados) não é tocada pelo `get.sh`; o `install.sh` só volta a
@@ -435,17 +435,17 @@ só neste PC. A squad só trabalha enquanto o PC está ligado e o Docker Desktop
    ```bash
    mkdir -p ~/office && cd ~/office
    ```
-3. **Descarrega o `compose.yaml`** da versão 0.6.1. As imagens do Office e do runner vêm fixadas por digest: o que
+3. **Descarrega o `compose.yaml`** da versão 0.6.2. As imagens do Office e do runner vêm fixadas por digest: o que
    corre é sempre o que foi publicado com esta versão.
    No PowerShell (é `curl.exe`, não `curl`):
    ```powershell
-   curl.exe -fsSLO https://github.com/MozThinker/squad-office-lite/releases/download/v0.6.1/compose.yaml
+   curl.exe -fsSLO https://github.com/MozThinker/squad-office-lite/releases/download/v0.6.2/compose.yaml
    ```
    No Terminal:
    ```bash
-   curl -fsSLO https://github.com/MozThinker/squad-office-lite/releases/download/v0.6.1/compose.yaml
+   curl -fsSLO https://github.com/MozThinker/squad-office-lite/releases/download/v0.6.2/compose.yaml
    ```
-   Também o podes descarregar pelo browser, na página da release `v0.6.1`, e guardá-lo nesta pasta com o nome
+   Também o podes descarregar pelo browser, na página da release `v0.6.2`, e guardá-lo nesta pasta com o nome
    `compose.yaml`. Para mudar a porta ou a pasta dos projectos, ver
    [Mudar a porta, o endereço ou a pasta dos projectos](#mudar-a-porta-o-endereço-ou-a-pasta-dos-projectos) (opcional).
    **No Linux**, cria já o `.env` com o teu utilizador e grupo, antes do passo 4, para os ficheiros dos projectos
@@ -522,7 +522,7 @@ Sem `.env` valem as omissões. Para mudar, descarrega o `env.example` da release
 `compose.yaml`, tira o `#` das linhas que queres mudar e corre `docker compose up -d` (no Linux já tens um `.env` do
 passo 3: não o substituas, acrescenta-lhe as linhas):
 ```powershell
-curl.exe -fsSLo .env https://github.com/MozThinker/squad-office-lite/releases/download/v0.6.1/env.example
+curl.exe -fsSLo .env https://github.com/MozThinker/squad-office-lite/releases/download/v0.6.2/env.example
 ```
 (no Terminal, `curl` em vez de `curl.exe`). O anexo chama-se `env.example` porque o GitHub muda o nome dos anexos que
 começam por ponto.
@@ -824,7 +824,8 @@ Lançáveis = cada squad `worktree` × cada projecto.
     push/                       chaves e subscrições Web Push (0700)
     biblioteca/<pasta>/         fontes da Biblioteca
     biblioteca/<pasta>/.arquivo/  o que se arquivou (mesmos caminhos) e o REGISTO.tsv; só o runner lá escreve
-    runner/                     lock, histórico, logs, settings/, office.yaml.sha256, gh-verificado.json e
+    runner/                     lock, histórico, logs, settings/, office.yaml.sha256, gh-verificado.json,
+                                limpeza.json (tarefas vistas hoje e PRs fundidos) e
                                 agentes-ia.jsonl (custos da IA dos agentes) do runner (só no host)
     runner-estado/estado.json   sinal do runner para o Office (sem segredos; ver Runner)
 ~/projectos/exemplo/            repositório de exemplo criado pelo instalador
@@ -869,8 +870,25 @@ Cada passagem (com lock, nunca duas ao mesmo tempo): grava o `estado.json` → c
 aplica decisões → retoma tarefas interrompidas (até 2 vezes) → trata a fila do Quadro → trata a fila do arquivo da
 Biblioteca e o arquivo automático (ver [Arquivo da Biblioteca](#arquivo-da-biblioteca-adr-011)) → arquiva pedidos
 antigos (de todas as filas) → rotinas aprovadas → fila dos agentes, com a acção de IA no fim (ver
-[Fila dos agentes](#fila-dos-agentes-adr-017-a-019)). No log, o que é da Biblioteca começa por «biblioteca:» e o da
-fila dos agentes por «agentes:».
+[Fila dos agentes](#fila-dos-agentes-adr-017-a-019)) → limpeza das tarefas com PR fundido (abaixo). No log, o que é da
+Biblioteca começa por «biblioteca:», o da fila dos agentes por «agentes:» e o da limpeza por «limpeza:».
+
+**Limpeza das worktrees (ADR-025):** o runner vê cada tarefa parada uma vez por dia. «Parada» conta pelo que só o
+runner escreve: heartbeat parado há mais de 5 min e nenhum `correr` da tarefa vivo (o estado da meta não chega). Com
+o PR fundido (do mesmo repositório, não de um fork, e aberto depois do início da tarefa), sem alterações a ficheiros
+seguidos, sem ficheiros novos por adicionar e com o HEAD local igual ou antecessor do último commit do PR (um squash
+merge também conta), remove o worktree, o branch local e a transcrição da sessão (a pasta em
+`raizes.claude_projects` com o nome do worktree; fica se tiver `memory/`), e a tarefa passa a `arquivada` (Feito, no
+Quadro; a pasta `tasks/<id>/` fica). Ficheiros novos que não travam: pastas de dependências (`node_modules`, `.venv`,
+`venv*` com `pyvenv.cfg`, `__pycache__`, `.pytest_cache`) e o que o runner copiou (agentes, mensagens, acções); os
+ignorados pelo `.gitignore` saem com o worktree. PR aberto: fica. PR encerrado sem merge, sem PR (repositório sem
+remoto, squads de negócio), alterações por commitar, outro ficheiro novo, commits que não estão no PR ou sem o estado
+do runner da tarefa: fica, e se estiver parada há mais de 7 dias aparece numa linha diária «limpeza: … ficam por
+limpar» no journal. O estado do PR vem do `gh` (no máximo 10 perguntas por passagem; as outras ficam para a seguinte).
+Cada passo que falha dá uma linha «limpeza: …»; se o worktree não sair, não se apaga mais nada, e um passo que falhe
+depois (branch, transcrição, meta) volta a ser tentado no dia seguinte. Falhas ou tarefas por limpar dão também uma
+notificação resumida (Telegram), no máximo uma por dia. O estado do runner de uma tarefa (`runner/tarefas/<id>.json`)
+não sai com a rotação enquanto o worktree existir.
 
 **`estado.json`** (`<dados>/runner-estado/`, 0644, escrita atómica): o sinal do runner para o Office, que o lê só de
 leitura e com ele desenha os «Primeiros passos» e a faixa «O runner não dá sinal desde HH:MM» (mais de 3 min sem
@@ -887,7 +905,10 @@ ignorado (o Office diz «O runner ainda não deu sinal»). O `/healthz` não mud
 **Lançar:** revalida o pedido contra a config; confirma o tecto diário (`tecto_diario`, no fuso da config) e o
 `paralelo` (acima dele o pedido espera); cria `git worktree` em `<repo>/.worktrees/<task_id>` num branch
 `<kind>/<slug>` a partir do ramo por omissão do `origin` (ou do actual, sem remoto); copia para lá os agentes da squad
-(ver [Fila dos agentes](#fila-dos-agentes-adr-017-a-019)); grava `task.md` e `meta.json`;
+(ver [Fila dos agentes](#fila-dos-agentes-adr-017-a-019)). A `meta.json` (com o `task.md`) é gravada logo a seguir
+às validações, com o estado `a preparar` (Em curso no Quadro, sem selo), e passa a `a correr` quando o worktree e as
+cópias estão prontos; se a preparação falhar a partir daí, fica em `erro` com o motivo, e uma preparação interrompida
+(processo morto, ex.: reboot durante a cópia) fecha em `erro` na passagem seguinte. Depois
 responde `{"task_id"}` e corre o `claude -p` destacado (log em `<dados>/runner/logs/<task_id>.log`, saída do claude em
 `tasks/<id>/claude.log`; os segredos do `runner.env` chegam-lhe pelo stdin, ver
 [Credenciais do Claude](#credenciais-do-claude)). O título e o brief vão só por ficheiro e stdin, delimitados como dados do utilizador. Limite

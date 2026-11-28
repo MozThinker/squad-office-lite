@@ -829,6 +829,14 @@ jobs:
           PLAYWRIGHT_DIR="$RUNNER_TEMP/pw" E2E_BROWSER="$BROWSER" node tools/e2e_conversa.mjs
         env:
           BROWSER: ${{ matrix.browser }}
+          E2E_APROVACOES: "0"
+      # Proposta 0.6.1 (ADR-024): selo «lança» ligado e desligado, linha sem marca, fila v1 (servidor real, pastas temporárias)
+      - name: Aprovações que lançam (selo, «Aprovar e lançar», 375 e 1440 px)
+        run: |
+          if [ ! -f tools/e2e_aprovacoes.mjs ]; then echo "sem tools/e2e_aprovacoes.mjs: nada a correr"; exit 0; fi
+          PLAYWRIGHT_DIR="$RUNNER_TEMP/pw" E2E_BROWSER="$BROWSER" node tools/e2e_aprovacoes.mjs
+        env:
+          BROWSER: ${{ matrix.browser }}
 
   # Proposta 0.6.0 (ADR-023, revisão S2/S5): o instalar-conversa.sh a sério, como root, com dois utilizadores. Prova
   # com uids distintos o que os testes locais só simulam (test_guardiao_chave/web).

@@ -43,6 +43,8 @@ HEARTBEAT_S = 60          # o Office: «a correr» com heartbeat parado há > 5 
 MORTA_S = 5 * 60
 TIMEOUT_S = {"task": 3 * 3600, "goal": 8 * 3600}
 MAX_RETOMAS = 2
+PREPARAR = "a preparar"   # meta escrita antes do worktree; passa a «a correr» no fim do preparar()
+PREPARAR_S = 30 * 60
 GIT_S = 120               # timeout de cada comando git/gh
 DISALLOWED = ["Bash(gh pr merge:*)", "Bash(gh pr close:*)", "Bash(gh repo delete:*)", "Bash(gh release:*)",
               "Bash(git push --force:*)", "Bash(git push -f:*)", "Bash(git push origin main:*)",
@@ -351,11 +353,11 @@ def lancados_hoje(cfg, fila: Path, now: float) -> int:
 
 
 def a_correr(cfg, now: float) -> int:
-    # execuções vivas: meta «a correr» com heartbeat fresco
+    # execuções vivas: meta «a correr» (ou «a preparar») com heartbeat fresco
     n = 0
     for m in officecfg.caminho(cfg, "tasks").glob("*/meta.json"):
         meta = ler_meta(m)
-        if meta and meta.get("status") == "a correr":
+        if meta and meta.get("status") in ("a correr", PREPARAR):
             idade = idade_heartbeat(m.parent, now)
             n += idade is not None and idade < MORTA_S
     return n
@@ -533,9 +535,10 @@ def _delimitar(s: str) -> str:
 
 
 def preparar(cfg, p: dict, now: float, extra: dict | None = None) -> str:
-    """Cria worktree, task.md, meta.json («a correr») e heartbeat. Devolve o task_id. Falha sem lançar nada.
-    Copia os agentes da squad para o worktree (agentes_copia); `extra` (rotinas: rotina, max_usd, max_turnos) entra
-    na meta."""
+    """Valida, grava logo task.md, meta.json («a preparar», com o pid de quem prepara) e heartbeat, para o Quadro
+    mostrar a tarefa durante a cópia; cria o worktree, copia os agentes da squad (agentes_copia) e grava o estado; a
+    meta passa a «a correr». Devolve o task_id. Falha sem lançar nada: antes da meta, sem deixar rasto; depois, com a
+    meta em «erro» e o motivo em `issues`. `extra` (rotinas: rotina, max_usd, max_turnos) entra na meta."""
     proj = next(x for x in cfg["projectos"] if x["id"] == p["projecto"])
     repo = officecfg.raiz(cfg, "projectos") / proj["repo"]
     if not repo.is_dir() or git(["rev-parse", "--git-dir"], repo).returncode != 0:
@@ -555,33 +558,56 @@ def preparar(cfg, p: dict, now: float, extra: dict | None = None) -> str:
         if r.returncode != 0 or r.stdout.strip():
             raise Falha(f"o branch {branch} já existe no remoto")
     wt = repo.resolve() / ".worktrees" / tid
-    _excluir_worktrees(repo)
-    r = git(["worktree", "add", "--quiet", "--no-track", "-b", branch, "--", str(wt), inicio], repo)
-    if r.returncode != 0:
-        raise Falha("git worktree add falhou")
     workdir.mkdir(parents=True, mode=0o750)
-    copiados, avisos = agentes_copia.copiar(cfg, p["squad"], wt, [])
-    mensagens = []
-    if negocio(cfg, p["squad"]):   # CA-4: as mensagens recolhidas pelo serviço accoes vão para entrada/mensagens/
-        mensagens, av = agentes_copia.copiar_mensagens(cfg, p["squad"], wt, [], now)
-        _, av2 = agentes_copia.copiar_accoes(cfg, p["squad"], wt)   # C2: acções, folhas e domínios da squad
-        avisos = avisos + av + av2
-    gravar_estado(cfg, tid, {"squad": p["squad"], "projecto": p["projecto"], "worktree": str(wt),
-                             "agentes_copiados": copiados, "avisos": avisos, "mensagens_copiadas": mensagens,
-                             **(extra or {})})
     task = f"# {p['titulo'].strip()}\n\n{p['brief'].strip()}\n"
     (workdir / "task.md").write_text(task, encoding="utf-8")
     meta = {"id": tid, "squad": p["squad"], "project": p["projecto"], "repo": url, "task": task,
-            "mode": p["mode"], "kind": p["kind"], "status": "a correr",
+            "mode": p["mode"], "kind": p["kind"], "status": PREPARAR,
             "started_at": dt.isoformat(timespec="seconds"), "finished_at": None,
             "worktree": str(wt), "workdir": str(workdir), "branch": branch, "base": base,
             "session_id": None, "claude_dir": officecfg.mangle(str(wt)), "pr": None, "pr_url": None,
             "cost_usd": None,
-            "turns": None, "duration_s": None, "result": None, "issues": [], "auto_resumes": 0, "pid": None,
-            "pedido": p["id"], "agentes_copiados": copiados, "avisos_agentes": avisos, **(extra or {})}
+            "turns": None, "duration_s": None, "result": None, "issues": [], "auto_resumes": 0, "pid": os.getpid(),
+            "pedido": p["id"], "agentes_copiados": [], "avisos_agentes": [], **(extra or {})}
+    escrever_json(workdir / "meta.json", meta)
+    (workdir / "heartbeat").touch()
+    try:
+        _excluir_worktrees(repo)
+        r = git(["worktree", "add", "--quiet", "--no-track", "-b", branch, "--", str(wt), inicio], repo)
+        if r.returncode != 0:
+            raise Falha("git worktree add falhou")
+        copiados, avisos = agentes_copia.copiar(cfg, p["squad"], wt, [])
+        mensagens, accoes = [], []
+        if negocio(cfg, p["squad"]):   # CA-4: as mensagens recolhidas pelo serviço accoes vão para entrada/mensagens/
+            mensagens, av = agentes_copia.copiar_mensagens(cfg, p["squad"], wt, [], now)
+            accoes, av2 = agentes_copia.copiar_accoes(cfg, p["squad"], wt)   # C2: acções, folhas e domínios
+            avisos = avisos + av + av2
+        # branch e cópias: a limpeza (ADR-025) confere a meta contra eles e sabe que ficheiros não seguidos são nossos
+        gravar_estado(cfg, tid, {"squad": p["squad"], "projecto": p["projecto"], "worktree": str(wt),
+                                 "branch": branch, "agentes_copiados": copiados, "avisos": avisos,
+                                 "mensagens_copiadas": mensagens, "accoes_copiadas": accoes, **(extra or {})})
+    except Exception as e:   # noqa: BLE001 - a meta nunca fica «a preparar»; o erro sobe como antes
+        motivo = str(e) if isinstance(e, Falha) else f"erro a preparar a tarefa no host ({type(e).__name__})"
+        meta.update(status="erro", pid=None, issues=[motivo],
+                    finished_at=agora(cfg).isoformat(timespec="seconds"))
+        try:
+            escrever_json(workdir / "meta.json", meta)
+        except OSError:
+            pass   # a Falha/OSError sobe na mesma: o pedido fica com o erro e a linha no journal
+        raise
+    meta.update(status="a correr", pid=None, agentes_copiados=copiados, avisos_agentes=avisos)
     escrever_json(workdir / "meta.json", meta)
     (workdir / "heartbeat").touch()
     return tid
+
+
+def preparacao_morta(meta: dict, workdir: Path, now: float) -> bool:
+    """Meta «a preparar» órfã: heartbeat parado há > MORTA_S e o processo que preparava já não existe (ou o heartbeat
+    parou há > PREPARAR_S: cada git tem timeout de GIT_S, por isso um pid vivo nessa altura é outro processo)."""
+    idade = idade_heartbeat(workdir, now)
+    if idade is not None and idade < MORTA_S:
+        return False
+    return idade is None or idade > PREPARAR_S or not vivo(meta.get("pid"))
 
 
 def negocio(cfg, squad) -> str | None:
@@ -1364,10 +1390,19 @@ def _propor(cfg, squad: str, tid: str, texto: str) -> list[str]:
 
 def retomas(cfg, cfg_path: str, now: float | None = None) -> list[str]:
     """Execuções «a correr» que morreram (heartbeat > 5 min, processo inexistente): retoma com --resume até
-    MAX_RETOMAS vezes, se houver sessão e lugar no paralelo; senão fecha-as em «erro»."""
+    MAX_RETOMAS vezes, se houver sessão e lugar no paralelo; senão fecha-as em «erro». Metas «a preparar» órfãs
+    (preparacao_morta) fecham em «erro»: nunca há worktree completo para retomar."""
     t, linhas = time.time() if now is None else now, []
     for meta_path in sorted(officecfg.caminho(cfg, "tasks").glob("*/meta.json")):
         meta = ler_meta(meta_path)
+        if meta and meta.get("status") == PREPARAR and meta.get("id") == meta_path.parent.name:
+            if preparacao_morta(meta, meta_path.parent, t):   # o lançador morreu a meio (ex.: reboot na cópia)
+                meta.update(status="erro", pid=None, finished_at=agora(cfg, t).isoformat(timespec="seconds"),
+                            issues=["a preparação da tarefa foi interrompida"])
+                escrever_json(meta_path, meta)
+                linhas.append(f"tarefa {meta['id']} interrompida na preparação: fechada em erro")
+                avisar(f"Squad Office: {meta['id']} — erro (a preparação foi interrompida)")
+            continue
         if not meta or meta.get("status") != "a correr" or meta.get("id") != meta_path.parent.name:
             continue
         tid = meta["id"]
@@ -1457,6 +1492,9 @@ def parar(cfg, tid: str) -> tuple[int, str]:
             return 1, f"a marca de paragem da tarefa {tid} é um symlink (não foi seguido): apaga {marca} e repete"
         return desconhecida   # sem pasta da tarefa (ou ilegível)
     meta = ler_meta(meta_path)
+    if meta is not None and meta.get("id") == tid and meta.get("status") == PREPARAR:
+        # a marca fica: o correr que o lançador destacar no fim da preparação vê-a e fecha a meta sem lançar
+        return 0, f"tarefa {tid} marcada para parar: ainda está a preparar e fecha sem correr"
     if meta is None or meta.get("id") != tid or meta.get("status") != "a correr":
         marca.unlink(missing_ok=True)
         return desconhecida if meta is None or meta.get("id") != tid else (

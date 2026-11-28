@@ -2,6 +2,7 @@
 Repos git locais, `claude` falso de tests/bin, tudo em tmp_path."""
 import json
 import os
+import shutil
 import time
 from pathlib import Path
 
@@ -296,5 +297,9 @@ def test_estado_das_tarefas_rodado_com_as_settings(ctx):
     assert est.exists()
     office_runner.limpar_settings(cfg, time.time() - 3600)
     assert est.exists()
+    office_runner.limpar_settings(cfg, time.time() + 3600)
+    assert est.exists()   # o worktree ainda existe: a limpeza (ADR-025) precisa do estado
+    m = json.loads((officecfg.caminho(cfg, "tasks") / tid / "meta.json").read_text(encoding="utf-8"))
+    shutil.rmtree(m["worktree"])
     office_runner.limpar_settings(cfg, time.time() + 3600)
     assert not est.exists()

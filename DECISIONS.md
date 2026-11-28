@@ -912,3 +912,65 @@ omissão do kit e o que o Dia 5 diz.
 **Consequências:** um ficheiro escondido na pasta das decisões (não é `.md`: não aparece como pedido nem na
 Biblioteca). Um selo a mais por linha. **Reverter:** voltar a mostrar `d.texto` com a marca e ignorar `lanca`; o
 ficheiro do kit pode ficar.
+
+## ADR-025 · Tarefa visível desde o arranque («a preparar») e limpeza diária das worktrees com PR fundido (2026-11-28)
+**Contexto:** a `meta.json` só era escrita depois do `git worktree add`; numa instalação com um repositório grande, a
+tarefa ficou invisível no Quadro durante a cópia. E o Lite nunca removia worktrees: numa instalação acumularam
+5,5 GB de worktrees de PRs já fundidos.
+
+**Decisão:**
+- **«a preparar».** O `preparar()` escreve `task.md`, `meta.json` (`status: "a preparar"`, `pid` de quem prepara) e o
+  heartbeat logo depois das validações (id, branch local e no remoto); só então cria o worktree, copia os agentes e
+  grava o estado do runner, e a meta passa a «a correr» (`pid: null`, como antes). Validação falhada: nada fica
+  escrito, como antes. Falha depois da meta: `status: "erro"` com o motivo em `issues` e a `Falha` (ou `OSError`) sobe
+  como antes (o pedido recebe o erro). No Quadro, «a preparar» é Em curso sem selo; no Office não conta como «a
+  correr» (sem transcrições a seguir, nunca «morreu» nem «parada?»). Conta no `paralelo` e nas tarefas abertas das
+  rotinas. O `retomas()` nunca a retoma (não há worktree completo): fecha-a em «erro» («a preparação da tarefa foi
+  interrompida») só quando o heartbeat está parado há > 5 min **e** o processo que preparava já não existe, ou o
+  heartbeat parou há > 30 min (cada `git` tem timeout de 2 min: um pid vivo nessa altura é outro processo). O
+  `parar` numa tarefa «a preparar» deixa a marca: o `correr` destacado no fim da preparação vê-a e fecha sem lançar.
+- **Limpeza (`runner/limpeza.py`, no fim de cada passagem, cada tarefa vista no máximo 1× por dia).** Remove o
+  worktree (`git worktree remove --force`), o branch local (`git branch -D`) e a transcrição (a pasta do
+  `raizes.claude_projects` com o nome do worktree, recalculado e igual ao `claude_dir` da meta; nunca se tiver
+  `memory/`, nunca um symlink) e a meta passa a `arquivada` (com `arquivada_em` e o `pr` «… (merged)»), só se:
+  - `confiar()` (worktree e workdir da meta iguais aos que o runner calcula) e o `branch` da meta igual ao do estado
+    do runner (`runner/tarefas/<tid>.json`, que só o runner escreve; estados de antes da 0.6.2 não o têm). Sem estado:
+    fica (com aviso aos 7 dias). A rotação (`limpar_settings`) já não apaga o estado de uma tarefa com worktree;
+  - parada pelo que só o runner escreve: heartbeat parado há > 5 min, nenhum `office_runner.py correr <tid>` vivo
+    (procurado em `/proc`, não pelo pid da meta) e o pid da meta sem processo. O `status` da meta só exclui
+    («a correr», «a preparar», «arquivada»), nunca autoriza;
+  - sem alterações a ficheiros seguidos e sem entradas `??` (regra igual à do kit 1.7.0), salvo pastas de
+    dependências (`node_modules`, `.venv`, `venv*` com `pyvenv.cfg`, `__pycache__`, `.pytest_cache`) e os caminhos que
+    o runner copiou e estão no estado (`agentes_copiados`, `mensagens_copiadas`, `accoes_copiadas`). Uma pasta nova
+    que não seja de dependências é vista ficheiro a ficheiro. Os ignorados pelo `.gitignore` saem com o worktree;
+  - no branch da tarefa, PR fundido do mesmo repositório (`isCrossRepository: false` e o dono do origin) criado depois
+    do início da tarefa (minuto do task_id) ou com o URL do `pr_url` da meta, e o HEAD local igual ou antecessor do
+    último commit do PR (`git merge-base --is-ancestor HEAD <headRefOid>`: um squash merge confere assim).
+
+  O estado do PR vem do `gh pr list --head <branch> --state all --json
+  url,state,headRefName,headRefOid,createdAt,headRepositoryOwner,isCrossRepository`, no máximo 10 por passagem (as
+  restantes ficam para a passagem seguinte); o último commit de um PR fundido (e o branch) fica em
+  `<dados>/runner/limpeza.json` (com as tarefas vistas hoje), para não voltar a perguntar enquanto a tarefa não sai.
+  PR aberto: fica, calado. PR fechado sem merge, sem PR (também repositórios sem remoto e squads de negócio), sujo,
+  ficheiros novos, commits locais fora do PR ou o último commit do PR que não está no repositório local: fica, e se
+  estiver parada há mais de 7 dias entra numa linha de aviso diária no journal. Um passo que falha (gh, `git status`,
+  `worktree remove`, `branch -D`, apagar a transcrição, gravar a meta) dá a sua linha `limpeza: …`; se o
+  `worktree remove` falhar não se apaga mais nada. Os passos são idempotentes: com o merge guardado, uma tarefa sem
+  worktree cuja limpeza ficou a meio (branch, transcrição ou meta por gravar) acaba no dia seguinte; um worktree
+  apagado à mão sem merge conferido fica como está. Falhas ou tarefas por limpar dão um `avisar()` resumido, no
+  máximo 1 por dia (`avisado` no `limpeza.json`). Uma tarefa que morre «a preparar» também dá `avisar()`.
+
+**Alternativas recusadas:**
+- Uma chave no `office.yaml` para ligar/desligar: exigia `versao: 2` ou mais uma chave a documentar; a limpeza só
+  toca em trabalho já fundido no remoto e conferido commit a commit.
+- Confiar no estado do PR gravado na meta no fim da tarefa: é o de então (quase sempre «open»); um PR fundido depois
+  nunca seria limpo. Por isso pergunta-se ao gh, com limite.
+- `git branch -d` (só ramos fundidos): um squash merge nunca conta como fundido para o git; o `--is-ancestor` contra
+  o último commit do PR é a prova.
+- Apagar a pasta da tarefa (`tasks/<id>/`): fica, com o `task.md`, o `claude.log` e a meta, para o histórico e o
+  Quadro.
+
+**Consequências:** o disco volta ao normal sem intervenção; o `node_modules`/`dist` (não seguidos) de uma tarefa
+fundida saem com o worktree. Mais 1 pedido ao GitHub por tarefa parada e por dia (≤ 10 por passagem). O estado
+`arquivada` já era tratado pelo Quadro (Feito). **Reverter:** tirar a linha `limpeza.processar` de
+`office_runner.uma_vez`; as metas já arquivadas ficam como estão.

@@ -5,7 +5,8 @@ Docker, pelo `ciclo` (processo principal do contentor runner).
     office_runner.py --uma-vez [--config FICH]            uma passagem: decisões → retomas → fila do Quadro → arquivo
                                                           da Biblioteca (fila e automático) → rotação → rotinas →
                                                           fila dos agentes (a acção com IA no fim) → rotação dela →
-                                                          purga dos pedidos de acções com mais de 90 dias
+                                                          limpeza das tarefas com PR fundido → purga dos pedidos de
+                                                          acções com mais de 90 dias
     office_runner.py correr TASK_ID [--retomar] [--config FICH]   (interno) corre o claude numa tarefa já preparada
     office_runner.py parar TASK_ID [--config FICH]        pára uma tarefa «a correr» (fecha em erro; não é retomada)
     office_runner.py doctor [--config FICH]               diagnóstico: uma linha ✓/✗ por verificação (exit 0/1)
@@ -40,6 +41,7 @@ import arquivador
 import decisoes
 import diagnostico
 import lancador
+import limpeza
 import rotinas
 import seguro
 
@@ -70,7 +72,7 @@ def cfg_parar(cfg_path: str) -> dict:
 def limpar_settings(cfg, limite: float) -> None:
     """Apaga as <dados>/runner/settings/<tid>.json e o estado <dados>/runner/tarefas/<tid>.json de tarefas fechadas
     antes de `limite` (o correr já apaga as settings ao fechar; isto apanha as que ficaram, ex.: tarefa fechada pelo
-    retomas()). Sem meta, conta a data do ficheiro."""
+    retomas()). Sem meta, conta a data do ficheiro. O estado de uma tarefa cujo worktree ainda existe nunca sai."""
     tasks = officecfg.caminho(cfg, "tasks")
     for sub in ("settings", "tarefas"):
         pasta = officecfg.caminho(cfg, "runner") / sub
@@ -82,6 +84,10 @@ def limpar_settings(cfg, limite: float) -> None:
             tid = nome[: -len(".json")]
             if not lancador.TID.fullmatch(tid):
                 continue
+            if sub == "tarefas":   # o estado de uma tarefa com worktree fica: a limpeza confere-a com ele (ADR-025)
+                wt = lancador.ler_estado(cfg, tid).get("worktree")
+                if isinstance(wt, str) and os.path.isdir(wt):
+                    continue
             meta = lancador.ler_meta(tasks / tid / "meta.json")
             try:
                 if meta is None:
@@ -183,6 +189,7 @@ def uma_vez(cfg, cfg_path: str, now: float | None = None) -> list[str]:
         linhas += rotinas.processar(cfg, cfg_path, now)
         linhas += agentes_fila.processar(cfg, cfg_path, now)
         linhas += agentes_fila.rodar(cfg, now)
+        linhas += limpeza.processar(cfg, now)   # 1× por dia por tarefa: worktrees de PRs fundidos (ADR-025)
         accoes_propor.registo_legivel(cfg)
         linhas += accoes_propor.purgar(cfg, time.time() if now is None else now)   # 90 dias (ADR-021)
     return linhas

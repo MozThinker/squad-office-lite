@@ -77,6 +77,11 @@ class RegrasDevTest(unittest.TestCase):
         c = self.um(status="parada?")
         self.assertEqual((c["coluna"], c["selo"]), ("em-curso", {"cor": "laranja", "texto": "parada?"}))
 
+    def test_4b_a_preparar_em_curso_sem_selo(self):
+        # a meta é escrita antes do worktree: o cartão aparece logo, sem selo de erro nem cinzento
+        c = self.um(status="a preparar", finished=None)
+        self.assertEqual((c["coluna"], c["selo"], c["detalhe"]["estado"]), ("em-curso", None, "a preparar"))
+
     def test_5_falhadas(self):
         for st in ("erro", "incompleta", "morreu"):
             c = self.um(status=st)
@@ -247,7 +252,7 @@ class RotinasTest(unittest.TestCase):
 
 class SquadsTest(unittest.TestCase):
     def test_estados(self):
-        casos = {"a correr": ("em-curso", None), "parada?": ("em-curso", "laranja"), "erro": ("em-curso", "vermelho"),
+        casos = {"a correr": ("em-curso", None), "a preparar": ("em-curso", None), "parada?": ("em-curso", "laranja"), "erro": ("em-curso", "vermelho"),
                  "falhou": ("em-curso", "vermelho"), "morreu": ("em-curso", "vermelho"),
                  "incompleta": ("em-curso", "vermelho"), "concluída": ("feito", None), "concluido": ("feito", None),
                  "terminada": ("feito", None), "arquivada": ("feito", None)}

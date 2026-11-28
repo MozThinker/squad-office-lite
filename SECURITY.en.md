@@ -40,7 +40,7 @@ purchasers are guaranteed them for **at least 12 months from the date of purchas
 The same command as the installation (see the README, “Updating”):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/MozThinker/squad-office-lite/v0.6.1/get.sh | bash
+curl -fsSL https://raw.githubusercontent.com/MozThinker/squad-office-lite/v0.6.2/get.sh | bash
 ```
 
 It downloads the latest published version, checks its sha256 and runs `install.sh`. The previous version stays in

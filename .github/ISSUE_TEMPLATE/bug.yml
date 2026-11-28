@@ -32,7 +32,7 @@ body:
     attributes:
       label: Versão do Lite / Lite version
       description: "A da linha «versão instalada …» do `doctor` (no modo Docker, também a do endereço de onde descarregaste o `compose.yaml`). / The one on the «versão instalada …» (installed version) line of `doctor` (in Docker mode, also the one in the URL you downloaded `compose.yaml` from)."
-      placeholder: "0.6.1"
+      placeholder: "0.6.2"
     validations:
       required: true
   - type: input

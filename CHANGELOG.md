@@ -1,5 +1,27 @@
 # Changelog
 
+## Lite 0.6.2 (2026-11-28)
+
+Arrumação do runner (ADR-025). `versao: 1` do `office.yaml` mantém-se (nenhuma chave nova) e os contratos v1 (fila de
+decisões, `cartoes.json`, pedidos de lançamento, push) não mudam.
+
+- **A tarefa aparece logo no Quadro:** a `meta.json` é escrita antes do `git worktree add`, com o estado novo
+  `a preparar` (Em curso, sem selo), e passa a `a correr` depois do worktree, da cópia dos agentes e do estado do
+  runner. Se a preparação falhar a partir daí, a tarefa fica em `erro` com o motivo em `issues` (o pedido recebe o
+  erro como antes). Uma preparação interrompida (ex.: reboot durante a cópia) fecha em `erro` na passagem seguinte,
+  nunca enquanto o processo que prepara está vivo; o `parar` numa tarefa a preparar fá-la fechar sem correr.
+- **Limpeza diária das worktrees:** o runner remove o worktree, o branch local e a transcrição da sessão das tarefas
+  paradas (heartbeat parado e nenhum `correr` vivo, não só o estado da meta) com o PR fundido (do mesmo repositório e
+  aberto depois do início da tarefa), sem alterações a ficheiros seguidos, sem ficheiros novos por adicionar (salvo
+  pastas de dependências e as cópias do runner) e com o HEAD local contido no último commit do PR (um squash também
+  conta). A meta passa a `arquivada`. A transcrição fica se tiver `memory/`. PR fechado sem merge, sem PR, trabalho
+  por enviar ou sem o estado do runner: fica, com um aviso no journal se estiver parada há mais de 7 dias. No máximo
+  10 perguntas ao `gh` por passagem; cada passo falhado dá uma linha `limpeza: …` no journal e é tentado outra vez no
+  dia seguinte; uma notificação resumida por dia. O estado do runner de uma tarefa não sai com a rotação enquanto o
+  worktree existir, e passa a guardar o branch e as cópias de acções.
+- **Testes:** `tests/test_runner_preparar.py` e `tests/test_runner_limpeza.py` (`git` real em pastas temporárias,
+  `gh` falso), mais o Quadro e o Office com `a preparar`.
+
 ## Lite 0.6.1 (2026-11-23)
 
 Aprovações que lançam bem à vista (ADR-024). Só muda a apresentação: a fila de decisões v1 e o formato das linhas

@@ -233,7 +233,7 @@ def _fechar_tarefas(cfg, r: dict) -> bool:
     for tid in r["tarefas"]:
         meta = lancador.ler_meta(officecfg.caminho(cfg, "tasks") / tid / "meta.json") \
             if lancador.TID.fullmatch(tid) else None
-        if meta is not None and meta.get("status") == "a correr":
+        if meta is not None and meta.get("status") in ("a correr", lancador.PREPARAR):
             abertas.append(tid)
         elif meta is not None:
             r["falhas"] = r["falhas"] + 1 if meta.get("status") == "erro" else 0

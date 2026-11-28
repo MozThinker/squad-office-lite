@@ -39,6 +39,7 @@ PR_OPEN = re.compile(r"(https://github\.com/[\w.-]+/[\w.-]+/pull/\d+) \((open(?:
 PR_ANY = re.compile(r"(https://github\.com/[\w.-]+/[\w.-]+/pull/\d+)(?: \(([a-z, ]{1,30})\))?")
 TID = re.compile(r"[A-Za-z0-9._-]{1,120}")
 SLUG_PREFIX = re.compile(r"^\d{8}-\d{4}-")
+VIVOS = ("a correr", "a preparar")   # a preparar: meta escrita antes do worktree (o runner a copiar o repositório)
 FAIL = ("erro", "incompleta", "morreu", "interrompida")   # interrompida: o runner não a grava (metas de fora)
 SQUAD_FAIL = FAIL + ("falhou",)
 # execuções de rotina das squads: um cartão por squad + mode + dia local; estes modes ficam individuais
@@ -222,7 +223,7 @@ def _dev(t: dict, aux: dict) -> dict | None:
             etq.append("fechado sem merge")
     elif status == "arquivada":
         col, etq = "feito", ["arquivada"]
-    elif status == "a correr":
+    elif status in VIVOS:
         col = "em-curso"
     elif status == "parada?":
         col, selo = "em-curso", _selo("laranja", "parada?")
@@ -278,7 +279,7 @@ def _squad(t: dict, aux: dict) -> dict | None:
         return None
     tid, link = ids
     selo = None
-    if status == "a correr":
+    if status in VIVOS:
         col = "em-curso"
     elif status == "parada?":
         col, selo = "em-curso", _selo("laranja", "parada?")
@@ -318,7 +319,7 @@ def _grupos(execs: list[dict], aux: dict, tz) -> list[dict]:
         ts = [t for _, t in lst]
         st = [t.get("status") for t in ts]
         n = len(ts)
-        correr = any(s in ("a correr", "parada?") for s in st)
+        correr = any(s in VIVOS + ("parada?",) for s in st)
         falhas = sum(s in SQUAD_FAIL for s in st)
         selo = None if falhas or "parada?" not in st else _selo("laranja", "parada?")
         custos = [c for c in (_num(t.get("cost_usd")) for t in ts) if c is not None]
